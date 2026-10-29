@@ -1928,6 +1928,8 @@ func selftest() -> Never {
     }
         precondition(webSearch("c++ & rust").absoluteString == "https://www.google.com/search?q=c%2B%2B%20%26%20rust")
     precondition(score("sfr", "Safari") == nil && score("saf", "Workspace 5 · FREE") == nil)
+    precondition(CalendarSource.upcoming("cal").isEmpty)  // "cal" means Calculator or Calendar.app, not the agenda
+    precondition((systemActionItems().first { $0.title == "Lock Screen" }?.score ?? 0) > 0)  // the action beats the Settings pane
     print("veil-search selftest: ok")
     exit(0)
 }

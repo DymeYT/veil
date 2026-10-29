@@ -323,7 +323,7 @@ func utilityAnswers(_ q: String) -> [Item] {
     return out
 }
 
-// MARK: clipboard history (Spotlight 26 parity). Captured when the panel opens and when NC copies; never polled.
+// MARK: clipboard history (Spotlight 26 parity). The change counter is read once a second; text is kept in memory only.
 
 final class ClipHistory {
     static let shared = ClipHistory()
@@ -359,9 +359,12 @@ final class ClipHistory {
         if let types = pb.types, types.contains(where: { skip.contains($0.rawValue) }) { return }
         if secretApps.contains(app) { return }
         clips.removeAll { Date().timeIntervalSince($0.date) > 8 * 3600 }  // eight hours, like Spotlight's shortest setting
-        guard let s = pb.string(forType: .string)?.trimmingCharacters(in: .whitespacesAndNewlines), !s.isEmpty, s.count < 20000 else { return }
+        // keep the text exactly as copied (a snippet's indentation and final newline paste back unchanged)
+        guard let s = pb.string(forType: .string), !s.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, s.count < 20000 else { return }
+        // copying a clip again from Veil Search moves it to the top but keeps the app it first came from
+        let source = app == "Veil Search" ? (clips.first { $0.text == s }?.app ?? app) : app
         clips.removeAll { $0.text == s }
-        clips.insert(Clip(text: s, date: Date(), app: app), at: 0)
+        clips.insert(Clip(text: s, date: Date(), app: source), at: 0)
         clips = Array(clips.prefix(200))
     }
 
@@ -373,7 +376,7 @@ final class ClipHistory {
         rel.unitsStyle = .abbreviated
         clips.removeAll { Date().timeIntervalSince($0.date) > 8 * 3600 }
         return clips.filter { f.isEmpty || $0.text.lowercased().contains(f) }.prefix(40).map { c in
-            let oneLine = c.text.replacingOccurrences(of: "\n", with: " ⏎ ")
+            let oneLine = c.text.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "\n", with: " ⏎ ")
             let age = Date().timeIntervalSince(c.date) < 60 ? "just now" : rel.localizedString(for: c.date, relativeTo: Date())
             return Item(kind: .answer, title: String(oneLine.prefix(90)), subtitle: "\(c.app.isEmpty ? "Clipboard" : c.app) · \(age)   ↵ copies",
                         symbol: "doc.on.clipboard", action: .copy(c.text), score: 1000, extra: "clip")
