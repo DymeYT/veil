@@ -141,8 +141,8 @@ for i in "${!keys[@]}"; do sketchybar --add item keys.$i popup.keys --set keys.$
 header() {
   sketchybar --add item "menu.h.$1" popup.city --set "menu.h.$1" icon="$2" icon.color=0xff76849c icon.font="$F_SMALL" label.drawing=off
 }
-row() {  # ID LABEL COMMAND [shortcut or mark] [icon color]
-  sketchybar --add item "menu.$1" popup.city --set "menu.$1" icon="${4:-—}" icon.font="$F_SMALL" icon.width=66 icon.align=left \
+row() {  # ID LABEL COMMAND [real shortcut, or a mark; rows without one show a quiet dash] [icon color]
+  sketchybar --add item "menu.$1" popup.city --set "menu.$1" icon="${4:-—}" icon.font="$F_SMALL" icon.width=76 icon.align=left \
     icon.color="${5:-0xff76849c}" label="$2" click_script="sketchybar --set city popup.drawing=off; $3"
 }
 sketchybar --add item menu.title popup.city --set menu.title icon='@@title@@' icon.font="$F_CHIP" icon.color=0xfffcee09 label="$PANEL" label.color=0xff76849c
@@ -162,8 +162,8 @@ system_controls() {
   header system "$SYSTEM_GROUP"
   row launch 'Search apps, files and commands' "$B/veil launch" '⌘ Space'
   row terminal 'New terminal' "$B/veil term" '⌥ ⏎'
-  row btop 'System monitor' "$B/veil btop" 'MONITOR'
-  row eco 'Quiet mode on / off' "$B/veil toggle-quiet" 'QUIET'
+  row btop 'System monitor' "$B/veil btop"
+  row eco 'Quiet mode on / off' "$B/veil toggle-quiet"
 }
 # The first module follows the way each environment is used.
 case "$THEME" in
@@ -175,9 +175,9 @@ header appearance "$THEME_GROUP"
 row environment 'Change environment…' "osascript -l JavaScript -e \"ObjC.import('Foundation'); \$.NSDistributedNotificationCenter.defaultCenter.postNotificationNameObjectUserInfoDeliverImmediately('app.veil.search.show', 'theme', \$(), true)\"" '◐'
 MAINT_GROUP=Maintenance; [ "$THEME_GROUP" = "$(printf '%s' "$THEME_GROUP" | tr '[:lower:]' '[:upper:]')" ] && MAINT_GROUP=MAINTENANCE  # follow the theme's heading case
 header maintenance "$MAINT_GROUP"
-row reload 'Reload config' "$B/veil reload" 'RELOAD'
-row recover 'Recover windows' "$B/veil recover" 'REPAIR'
-row quit 'Quit window manager…' "osascript -e 'display dialog \"Quit the window manager? Windows stop tiling until you choose Recover windows.\" buttons {\"Cancel\", \"Quit\"} default button \"Cancel\" with icon caution' && $B/veil quit" 'QUIT' 0xffff5370
+row reload 'Reload config' "$B/veil reload"
+row recover 'Recover windows' "$B/veil recover"
+row quit 'Quit window manager…' "osascript -e 'display dialog \"Quit the window manager? Windows stop tiling until you choose Recover windows.\" buttons {\"Cancel\", \"Quit\"} default button \"Cancel\" with icon caution' && $B/veil quit" '×' 0xffff5370
 # Each menu keeps the same usable actions but borrows its surface grammar from its environment.
 case "$THEME" in
   factorio)

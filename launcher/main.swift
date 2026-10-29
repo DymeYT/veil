@@ -1263,7 +1263,7 @@ struct LauncherView: View {
                         HStack(spacing: 16) { hint("↵", "open"); hint("⌘K", "actions") }
                     }
                     Spacer(minLength: 12)
-                    Text(p.cased("\(p.s("brand", "VEIL")) // search")).font(mono(10, "Bold")).tracking(1.4).foregroundStyle(p["comment"]).lineLimit(1).fixedSize()
+                    Text(p.cased("\(p.s("brand", "VEIL")) // search")).font(mono(11, "Bold")).tracking(1.4).foregroundStyle(p["comment"]).lineLimit(1).fixedSize()
                 }
                 .padding(.horizontal, 18).frame(height: 32)
                 .background(p["bg_dark"].opacity(0.55))
@@ -1524,10 +1524,10 @@ struct LauncherView: View {
 
     func hint(_ key: String, _ label: String) -> some View {
         HStack(spacing: 5) {
-            Text(key).font(mono(10, "Bold")).foregroundStyle(m.palette["dim"])
+            Text(key).font(mono(11, "Bold")).foregroundStyle(m.palette["dim"])
                 .padding(.horizontal, 5).padding(.vertical, 1.5)
                 .background(RoundedRectangle(cornerRadius: 4).stroke(m.palette["border"], lineWidth: 1))
-            Text(label).font(mono(10, "Regular")).foregroundStyle(m.palette["comment"])
+            Text(label).font(mono(11, "Regular")).foregroundStyle(m.palette["comment"])  // 11 pt floor: ~9.3 pt physical at More Space
         }.lineLimit(1).fixedSize()
     }
 }
