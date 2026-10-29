@@ -24,8 +24,8 @@ while IFS=$'\t' read -r i active count; do
     pill|slot)
       dot='  '; [ "$count" -gt 0 ] && dot=' •'
       num="0$((i+1))"; [ "$STYLE" = slot ] && num="$((i+1))"
-      # Field-desk tabs are names, while the factory keeps numbered shortcut slots.
-      [ "$THEME" = paradis ] && num=''
+      # Field-desk (Paradis) and field-guide (Guidance) tabs are names; the factory keeps numbered shortcut slots.
+      case "$THEME" in paradis|elden-ring) num='' ;; esac
       base=(icon="$num" label="$n$dot" background.corner_radius="$WS_RADIUS")
       if [ "$STYLE" = slot ]; then
         case $state in
