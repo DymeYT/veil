@@ -3,6 +3,7 @@
 // Veil commands and themes. Colors come from generated/launcher.json (written by veil-theme).
 // Build: launcher/build.sh. Self-check: "Veil Search.app/Contents/MacOS/veil-search" --selftest
 import AppKit
+import ApplicationServices
 import Carbon.HIToolbox
 import QuickLookThumbnailing
 import SwiftUI
@@ -618,8 +619,16 @@ final class Model: NSObject, ObservableObject {
         if it.extra == "menu" { close(); MenuItems.press(it.id); return }
         if paste {
             let text: String = { if case .copy(let v) = it.action { return v }; return it.path ?? it.title }()
+            // without Accessibility the paste can't happen: copy instead and say so while the panel is still open
+            guard AXIsProcessTrusted() else {
+                copyText(text, secret: it.extra == "secret")
+                toast = "Copied · allow Accessibility to paste"
+                MenuItems.requestTrust()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) { self.toast = ""; self.close() }
+                return
+            }
             close()
-            if !pasteIntoFrontApp(text, secret: it.extra == "secret") { toast = "Allow Accessibility to paste" }
+            _ = pasteIntoFrontApp(text, secret: it.extra == "secret")
             return
         }
         let q = query.trimmingCharacters(in: .whitespaces)
@@ -709,11 +718,18 @@ final class Model: NSObject, ObservableObject {
 
     func trashSelected() {
         guard items.indices.contains(selected), let path = items[selected].path, !path.hasSuffix(".app") else { return }
-        NSWorkspace.shared.recycle([URL(fileURLWithPath: path)]) { _, _ in }
-        toast = "Moved to Trash"
-        items.remove(at: selected)
-        selected = min(selected, max(items.count - 1, 0))
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { self.toast = "" }
+        // the row goes and the toast confirms only once Finder has really moved it
+        NSWorkspace.shared.recycle([URL(fileURLWithPath: path)]) { [weak self] _, error in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                if error == nil, let i = self.items.firstIndex(where: { $0.path == path }) {
+                    self.items.remove(at: i)
+                    self.selected = min(self.selected, max(self.items.count - 1, 0))
+                }
+                self.toast = error == nil ? "Moved to Trash" : "Couldn't move to Trash"
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { self.toast = "" }
+            }
+        }
     }
 
     func copySelected() {

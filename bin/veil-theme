@@ -173,6 +173,13 @@ def plan(name):
     return theme, changes
 
 
+def prune_backups(keep=20):
+    """One folder per apply adds up: keep the newest `keep` (restore walks back through them) and `original`."""
+    old = sorted(p for p in BACKUPS.iterdir() if p.is_dir() and (p / "manifest.json").exists())[:-keep]
+    for p in old:
+        shutil.rmtree(p, ignore_errors=True)
+
+
 def write_atomic(path, text, mode):
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
@@ -291,6 +298,7 @@ def apply(name):
         files.append({"path": str(live), "backup": f"{i}-{live.name}" if old is not None else None})
     previous = (ROOT / "current").read_text().strip() if (ROOT / "current").exists() else BASE
     (backup / "manifest.json").write_text(json.dumps({"previous": previous, "files": files}, indent=2))
+    prune_backups()
     try:
         for live, _, new, mode, _ in changes:
             write_atomic(live, new, mode)
@@ -341,11 +349,12 @@ def main(argv):
             sys.exit("no backups to restore")
         prev = restore(backups[-1])
         shutil.rmtree(backups[-1])
-        print(f"restored {backups[-1].name} (theme: {prev}); reload apps as after apply")
+        print(f"restored {backups[-1].name} (theme: {load_theme(prev)['name']})")
         if not os.environ.get("VEIL_NO_RELOAD"):
+            # the same reloads as apply (Ghostty, SketchyBar, borders), so nothing waits for a manual step
+            reload_configs([(live, reload) for _, live, _, reload in targets()], prev)
             system_accents(load_theme(prev))
-            subprocess.run(["sketchybar", "--reload"], capture_output=True)
-            subprocess.run(["bash", "-c", f"pgrep -xq borders && exec bash {CFG / 'borders/bordersrc'} || exec /opt/homebrew/bin/brew services restart borders"], capture_output=True)
+        print("  manual: New shells pick up fzf colors; btop, cava and Neovim on next launch")
     else:
         print(__doc__.strip())
 

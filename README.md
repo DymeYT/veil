@@ -35,9 +35,9 @@ spreads its detail across the frame instead of giving the eye one subject to sta
 | --- | --- |
 | Veil Search (Spotlight replacement): apps, files, math, settings, workspaces, commands, themes, web, dictionary | ⌘Space (↵ open, ⌘↵ show in Finder, ⌘C copy, ↑↓/Tab move, Esc close) |
 | New terminal window | ⌥Return |
-| Resize tiles with the keyboard | ⌥R, then arrows (Shift shrinks a middle tile), Esc to leave |
+| Resize tiles with the keyboard | ⌥R, then arrows (Shift shrinks a middle tile); Esc or switching apps leaves |
 | Control panel | click the theme chip at the left of the bar |
-| Shortcut cheat sheet | click `?` in the bar, or `veil keys` |
+| Shortcut cheat sheet | click the keys button (󰘥) at the right of the bar, or `veil keys` |
 | Switch theme | control panel, launcher, or `veil-theme apply arasaka` |
 | Undo the last theme change | `veil-theme restore` |
 | Battery saver | `veil quiet` (back: `veil normal`) |
@@ -77,7 +77,7 @@ happens only while it is open (≈1 ms per keystroke; file results stream in fro
   hidden files, eject, quit/hide/force quit apps (`quit safari`; force quit asks), search prefixes (`g`, `yt`, `gh`, `w`, `maps`, `r`, `amz`),
   quick keys from `launcher/aliases.json`, scripts in `launcher/scripts/` (`# @veil title:` headers), new Obsidian note (`note …`).
 - Clipboard history (⌘4 or `clip`): memory only, 8 hours, skips concealed/password-manager copies.
-- Keys: ↵ open · ⌘↵/⌘R reveal · ⌘C copy · ⌘Y Quick Look · ⌘K actions · ⌘L Large Type · ⌘P pin · ⌘⌫ Trash ·
+- Keys: ↵ open · ⌘↵/⌘R reveal · ⌘C copy · ⌘Y Quick Look · ⌘K actions · ⌘L Large Type · ⌘P pin · ⌘⌫ Trash (empty field only) ·
   ⌘1–4 apps/files/actions/clipboard · → accept completion · ↑ on empty field recalls searches · Esc clears, then closes.
 - With permission: contacts (3+ letters), calendar events and reminders (`event …`, `remind …`), Safari tabs,
   menu-bar search (`m …`), paste into the front app (⌥↵).

@@ -52,6 +52,8 @@ case "${1:-help}" in
   check "rift answers queries" "perl -e 'alarm 5; exec @ARGV' rift-cli query workspaces"
   check "bar has all items" "[ \$(sketchybar --query bar | jq '.items|length') -gt 30 ]"
   check "theme files match templates" "veil-theme status | grep -q 'all files match'"
+  # Spotlight keeps ⌘Space unless its shortcut (symbolic hot key 64) is off; then Veil Search can't open with it
+  check "Spotlight has released ⌘Space" "[ \"\$(defaults export com.apple.symbolichotkeys - | plutil -extract AppleSymbolicHotKeys.64.enabled raw -)\" = false ]"
   exit $fail
   ;;
  # launcher menu entry: run the selftest and show the result as a notification

@@ -60,7 +60,9 @@ for t in (ROOT / "themes").glob("*.toml"):
     # launcher selected-row subtitle: fg at 82% over the solid selection fill (the most opaque row style)
     sub = mix(palette["fg"], palette["selection"], 0.82)
     assert ratio(sub, palette["selection"]) >= 4.5, f"{t.stem}: selected subtitle below 4.5:1"
-    assert (ROOT / "art" / f"{t.stem}.jpg").is_file(), f"{t.stem}: wallpaper missing"
+    # wallpapers are bring-your-own (not in git): once any is installed, every theme needs one
+    if any((ROOT / "art").glob("*.jpg")):
+        assert (ROOT / "art" / f"{t.stem}.jpg").is_file(), f"{t.stem}: wallpaper missing"
     assert (ROOT / "art" / f"{t.stem}.notes.md").is_file(), f"{t.stem}: wallpaper notes missing"
 
 # every theme fills every @@placeholder@@ in every template
@@ -136,6 +138,29 @@ with tempfile.TemporaryDirectory() as tmp:
         with patch.dict(os.environ, VEIL_NO_RELOAD="1"):
             nct.apply("nyc")
         accents.assert_not_called()
+
+# backups: the newest 20 applies stay restorable, `original` (the pre-Veil baseline) is never pruned
+with tempfile.TemporaryDirectory() as tmp:
+    b = Path(tmp)
+    (b / "original").mkdir()
+    for i in range(25):
+        (b / f"20261029-0000{i:02d}-000000000").mkdir()
+        (b / f"20261029-0000{i:02d}-000000000/manifest.json").write_text("{}")
+    with patch.object(nct, "BACKUPS", b):
+        nct.prune_backups()
+    left = sorted(p.name for p in b.iterdir())
+    assert len(left) == 21 and "original" in left and "20261029-000005-000000000" in left and "20261029-000004-000000000" not in left
+
+# restore reloads every app apply reloads (Ghostty included), not just the bar and borders
+with tempfile.TemporaryDirectory() as tmp:
+    root = Path(tmp)
+    (root / "backups/20261029-000000-000000000").mkdir(parents=True)
+    (root / "backups/20261029-000000-000000000/manifest.json").write_text('{"previous": "nyc", "files": []}')
+    with patch.object(nct, "ROOT", root), patch.object(nct, "BACKUPS", root / "backups"), patch.object(nct, "reload_configs") as reloads, \
+         patch.object(nct, "system_accents"), patch.dict(os.environ, {}, clear=True):
+        nct.main(["restore"])
+        commands = [c for _, c in reloads.call_args.args[0] if isinstance(c, list)]
+        assert any("reload_config" in " ".join(c) for c in commands), "restore must reload Ghostty"
 
 # JankyBorders draws a square "ghost box" ~10pt outside windows for fractional widths (issue #173)
 for t in (ROOT / "themes").glob("*.toml"):

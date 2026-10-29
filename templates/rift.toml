@@ -82,8 +82,8 @@ app_rules = [
 "Alt + Shift + 5" = { move_window_to_workspace = 4 }
 
 # Resize mode (Alt + R): an arrow (or H/J/K/L) grows the focused tile toward that side, Shift pulls
-# that side back in, Tab picks
-# another tile, Escape, Return or Alt + R to leave; all Alt shortcuts still work. The bar shows RESIZE.
+# that side back in, Tab picks another tile; Escape, Return, Alt + R or switching apps leaves it.
+# All Alt shortcuts still work. The bar shows RESIZE · ESC.
 [binding_modes.resize]
 "H" = { resize_window_grow = "left" }
 "Shift + H" = { resize_window_shrink = "left" }

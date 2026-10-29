@@ -38,6 +38,8 @@ case "$THEME" in
   eclipse) PANEL='Desk'; WINDOW_GROUP='Windows'; SYSTEM_GROUP='Utilities'; THEME_GROUP='Appearance'; CPU_POS=popup.city; NET_POS=popup.city; VOL_POS=popup.city; SHOW_APP=off; SHOW_GRAPH=off ;;
 esac
 
+CPU_FREQ=10; [ -f "$HOME/.config/veil/generated/quiet" ] && CPU_FREQ=30  # `veil quiet` survives reloads
+
 # Top bars line up with the notch (38pt safe area on this MacBook): edge bars match its height exactly,
 # floating islands sit centered on it, so the notch never hangs below or floats above the bar.
 EDGE_H=32; ISLE_Y=6; ISLE_H=34
@@ -75,7 +77,8 @@ case "$WS" in
 esac
 # Rift binding mode (RESIZE while Alt + R mode is on); mode-event.sh shows and hides it
 sketchybar --add item mode $WSPOS --set mode drawing=off icon.drawing=off label.font="$F_CHIP" label.color=0xff070a12 \
-  background.drawing=on background.color=0xff00e5ff background.corner_radius=$CHIP_RADIUS
+  background.drawing=on background.color=0xff00e5ff background.corner_radius=$CHIP_RADIUS \
+  updates=on script="$HOME/.config/sketchybar/plugins/mode-event.sh" --subscribe mode front_app_switched
 case "$QUICK" in
   search) sketchybar --add item quick left --set quick icon='⌘' label='SEARCH' click_script="$B/veil launch" ;;
   terminal|tools) sketchybar --add item quick left --set quick icon='⌥⏎' label='TERMINAL' click_script="$B/veil term" ;;
@@ -94,7 +97,7 @@ sketchybar --add item battery right --set battery icon="${TAGS[4]}" update_freq=
 # CPU sparkline sits right of the CPU value (fed by the cpu script, no extra polling)
 sketchybar --add graph cpu.graph right 34 --set cpu.graph graph.color=0xff00e5ff graph.fill_color=0x3300e5ff graph.line_width=1.2 \
   drawing="$SHOW_GRAPH" background.drawing=on background.color=0x00000000 background.height=16 padding_left=0 padding_right=6 icon.drawing=off label.drawing=off
-[ "$CPU_POS" = right ] && sketchybar --add item cpu "$CPU_POS" --set cpu icon="${TAGS[0]}" label='—' label.padding_right=4 update_freq=10 script="$P"
+[ "$CPU_POS" = right ] && sketchybar --add item cpu "$CPU_POS" --set cpu icon="${TAGS[0]}" label='—' label.padding_right=4 update_freq="$CPU_FREQ" script="$P"
 sketchybar --add item music right --set music icon='󰝚' icon.font="$GLYPH" icon.color=0xffff4fbc label.max_chars=28 drawing=off updates=on script="$P" --subscribe music music_change spotify_change
 sketchybar --add item keys right --set keys icon='󰘥' icon.font="$GLYPH" icon.color=0xff76849c label="$KEYS_LABEL" label.drawing=on script="$P" click_script='sketchybar --set keys popup.drawing=toggle' $POPUP --subscribe keys mouse.exited.global
 
@@ -127,7 +130,9 @@ fi
 
 # shortcuts sheet
 sketchybar --add item keys.title popup.keys --set keys.title icon='KEYS' icon.font="$F_SMALL" icon.color=0xfffcee09 label='SHORTCUTS' label.color=0xff76849c
-keys=('⌘ Space|Launcher' '⌥ 1-5|Switch workspace' '⇧⌥ 1-5|Move window to workspace' '⌥ H J K L|Focus left/down/up/right' '⇧⌥ H J K L|Move window' '⌥ F|Fullscreen in gaps' '⌥ V|Float / tile window' '⌥ Z|Pause / resume tiling' '⌥ ⏎|New terminal' '⌥ Tab|Last workspace' '⌥ R|Resize tiles (arrows; esc leaves)' '⌃⌥ 1-4|Tiled / scrolling / split / master layout' '⇧⌥ R|Reload Rift config')
+# workspace names with their numbers, so styles that show no numeral (diamond, rule, bracket) still map to ⌥N
+WSN=(@@ws@@); ws_line=''; for i in "${!WSN[@]}"; do ws_line="$ws_line${ws_line:+  }$((i + 1)) ${WSN[$i]}"; done
+keys=('⌘ Space|Launcher' 'Left chip|Control panel (click)' "⌥ 1-5|Go to  $ws_line" '⇧⌥ 1-5|Move window to workspace' '⌥ H J K L|Focus left/down/up/right' '⇧⌥ H J K L|Move window' '⌥ F|Fullscreen in gaps' '⌥ V|Float / tile window' '⌥ Z|Pause / resume tiling' '⌥ ⏎|New terminal' '⌥ Tab|Last workspace' '⌥ R|Resize tiles (arrows; esc leaves)' '⌃⌥ 1-4|Tiled / scrolling / split / master layout' '⇧⌥ R|Reload Rift config')
 for i in "${!keys[@]}"; do sketchybar --add item keys.$i popup.keys --set keys.$i icon="${keys[$i]%%|*}" icon.font="$F_LABEL" icon.width=96 icon.align=center icon.padding_left=10 icon.padding_right=10 \
   icon.background.drawing=on icon.background.color=0xff151b2d icon.background.border_color=0xff334563 icon.background.border_width=1 \
   icon.background.corner_radius=$CHIP_RADIUS icon.background.height=20 icon.color=0xffd9f4ff label="${keys[$i]#*|}" click_script='sketchybar --set keys popup.drawing=off'; done
