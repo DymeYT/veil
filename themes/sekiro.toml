@@ -47,6 +47,10 @@ logo = """          ██
 
 # Shape, type and layout (see ECOSYSTEMS.md). Values may name colors as %role%.
 [style]
+panel_headers = "text"  # control panel structure (sketchybarrc): text | rule | space
+panel_status = "top"
+panel_keys = "trailing"
+panel_first = "system"
 search_symbol = "ashina-crest"
 ws = "OUTSKIRTS HIRATA CASTLE DEPTHS FOUNTAIN"
 bar_layout = "strip"
@@ -195,6 +199,7 @@ editor_signcolumn = "yes:2"
 editor_foldcolumn = "0"
 
 editor_statusline = "3"
+editor_status_layout = "kanji"  # Neovim statusline form (templates/nvim.lua layouts)
 
 editor_colorcolumn = "100"
 

@@ -137,16 +137,37 @@ for i in "${!keys[@]}"; do sketchybar --add item keys.$i popup.keys --set keys.$
   icon.background.drawing=on icon.background.color=0xff151b2d icon.background.border_color=0xff334563 icon.background.border_width=1 \
   icon.background.corner_radius=$CHIP_RADIUS icon.background.height=20 icon.color=0xffd9f4ff label="${keys[$i]#*|}" click_script='sketchybar --set keys popup.drawing=off'; done
 
+# Panel structure is the environment's (themes/*.toml [style]); the actions, their order within a group and
+# their shortcuts are the same everywhere, so muscle memory carries across themes.
+P_HEADERS='@@panel_headers@@'  # text: group names | rule: name and a hairline | space: an empty row between groups
+P_STATUS='@@panel_status@@'    # top | bottom (bottom bars keep the readings next to the bar)
+P_KEYS='@@panel_keys@@'        # column: shortcuts in a left column | trailing: after the action, no column
+P_FIRST='@@panel_first@@'      # windows | system: which group leads
+
 # Control rows identify the action or its real shortcut; decorative row numbers are gone.
 header() {
-  sketchybar --add item "menu.h.$1" popup.city --set "menu.h.$1" icon="$2" icon.color=0xff76849c icon.font="$F_SMALL" label.drawing=off
+  case "$P_HEADERS" in
+    space) sketchybar --add item "menu.h.$1" popup.city --set "menu.h.$1" icon.drawing=off label.drawing=off ;;
+    rule) sketchybar --add item "menu.h.$1" popup.city --set "menu.h.$1" icon="$2" icon.color=0xff76849c icon.font="$F_SMALL" \
+            label='────────────' label.color=0xff26324a ;;
+    *) sketchybar --add item "menu.h.$1" popup.city --set "menu.h.$1" icon="$2" icon.color=0xff76849c icon.font="$F_SMALL" label.drawing=off ;;
+  esac
 }
-row() {  # ID LABEL COMMAND [real shortcut, or a mark; rows without one show a quiet dash] [icon color]
-  sketchybar --add item "menu.$1" popup.city --set "menu.$1" icon="${4:-—}" icon.font="$F_SMALL" icon.width=76 icon.align=left \
-    icon.color="${5:-0xff76849c}" label="$2" click_script="sketchybar --set city popup.drawing=off; $3"
+row() {  # ID LABEL COMMAND [real shortcut, or a mark; rows without one show a quiet dash] [color]
+  if [ "$P_KEYS" = trailing ]; then
+    label="$2"; case "$4" in *⌘*|*⌥*|*⌃*|*⇧*) label="$2   $4" ;; esac  # marks are column furniture; only shortcuts follow
+    sketchybar --add item "menu.$1" popup.city --set "menu.$1" icon.drawing=off label="$label" label.padding_left=14 \
+      ${5:+label.color=$5} click_script="sketchybar --set city popup.drawing=off; $3"
+  else
+    sketchybar --add item "menu.$1" popup.city --set "menu.$1" icon="${4:-—}" icon.font="$F_SMALL" icon.width=76 icon.align=left \
+      icon.color="${5:-0xff76849c}" label="$2" click_script="sketchybar --set city popup.drawing=off; $3"
+  fi
+}
+status_line() {
+  sketchybar --add item menu.status popup.city --set menu.status icon='STATUS' icon.color=0xff76849c icon.font="$F_SMALL" label='…' label.color=0xff8794ad
 }
 sketchybar --add item menu.title popup.city --set menu.title icon='@@title@@' icon.font="$F_CHIP" icon.color=0xfffcee09 label="$PANEL" label.color=0xff76849c
-sketchybar --add item menu.status popup.city --set menu.status icon='STATUS' icon.color=0xff76849c icon.font="$F_SMALL" label='…' label.color=0xff8794ad
+[ "$P_STATUS" = bottom ] || status_line
 
 # Readings that are not on the bar appear in the status line when the panel opens (no polling).
 window_controls() {
@@ -166,10 +187,7 @@ system_controls() {
   row eco 'Quiet mode on / off' "$B/veil toggle-quiet"
 }
 # The first module follows the way each environment is used.
-case "$THEME" in
-  factorio|arasaka|inscryption) system_controls; window_controls ;;
-  *) window_controls; system_controls ;;
-esac
+if [ "$P_FIRST" = system ]; then system_controls; window_controls; else window_controls; system_controls; fi
 header appearance "$THEME_GROUP"
 # the launcher's environment picker shows each palette; a 12-row list here was noise
 row environment 'Change environment…' "osascript -l JavaScript -e \"ObjC.import('Foundation'); \$.NSDistributedNotificationCenter.defaultCenter.postNotificationNameObjectUserInfoDeliverImmediately('app.veil.search.show', 'theme', \$(), true)\"" '◐'
@@ -178,6 +196,7 @@ header maintenance "$MAINT_GROUP"
 row reload 'Reload config' "$B/veil reload"
 row recover 'Recover windows' "$B/veil recover"
 row quit 'Quit window manager…' "osascript -e 'display dialog \"Quit the window manager? Windows stop tiling until you choose Recover windows.\" buttons {\"Cancel\", \"Quit\"} default button \"Cancel\" with icon caution' && $B/veil quit" '×' 0xffff5370
+[ "$P_STATUS" = bottom ] && status_line
 # Each menu keeps the same usable actions but borrows its surface grammar from its environment.
 case "$THEME" in
   factorio)
@@ -186,7 +205,6 @@ case "$THEME" in
     ;;
   inscryption)
     sketchybar --set city popup.height=29 popup.background.border_width=2
-    sketchybar --set '/menu\.h\..*/' label.drawing=on label='────────────' label.color=0xff26324a
     ;;
   hallownest|eclipse)
     sketchybar --set city popup.height=30 popup.background.shadow.drawing=off

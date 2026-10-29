@@ -83,7 +83,7 @@ comparison_spec.loader.exec_module(comparison)
 pairs = comparison.compare()
 assert len(pairs) == len(layouts) * (len(layouts)-1) // 2
 for pair in pairs:
-    assert len(pair["surfaces"]) >= 3, f"too similar: {pair}"
+    assert len(pair["surfaces"]) >= 4, f"too similar: {pair}"
 
 assert nct.load_theme("Eclipse")["id"] == "eclipse"
 
@@ -178,6 +178,13 @@ try:
     nct.fastfetch_modules({"ff_layout": "title colors:sparkles"}); raise AssertionError("bad swatch accepted")
 except ValueError:
     pass
+
+# Neovim statusline: every theme names a form the template defines (an unknown name would silently fall back to LazyVim's)
+nvim_template = (ROOT / "templates/nvim.lua").read_text()
+status_layouts = {t.stem: nct.strings_for(nct.load_theme(t.stem))["editor_status_layout"] for t in (ROOT / "themes").glob("*.toml")}
+for theme_id, form in status_layouts.items():
+    assert form == "hud" or f"        {form} = {{" in nvim_template, f"{theme_id}: no statusline form {form!r} in nvim.lua"
+assert len(set(status_layouts.values())) == len(status_layouts), f"statusline forms are shared: {status_layouts}"
 
 # JankyBorders draws a square "ghost box" ~10pt outside windows for fractional widths (issue #173)
 for t in (ROOT / "themes").glob("*.toml"):

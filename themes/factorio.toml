@@ -47,6 +47,10 @@ logo = """         ██
 
 # Shape, type and layout (see ECOSYSTEMS.md). Values may name colors as %role%.
 [style]
+panel_headers = "text"  # control panel structure (sketchybarrc): text | rule | space
+panel_status = "bottom"
+panel_keys = "column"
+panel_first = "system"
 search_symbol = "factorio-gear"
 bar_radius = "2"
 bar_border = "2"
@@ -183,6 +187,7 @@ editor_signcolumn = "yes:2"
 editor_foldcolumn = "1"
 
 editor_statusline = "3"
+editor_status_layout = "production"  # Neovim statusline form (templates/nvim.lua layouts)
 
 editor_colorcolumn = "120"
 

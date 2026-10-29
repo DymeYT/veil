@@ -41,6 +41,10 @@ logo = """  ╱╱  NIGHT CITY
 
 # Shape, type and layout (see ECOSYSTEMS.md). Values may name colors as %role%.
 [style]
+panel_headers = "text"  # control panel structure (sketchybarrc): text | rule | space
+panel_status = "top"
+panel_keys = "column"
+panel_first = "windows"
 notch_band = "true"   # black behind the notch in every environment: one notch rule, and bar text always sits on an opaque backing
 search_symbol = "night-city-emblem"
 bar_layout = "islands"
@@ -193,6 +197,7 @@ editor_signcolumn = "yes"
 editor_foldcolumn = "0"
 
 editor_statusline = "3"
+editor_status_layout = "hud"  # Neovim statusline form (templates/nvim.lua layouts)
 
 editor_colorcolumn = "100"
 

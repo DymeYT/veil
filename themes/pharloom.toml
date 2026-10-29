@@ -40,6 +40,10 @@ silk and song"""
 
 # Shape, type and layout (see ECOSYSTEMS.md). Values may name colors as %role%.
 [style]
+panel_headers = "rule"  # control panel structure (sketchybarrc): text | rule | space
+panel_status = "top"
+panel_keys = "trailing"
+panel_first = "windows"
 search_symbol = "hornet-needle"
 bar_radius = "3"
 bar_alpha = "f2"
@@ -170,6 +174,7 @@ editor_signcolumn = "auto"
 editor_foldcolumn = "0"
 
 editor_statusline = "2"
+editor_status_layout = "thread"  # Neovim statusline form (templates/nvim.lua layouts)
 
 editor_colorcolumn = ""
 

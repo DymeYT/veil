@@ -40,6 +40,10 @@ STRUGGLE"""
 
 # Shape, type and layout (see ECOSYSTEMS.md). Values may name colors as %role%.
 [style]
+panel_headers = "space"  # control panel structure (sketchybarrc): text | rule | space
+panel_status = "bottom"
+panel_keys = "trailing"
+panel_first = "windows"
 search_symbol = "brand-of-sacrifice"
 bar_layout = "strip"
 bar_position = "bottom"
@@ -188,6 +192,7 @@ editor_signcolumn = "auto"
 editor_foldcolumn = "0"
 
 editor_statusline = "0"
+editor_status_layout = "ink"  # Neovim statusline form (templates/nvim.lua layouts)
 
 editor_colorcolumn = "80"
 

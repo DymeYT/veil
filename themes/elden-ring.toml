@@ -47,6 +47,10 @@ logo = """       ▄██████▄
 
 # Shape, type and layout (see ECOSYSTEMS.md). Values may name colors as %role%.
 [style]
+panel_headers = "rule"  # control panel structure (sketchybarrc): text | rule | space
+panel_status = "top"
+panel_keys = "column"
+panel_first = "system"
 search_symbol = "elden-ring-sigil"
 bar_radius = "12"
 bar_alpha = "f2"
@@ -191,6 +195,7 @@ editor_signcolumn = "auto"
 editor_foldcolumn = "1"
 
 editor_statusline = "2"
+editor_status_layout = "atlas"  # Neovim statusline form (templates/nvim.lua layouts)
 
 editor_colorcolumn = ""
 
