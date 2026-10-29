@@ -39,11 +39,15 @@ logo = """H A L L O W N E S T
 
 # Shape, type and layout (see ECOSYSTEMS.md). Values may name colors as %role%.
 [style]
+panel_headers = "space"  # control panel structure (sketchybarrc): text | rule | space
+panel_status = "top"
+panel_keys = "trailing"
+panel_first = "windows"
 search_symbol = "knight-mask"
 bar_layout = "islands"
 font_tag = "Cinzel:Bold:10.5"
 font_label = "Cinzel:Regular:12.0"
-font_small = "Cinzel:Bold:10.5"
+font_small = "Cinzel:Bold:11.0"
 font_chip = "Cinzel:Bold:11.5"
 chip_style = "text"
 ws_style = "diamond"
@@ -57,14 +61,15 @@ gap_inner = "18"
 term_font = "IBM Plex Mono"
 term_size = "14"
 term_cell = "16%"
-term_opacity = "0.92"
-term_blur = "20"
+term_opacity = "1.0"
+term_blur = "0"
 term_pad_x = "26"
 term_pad_y = "20"
 term_cursor = "underline"
 prompt_char = "›"
 ff_sep = "  ·  "
 ff_logo_color = "white"
+ff_layout = "uptime memory battery"  # fastfetch readings, order and swatch (veil-theme fastfetch_modules)
 ff_k1 = "KINGDOM"
 ff_k2 = "VESSEL"
 ff_k3 = "KERNEL"
@@ -170,6 +175,7 @@ editor_signcolumn = "no"
 editor_foldcolumn = "0"
 
 editor_statusline = "0"
+editor_status_layout = "quiet"  # Neovim statusline form (templates/nvim.lua layouts)
 
 editor_colorcolumn = ""
 

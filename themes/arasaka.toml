@@ -39,6 +39,11 @@ CORPORATE NETWORK"""
 
 # Shape, type and layout (see ECOSYSTEMS.md). Values may name colors as %role%.
 [style]
+panel_headers = "text"  # control panel structure (sketchybarrc): text | rule | space
+panel_status = "top"
+panel_keys = "column"
+panel_first = "system"
+ff_layout = "title separator host os cpu:PROCESSOR memory processes:ACTIVE_JOBS uptime"  # fastfetch readings, order and swatch (veil-theme fastfetch_modules)
 search_symbol = "arasaka-logo"
 ws = "OPS EXEC RND INTEL VAULT"
 bar_radius = "0"
@@ -125,6 +130,7 @@ editor_signcolumn = "yes:2"
 editor_foldcolumn = "1"
 
 editor_statusline = "2"
+editor_status_layout = "directive"  # Neovim statusline form (templates/nvim.lua layouts)
 
 editor_colorcolumn = "100"
 
@@ -171,7 +177,7 @@ ws_style = "rule"
 chip_style = "filled"
 font_tag = "Avenir Next Condensed:Bold:11.5"
 font_label = "Avenir Next Condensed:Demi Bold:12.5"
-font_small = "Avenir Next Condensed:Bold:10.0"
+font_small = "Avenir Next Condensed:Bold:11.0"
 font_chip = "Avenir Next Condensed:Heavy:12.5"
 ui_font = "Avenir Next Condensed"
 l_frame = "none"

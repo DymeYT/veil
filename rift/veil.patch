@@ -1,19 +1,13 @@
 diff --git a/crates/rift-protocol/src/layout.rs b/crates/rift-protocol/src/layout.rs
-index a41d07d..29fd0e6 100644
+index a41d07d..148c25c 100644
 --- a/crates/rift-protocol/src/layout.rs
 +++ b/crates/rift-protocol/src/layout.rs
-@@ -10,7 +10,9 @@ pub enum Orientation {
- }
+@@ -1,3 +1,4 @@
++// Modified by Veil (2026): ResizeOrientation gains left/right/up/down. See rift/README.md in the Veil repository.
+ use std::fmt;
  
- impl Default for Orientation {
--    fn default() -> Self { Self::Horizontal }
-+    fn default() -> Self {
-+        Self::Horizontal
-+    }
- }
- 
- #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-@@ -84,6 +86,23 @@ pub enum ResizeOrientation {
+ use serde::{Deserialize, Serialize};
+@@ -84,6 +85,23 @@ pub enum ResizeOrientation {
      Horizontal,
      Vertical,
      Smart,
@@ -37,22 +31,37 @@ index a41d07d..29fd0e6 100644
  }
  
  #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
-@@ -122,7 +141,9 @@ impl LayoutKind {
-         }
-     }
- 
--    pub const fn is_group(self) -> bool { self.is_stacked() }
-+    pub const fn is_group(self) -> bool {
-+        self.is_stacked()
-+    }
- }
- 
- #[derive(
+diff --git a/src/actor/reactor.rs b/src/actor/reactor.rs
+index e6e033f..85cecb0 100644
+--- a/src/actor/reactor.rs
++++ b/src/actor/reactor.rs
+@@ -1,3 +1,4 @@
++// Modified by Veil (2026): initialises the workspace index map. See rift/README.md in the Veil repository.
+ //! The Reactor's job is to maintain coherence between the system and model state.
+ //!
+ //! It takes events from the rest of the system and builds a coherent picture of
+@@ -504,7 +505,10 @@ impl Reactor {
+             one_space,
+             binding_mode: "default".into(),
+             app_manager: managers::AppManager::new(),
+-            layout_manager: managers::LayoutManager { layout_engine },
++            layout_manager: managers::LayoutManager {
++                layout_engine,
++                last_workspace_idx: HashMap::default(),
++            },
+             state: RiftState::default(),
+             space_state: ForwardedSpaceState::default(),
+             last_screen_frames: HashMap::default(),
 diff --git a/src/actor/reactor/animation.rs b/src/actor/reactor/animation.rs
-index 950043b..afc8d2e 100644
+index 950043b..37c0090 100644
 --- a/src/actor/reactor/animation.rs
 +++ b/src/actor/reactor/animation.rs
-@@ -151,6 +151,7 @@ struct ActiveAnimation {
+@@ -1,3 +1,4 @@
++// Modified by Veil (2026): bezier timing curves and directional workspace slides. See rift/README.md in the Veil repository.
+ use std::sync::Arc;
+ use std::time::{Duration, Instant};
+ 
+@@ -151,6 +152,7 @@ struct ActiveAnimation {
  pub struct Animation {
      interval: Duration,
      duration: Duration,
@@ -60,51 +69,7 @@ index 950043b..afc8d2e 100644
      display: u32,
      windows: Vec<PresentedWindow>,
      handled_windows: Vec<WindowId>,
-@@ -707,12 +708,15 @@ impl Reactor {
-         }
-         let windows = next.windows.iter().map(|w| w.wid).collect();
-         let ids = next.windows.iter().map(|w| w.wid).collect();
--        self.presentations.insert(space, ViewportHandle {
--            identity,
--            state,
--            windows: ids,
--            headless: None,
--        });
-+        self.presentations.insert(
-+            space,
-+            ViewportHandle {
-+                identity,
-+                state,
-+                windows: ids,
-+                headless: None,
-+            },
-+        );
-         if let Some(tx) = &self.animation_tx {
-             let _ = tx.send(Message::Camera(Box::new(next)));
-         } else {
-@@ -729,7 +733,9 @@ impl Reactor {
- }
- 
- impl AnimationManager {
--    pub fn new() -> Self { Self::default() }
-+    pub fn new() -> Self {
-+        Self::default()
-+    }
- 
-     /// One runner for all displays. Commands are semantic work; display wakes
-     /// are bounded to one permit and each link retains only its newest timing.
-@@ -891,7 +897,9 @@ impl AnimationManager {
-         }
-     }
- 
--    fn has_work(&self) -> bool { self.motions.iter().any(Motion::has_work) }
-+    fn has_work(&self) -> bool {
-+        self.motions.iter().any(Motion::has_work)
-+    }
- 
-     fn stop_windows(&mut self, windows: &[WindowId]) {
-         if !windows.is_empty() {
-@@ -1116,13 +1124,82 @@ impl AnimationManager {
+@@ -1116,13 +1118,82 @@ impl AnimationManager {
      /// Keep this entry point separate from `instant_layout`: layouts merely suppressed
      /// while a switch is in progress may still change window sizes and must use the
      /// full-frame request.
@@ -188,18 +153,7 @@ index 950043b..afc8d2e 100644
      }
  
      fn instant_layout_inner(
-@@ -1401,7 +1478,9 @@ impl ActiveAnimation {
-         self.progress = t;
-     }
- 
--    fn is_complete(&self) -> bool { self.progress >= 1.0 }
-+    fn is_complete(&self) -> bool {
-+        self.progress >= 1.0
-+    }
- }
- 
- impl Animation {
-@@ -1410,6 +1489,7 @@ impl Animation {
+@@ -1410,6 +1481,7 @@ impl Animation {
          Self {
              interval,
              duration: Duration::from_secs_f64(duration),
@@ -207,18 +161,7 @@ index 950043b..afc8d2e 100644
              display: 0,
              windows: vec![],
              handled_windows: vec![],
-@@ -1457,7 +1537,9 @@ impl Animation {
-         }
-     }
- 
--    fn is_empty(&self) -> bool { self.windows.is_empty() }
-+    fn is_empty(&self) -> bool {
-+        self.windows.is_empty()
-+    }
- 
-     fn begin(&mut self) {
-         for window in &mut self.windows {
-@@ -1477,7 +1559,7 @@ impl Animation {
+@@ -1477,7 +1549,7 @@ impl Animation {
              &mut self.windows,
              Sample::Transition {
                  progress: t,
@@ -227,18 +170,7 @@ index 950043b..afc8d2e 100644
                  set_size: (previous < 0.5 && t >= 0.5) || t == 1.0,
              },
              frames,
-@@ -1492,7 +1574,9 @@ impl Animation {
- }
- 
- #[cfg(test)]
--fn get_frame(a: CGRect, b: CGRect, t: f64) -> CGRect { interpolate_frame(a, b, ease(t)) }
-+fn get_frame(a: CGRect, b: CGRect, t: f64) -> CGRect {
-+    interpolate_frame(a, b, ease(t))
-+}
- 
- fn interpolate_frame(a: CGRect, b: CGRect, s: f64) -> CGRect {
-     CGRect {
-@@ -1507,15 +1591,48 @@ fn interpolate_frame(a: CGRect, b: CGRect, s: f64) -> CGRect {
+@@ -1507,14 +1579,43 @@ fn interpolate_frame(a: CGRect, b: CGRect, s: f64) -> CGRect {
      }
  }
  
@@ -281,19 +213,13 @@ index 950043b..afc8d2e 100644
      }
  }
  
--fn blend(a: f64, b: f64, s: f64) -> f64 { (1.0 - s) * a + s * b }
 +#[cfg(test)]
-+fn ease(t: f64) -> f64 {
-+    OVERSHOOT.at(t)
-+}
++fn ease(t: f64) -> f64 { OVERSHOOT.at(t) }
 +
-+fn blend(a: f64, b: f64, s: f64) -> f64 {
-+    (1.0 - s) * a + s * b
-+}
+ fn blend(a: f64, b: f64, s: f64) -> f64 { (1.0 - s) * a + s * b }
  
  #[cfg(test)]
- mod tests {
-@@ -1693,7 +1810,9 @@ mod tests {
+@@ -1693,7 +1794,9 @@ mod tests {
                  assert!(collect_requests(&mut rx).is_empty());
              }
              assert_eq!(frames.len(), 3);
@@ -304,7 +230,7 @@ index 950043b..afc8d2e 100644
              assert_eq!(frames[2], rect(100.0, 50.0, 20.0, 30.0));
              assert!(transition_state(&manager).is_none());
              results.push(frames);
-@@ -2564,6 +2683,18 @@ mod tests {
+@@ -2564,6 +2667,18 @@ mod tests {
          assert!(!animation_contains(&manager, wid2));
      }
  
@@ -324,75 +250,99 @@ index 950043b..afc8d2e 100644
      fn skip_to_end_finishes_active_animation_and_applies_new_layout() {
          let (tx, mut rx) = crate::actor::channel();
 diff --git a/src/actor/reactor/managers.rs b/src/actor/reactor/managers.rs
-index 60665a0..9b6e396 100644
+index 60665a0..67cbe87 100644
 --- a/src/actor/reactor/managers.rs
 +++ b/src/actor/reactor/managers.rs
-@@ -25,7 +25,9 @@ pub struct AppManager {
+@@ -1,3 +1,4 @@
++// Modified by Veil (2026): remembers each space's workspace index for slide direction. See rift/README.md in the Veil repository.
+ use std::sync::Arc;
+ use std::sync::atomic::{AtomicBool, Ordering};
+ 
+@@ -206,6 +207,8 @@ pub struct RecordingManager {
+ /// Manages layout engine state
+ pub struct LayoutManager {
+     pub layout_engine: LayoutEngine,
++    /// Each space's workspace index at the last layout pass, so a switch knows which way to slide.
++    pub last_workspace_idx: HashMap<SpaceId, u64>,
  }
  
- impl AppManager {
--    pub fn new() -> Self { AppManager { apps: HashMap::default() } }
-+    pub fn new() -> Self {
-+        AppManager { apps: HashMap::default() }
-+    }
- 
-     pub fn reject_duplicate(&self, pid: pid_t, handle: &AppThreadHandle) -> bool {
-         let Some(existing) = self.apps.get(&pid) else {
-@@ -116,7 +118,9 @@ impl DragManager {
-         }
-     }
- 
--    pub fn release_preview(&mut self) { drop(self.preview.take()); }
-+    pub fn release_preview(&mut self) {
-+        drop(self.preview.take());
-+    }
- 
-     pub fn suppress_preview(&mut self, suppressed: bool) {
-         self.preview_suppressed = suppressed;
-@@ -543,9 +547,26 @@ impl LayoutManager {
+ pub type LayoutResult = Vec<(SpaceId, Vec<(WindowId, CGRect)>)>;
+@@ -543,9 +546,18 @@ impl LayoutManager {
                  }
              }
  
 +            // Remember each space's workspace index so a switch knows which way to slide.
 +            let ws_idx =
 +                reactor.layout_manager.layout_engine.workspaces().active_workspace_idx(space);
-+            let prev_idx = {
-+                let mut last = LAST_WORKSPACE_IDX.lock();
-+                let prev = last.iter().find(|(s, _)| *s == space).map(|(_, i)| *i);
-+                last.retain(|(s, _)| *s != space);
-+                if let Some(i) = ws_idx {
-+                    last.push((space, i));
-+                }
-+                prev
++            let prev_idx = match ws_idx {
++                Some(i) => reactor.layout_manager.last_workspace_idx.insert(space, i),
++                None => reactor.layout_manager.last_workspace_idx.remove(&space),
 +            };
              if is_workspace_switch {
 -                any_frame_changed |=
 -                    AnimationManager::workspace_switch_layout(reactor, space, &layout, skip_wid);
-+                let dir = match (prev_idx, ws_idx) {
-+                    (Some(prev), Some(now)) if now < prev => -1.0,
-+                    _ => 1.0,
-+                };
++                let dir = slide_direction(prev_idx, ws_idx);
 +                any_frame_changed |= AnimationManager::workspace_switch_layout(
 +                    reactor, space, &layout, skip_wid, dir,
 +                );
              } else if reactor.workspace_switch_manager.active_workspace_switch.is_some() {
                  any_frame_changed |=
                      AnimationManager::instant_layout(reactor, space, &layout, skip_wid);
-@@ -559,6 +580,9 @@ impl LayoutManager {
+@@ -559,6 +571,15 @@ impl LayoutManager {
      }
  }
  
-+static LAST_WORKSPACE_IDX: parking_lot::Mutex<Vec<(crate::sys::screen::SpaceId, u64)>> =
-+    parking_lot::const_mutex(Vec::new());
++/// Windows of the workspace being entered slide in from the side the user moves toward:
++/// from the right (1.0) for a higher index or an unknown previous one, from the left (-1.0) for a lower one.
++fn slide_direction(prev: Option<u64>, now: Option<u64>) -> f64 {
++    match (prev, now) {
++        (Some(prev), Some(now)) if now < prev => -1.0,
++        _ => 1.0,
++    }
++}
 +
  /// Manages pending space changes
  pub struct PendingSpaceChangeManager {
      pub pending_space_change: Option<ForwardedSpaceState>,
+@@ -568,7 +589,27 @@ pub struct PendingSpaceChangeManager {
+ mod tests {
+     use objc2_core_foundation::{CGPoint, CGRect, CGSize};
+ 
+-    use super::{ScrollingDisplayBounds, bound_frame_to_screen};
++    use super::{ScrollingDisplayBounds, bound_frame_to_screen, slide_direction};
++
++    #[test]
++    fn workspace_slide_comes_from_the_side_you_move_toward() {
++        assert_eq!(
++            slide_direction(Some(3), Some(1)),
++            -1.0,
++            "lower index enters from the left"
++        );
++        assert_eq!(
++            slide_direction(Some(1), Some(3)),
++            1.0,
++            "higher index enters from the right"
++        );
++        assert_eq!(
++            slide_direction(None, Some(2)),
++            1.0,
++            "first switch on a space defaults to the right"
++        );
++        assert_eq!(slide_direction(Some(2), None), 1.0);
++    }
+ 
+     fn rect(x: f64, y: f64, w: f64, h: f64) -> CGRect {
+         CGRect::new(CGPoint::new(x, y), CGSize::new(w, h))
 diff --git a/src/actor/reactor/tests.rs b/src/actor/reactor/tests.rs
-index 16dbcdf..030275b 100644
+index 16dbcdf..49f1af3 100644
 --- a/src/actor/reactor/tests.rs
 +++ b/src/actor/reactor/tests.rs
-@@ -3167,6 +3167,7 @@ fn workspace_switch_layout_falls_back_to_full_frames_for_size_changes() {
+@@ -1,3 +1,4 @@
++// Modified by Veil (2026): updated for the workspace slide direction argument. See rift/README.md in the Veil repository.
+ use objc2_core_foundation::{CGPoint, CGSize};
+ use test_log::test;
+ 
+@@ -3167,6 +3168,7 @@ fn workspace_switch_layout_falls_back_to_full_frames_for_size_changes() {
          space,
          &[(wid, target)],
          None,
@@ -401,10 +351,15 @@ index 16dbcdf..030275b 100644
  
      let requests = apps.requests();
 diff --git a/src/bin/rift-cli.rs b/src/bin/rift-cli.rs
-index d20c96f..94b8bbb 100644
+index d20c96f..1c1358e 100644
 --- a/src/bin/rift-cli.rs
 +++ b/src/bin/rift-cli.rs
-@@ -251,6 +251,10 @@ enum CliResizeOrientation {
+@@ -1,3 +1,4 @@
++// Modified by Veil (2026): exposes the directional resize values. See rift/README.md in the Veil repository.
+ use std::io::{self, Write};
+ use std::path::PathBuf;
+ use std::process::{self};
+@@ -251,6 +252,10 @@ enum CliResizeOrientation {
      Horizontal,
      Vertical,
      Smart,
@@ -415,7 +370,7 @@ index d20c96f..94b8bbb 100644
  }
  
  impl From<CliResizeOrientation> for rift_wm::layout_engine::ResizeOrientation {
-@@ -259,6 +263,10 @@ impl From<CliResizeOrientation> for rift_wm::layout_engine::ResizeOrientation {
+@@ -259,6 +264,10 @@ impl From<CliResizeOrientation> for rift_wm::layout_engine::ResizeOrientation {
              CliResizeOrientation::Horizontal => Self::Horizontal,
              CliResizeOrientation::Vertical => Self::Vertical,
              CliResizeOrientation::Smart => Self::Smart,
@@ -426,99 +381,49 @@ index d20c96f..94b8bbb 100644
          }
      }
  }
-@@ -785,7 +793,8 @@ fn into_protocol_command(command: CliCommand) -> Result<rift_protocol::RiftComma
- fn decode_protocol<T, U>(value: T) -> Result<U, String>
- where
-     T: Serialize,
--    U: DeserializeOwned, {
-+    U: DeserializeOwned,
-+{
-     serde_json::from_value(serde_json::to_value(value).map_err(|error| error.to_string())?)
-         .map_err(|error| error.to_string())
- }
-@@ -1221,9 +1230,12 @@ mod tests {
-     #[test]
-     fn binding_mode_query_and_subscription_parse() {
-         let cli = Cli::try_parse_from(["rift-cli", "query", "binding-mode"]).unwrap();
--        assert!(matches!(cli.command, Commands::Query {
--            query: QueryCommands::BindingMode
--        }));
-+        assert!(matches!(
-+            cli.command,
-+            Commands::Query {
-+                query: QueryCommands::BindingMode
-+            }
-+        ));
-         assert_eq!(
-             build_query_request(QueryCommands::BindingMode).unwrap(),
-             RiftRequest::GetBindingMode
 diff --git a/src/layout_engine/systems/bsp.rs b/src/layout_engine/systems/bsp.rs
-index 089a516..9845cb1 100644
+index 089a516..7e94f34 100644
 --- a/src/layout_engine/systems/bsp.rs
 +++ b/src/layout_engine/systems/bsp.rs
-@@ -252,12 +252,15 @@ impl BspLayoutSystem {
- 
-     fn make_leaf(&mut self, window: Option<WindowId>) -> NodeId {
-         let id = self.tree.mk_node().into_id();
--        self.kind.insert(id, NodeKind::Leaf {
--            window,
--            fullscreen: false,
--            fullscreen_within_gaps: false,
--            preselected: None,
--        });
-+        self.kind.insert(
-+            id,
-+            NodeKind::Leaf {
-+                window,
-+                fullscreen: false,
-+                fullscreen_within_gaps: false,
-+                preselected: None,
-+            },
-+        );
-         id
+@@ -1,3 +1,4 @@
++// Modified by Veil (2026): directional resize. See rift/README.md in the Veil repository.
+ use objc2_core_foundation::{CGPoint, CGRect, CGSize};
+ use serde::{Deserialize, Serialize};
+ use slotmap::Key;
+@@ -835,6 +836,32 @@ mod tests {
+         }
      }
  
-@@ -768,7 +771,9 @@ impl crate::model::tree::Observer for Components {
- mod tests {
-     use super::*;
- 
--    fn w(idx: u32) -> WindowId { WindowId::new(1, idx) }
-+    fn w(idx: u32) -> WindowId {
-+        WindowId::new(1, idx)
++    #[test]
++    fn directional_resize_moves_the_pressed_edge_or_the_opposite_one_on_an_edge_tile() {
++        let (mut system, layout) = tiled(&[1, 2]);
++        let size = CGSize::new(1000.0, 800.0);
++        let width = |system: &BspLayoutSystem, wid| {
++            calculate_frames(system, layout, size, &Default::default())[&w(wid)].size.width
++        };
++        let (left0, right0) = (width(&system, 1), width(&system, 2));
++
++        // right tile, Left: its left edge moves left, so it grows into the left tile
++        system.select_window(layout, w(2));
++        system.resize_selection_by(layout, 0.10, ResizeOrientation::Left);
++        assert!(width(&system, 2) > right0 && width(&system, 1) < left0);
++
++        // left tile, Left: nothing to its left, so its right edge moves left (it shrinks)
++        system.select_window(layout, w(1));
++        let left1 = width(&system, 1);
++        system.resize_selection_by(layout, 0.10, ResizeOrientation::Left);
++        assert!(width(&system, 1) < left1);
++
++        // left tile, Right: grows into the right tile
++        let left2 = width(&system, 1);
++        system.resize_selection_by(layout, 0.10, ResizeOrientation::Right);
++        assert!(width(&system, 1) > left2);
 +    }
- 
-     fn tiled(windows: &[u32]) -> (BspLayoutSystem, LayoutId) {
-         let mut system = BspLayoutSystem::default();
-@@ -1373,7 +1378,9 @@ impl LayoutSystem for BspLayoutSystem {
-         self.layouts.insert(state)
-     }
- 
--    fn contains_layout(&self, layout: LayoutId) -> bool { self.layouts.contains_key(layout) }
-+    fn contains_layout(&self, layout: LayoutId) -> bool {
-+        self.layouts.contains_key(layout)
-+    }
- 
-     /// shallow
-     fn clone_layout(&mut self, layout: LayoutId) -> LayoutId {
-@@ -1950,10 +1957,13 @@ impl LayoutSystem for BspLayoutSystem {
-             // onto a new split at the directional neighbor, then reclaim its
-             // old region for the sibling left behind.
-             let split = self.tree.mk_node().into_id();
--            self.kind.insert(split, NodeKind::Split {
--                orientation: direction.orientation(),
--                ratio: 0.5,
--            });
-+            self.kind.insert(
-+                split,
-+                NodeKind::Split {
-+                    orientation: direction.orientation(),
-+                    ratio: 0.5,
-+                },
-+            );
-             split.detach(&mut self.tree).insert_before(target);
-             let (first, second) = match direction {
-                 Direction::Left | Direction::Up => (moving, target),
-@@ -2284,31 +2294,57 @@ impl LayoutSystem for BspLayoutSystem {
++
+     #[test]
+     fn removal_clears_legacy_duplicates_and_empty_roots() {
+         let (mut system, layout) = tiled(&[1, 2, 3]);
+@@ -2284,31 +2311,57 @@ impl LayoutSystem for BspLayoutSystem {
          orientation: ResizeOrientation,
      ) {
          let sel_snapshot = self.selection_of_layout(layout);
@@ -529,6 +434,15 @@ index 089a516..9845cb1 100644
 -
 -        while let Some(parent) = node.parent(&self.tree.map) {
 -            if let Some(NodeKind::Split {
+-                orientation: split_orientation,
+-                ratio,
+-            }) = self.kind.get_mut(parent)
+-                && match orientation {
+-                    ResizeOrientation::Horizontal => *split_orientation == Orientation::Horizontal,
+-                    ResizeOrientation::Vertical => *split_orientation == Orientation::Vertical,
+-                    ResizeOrientation::Smart => true,
+-                }
+-            {
 +        // Directional grow with no split on that side (an edge tile) moves the opposite edge the
 +        // same way instead, so the opposite arrow shrinks a side tile without Shift.
 +        let opposite = match orientation {
@@ -543,35 +457,31 @@ index 089a516..9845cb1 100644
 +            let mut node = start;
 +            let mut done = false;
 +            while let Some(parent) = node.parent(&self.tree.map) {
-+                if let Some(NodeKind::Split {
-                 orientation: split_orientation,
-                 ratio,
-             }) = self.kind.get_mut(parent)
--                && match orientation {
-+                && match orientation.axis() {
-                     ResizeOrientation::Horizontal => *split_orientation == Orientation::Horizontal,
-                     ResizeOrientation::Vertical => *split_orientation == Orientation::Vertical,
--                    ResizeOrientation::Smart => true,
-+                    _ => true,
-                 }
--            {
--                let is_first = Some(node) == parent.first_child(&self.tree.map);
+                 let is_first = Some(node) == parent.first_child(&self.tree.map);
 -                let delta = (amount as f32) * 0.5;
 -                if is_first {
 -                    *ratio = (*ratio + delta).clamp(0.05, 0.95);
 -                } else {
 -                    *ratio = (*ratio - delta).clamp(0.05, 0.95);
 +                // a directional resize needs the split on that side of the window
-+                && match orientation {
-+                    ResizeOrientation::Right | ResizeOrientation::Down => {
-+                        Some(node) == parent.first_child(&self.tree.map)
-+                    }
-+                    ResizeOrientation::Left | ResizeOrientation::Up => {
-+                        Some(node) != parent.first_child(&self.tree.map)
-+                    }
++                let on_side = match orientation {
++                    ResizeOrientation::Right | ResizeOrientation::Down => is_first,
++                    ResizeOrientation::Left | ResizeOrientation::Up => !is_first,
 +                    _ => true,
-+                } {
-+                    let is_first = Some(node) == parent.first_child(&self.tree.map);
++                };
++                if let Some(NodeKind::Split {
++                    orientation: split_orientation,
++                    ratio,
++                }) = self.kind.get_mut(parent)
++                    && on_side
++                    && match orientation.axis() {
++                        ResizeOrientation::Horizontal => {
++                            *split_orientation == Orientation::Horizontal
++                        }
++                        ResizeOrientation::Vertical => *split_orientation == Orientation::Vertical,
++                        _ => true,
++                    }
++                {
 +                    let delta = (amount as f32) * 0.5;
 +                    if is_first {
 +                        *ratio = (*ratio + delta).clamp(0.05, 0.95);
@@ -591,10 +501,15 @@ index 089a516..9845cb1 100644
      }
  
 diff --git a/src/layout_engine/systems/scrolling.rs b/src/layout_engine/systems/scrolling.rs
-index 0f33b65..6d38cc7 100644
+index 0f33b65..f569fe4 100644
 --- a/src/layout_engine/systems/scrolling.rs
 +++ b/src/layout_engine/systems/scrolling.rs
-@@ -2056,6 +2056,7 @@ impl LayoutSystem for ScrollingLayoutSystem {
+@@ -1,3 +1,4 @@
++// Modified by Veil (2026): treats directional resizes as their axis. See rift/README.md in the Veil repository.
+ //! A strip of persistent columns in world coordinates, translated by one camera.
+ //! View targets follow niri's fit/center and gesture snap semantics. Ordinary layout
+ //! animation remains in the reactor; touchpad release belongs to the camera.
+@@ -2056,6 +2057,7 @@ impl LayoutSystem for ScrollingLayoutSystem {
          let Some((state, col, row)) = Self::selected_mut(&mut self.layouts, layout) else {
              return;
          };
@@ -603,78 +518,15 @@ index 0f33b65..6d38cc7 100644
              || (orientation == ResizeOrientation::Smart && state.columns[col].windows.len() > 1);
          state.mutate(&self.settings, |state| {
 diff --git a/src/layout_engine/systems/traditional.rs b/src/layout_engine/systems/traditional.rs
-index 4af2b04..77c04b5 100644
+index 4af2b04..6db0dd1 100644
 --- a/src/layout_engine/systems/traditional.rs
 +++ b/src/layout_engine/systems/traditional.rs
-@@ -51,7 +51,9 @@ impl TraditionalLayoutSystem {
-         self.window_insertion_point = value;
-     }
- 
--    pub fn set_equalize_nodes(&mut self, value: bool) { self.equalize_nodes = value; }
-+    pub fn set_equalize_nodes(&mut self, value: bool) {
-+        self.equalize_nodes = value;
-+    }
- 
-     fn find_best_focus_target(&self, node: NodeId) -> Option<(NodeId, WindowId)> {
-         if let Some(wid) = self.tree.data.window.at(node) {
-@@ -139,13 +141,17 @@ impl TraditionalLayoutSystem {
-         self.find_or_create_common_parent_internal(layout, node1, node2)
-     }
- 
--    pub(crate) fn root(&self, layout: LayoutId) -> NodeId { self.layout_roots[layout].id() }
-+    pub(crate) fn root(&self, layout: LayoutId) -> NodeId {
-+        self.layout_roots[layout].id()
-+    }
- 
-     pub(crate) fn selection(&self, layout: LayoutId) -> NodeId {
-         self.tree.data.selection.current_selection(self.root(layout))
-     }
- 
--    pub(crate) fn map(&self) -> &NodeMap { &self.tree.map }
-+    pub(crate) fn map(&self) -> &NodeMap {
-+        &self.tree.map
-+    }
- 
-     pub(crate) fn local_selection(&self, node: NodeId) -> Option<NodeId> {
-         self.tree
-@@ -155,7 +161,9 @@ impl TraditionalLayoutSystem {
-             .or_else(|| self.tree.data.selection.last_selection(self.map(), node))
-     }
- 
--    pub(crate) fn layout(&self, node: NodeId) -> LayoutKind { self.tree.data.layout.kind(node) }
-+    pub(crate) fn layout(&self, node: NodeId) -> LayoutKind {
-+        self.tree.data.layout.kind(node)
-+    }
- 
-     pub(crate) fn layouts_for_window(&self, wid: WindowId) -> Vec<LayoutId> {
-         self.tree.data.window.layouts_for(wid)
-@@ -606,7 +614,9 @@ impl LayoutSystem for TraditionalLayoutSystem {
-         self.layout_roots.insert(root)
-     }
- 
--    fn contains_layout(&self, layout: LayoutId) -> bool { self.layout_roots.contains_key(layout) }
-+    fn contains_layout(&self, layout: LayoutId) -> bool {
-+        self.layout_roots.contains_key(layout)
-+    }
- 
-     fn clone_layout(&mut self, layout: LayoutId) -> LayoutId {
-         let source_root = self.layout_roots[layout].id();
-@@ -617,11 +627,9 @@ impl LayoutSystem for TraditionalLayoutSystem {
-             source_root.traverse_preorder(&self.tree.map),
-             cloned_root.traverse_preorder(&self.tree.map),
-         ) {
--            self.tree.data.dispatch_event(&self.tree.map, TreeEvent::Copied {
--                src,
--                dest,
--                dest_layout,
--            });
-+            self.tree
-+                .data
-+                .dispatch_event(&self.tree.map, TreeEvent::Copied { src, dest, dest_layout });
-         }
-         dest_layout
-     }
-@@ -1309,14 +1317,37 @@ impl LayoutSystem for TraditionalLayoutSystem {
+@@ -1,3 +1,4 @@
++// Modified by Veil (2026): directional resize. See rift/README.md in the Veil repository.
+ use objc2_core_foundation::CGRect;
+ use serde::{Deserialize, Serialize};
+ use slotmap::Key;
+@@ -1309,14 +1310,37 @@ impl LayoutSystem for TraditionalLayoutSystem {
                  let directions: &[Direction] = match orientation {
                      ResizeOrientation::Horizontal => &[Direction::Right, Direction::Left],
                      ResizeOrientation::Vertical => &[Direction::Down, Direction::Up],
@@ -712,70 +564,63 @@ index 4af2b04..77c04b5 100644
              }
          }
      }
-@@ -2475,7 +2506,9 @@ struct WindowNodeInfo {
- struct WindowNodeInfoVec(Vec<WindowNodeInfo>);
- 
- impl WindowIndex {
--    pub(crate) fn at(&self, node: NodeId) -> Option<WindowId> { self.windows.get(node).copied() }
-+    pub(crate) fn at(&self, node: NodeId) -> Option<WindowId> {
-+        self.windows.get(node).copied()
-+    }
- 
-     fn layouts_for(&self, wid: WindowId) -> Vec<LayoutId> {
-         self.window_nodes
-@@ -2751,7 +2784,9 @@ impl Layout {
-         }
+@@ -5949,6 +5973,46 @@ mod tests {
+         assert!(after > before);
      }
  
--    fn kind(&self, node: NodeId) -> LayoutKind { self.info[node].kind }
-+    fn kind(&self, node: NodeId) -> LayoutKind {
-+        self.info[node].kind
-+    }
- 
-     fn proportion(&self, map: &NodeMap, node: NodeId) -> Option<f64> {
-         let Some(parent) = node.parent(map) else { return None };
-@@ -3273,7 +3308,9 @@ mod tests {
-     use super::*;
-     use crate::layout_engine::{Direction, LayoutKind};
- 
--    fn w(idx: u32) -> WindowId { WindowId::new(1, idx) }
-+    fn w(idx: u32) -> WindowId {
-+        WindowId::new(1, idx)
-+    }
- 
-     #[test]
-     fn window_in_direction_prefers_leftmost_when_moving_right() {
-@@ -3389,7 +3426,9 @@ mod tests {
-     }
- 
-     impl Drop for TestTraditionalLayoutSystem {
--        fn drop(&mut self) { self._root.remove(&mut self.system.tree); }
-+        fn drop(&mut self) {
-+            self._root.remove(&mut self.system.tree);
++    #[test]
++    fn directional_resize_moves_only_the_pressed_edge() {
++        let mut system = TraditionalLayoutSystem::default();
++        let layout = system.create_layout();
++        let root = system.root(layout);
++        system.tree.data.layout.set_kind(root, LayoutKind::Horizontal);
++        let (a, b, c) = (w(61), w(62), w(63));
++        for wid in [a, b, c] {
++            system.add_window_after_selection(layout, wid);
 +        }
-     }
- 
++        let prop = |system: &TraditionalLayoutSystem, wid| {
++            let node = system.tree.data.window.node_for(layout, wid).unwrap();
++            system.tree.data.layout.proportion(&system.tree.map, node).unwrap()
++        };
++
++        // middle tile, Left: grows into its left neighbour only
++        system.select_window(layout, b);
++        let (a0, b0, c0) = (prop(&system, a), prop(&system, b), prop(&system, c));
++        system.resize_selection_by(layout, 0.10, ResizeOrientation::Left);
++        assert!(prop(&system, b) > b0 && prop(&system, a) < a0);
++        assert_eq!(prop(&system, c), c0);
++
++        // middle tile, Right: grows into its right neighbour only
++        let (a1, c1) = (prop(&system, a), prop(&system, c));
++        system.resize_selection_by(layout, 0.10, ResizeOrientation::Right);
++        assert!(prop(&system, c) < c1);
++        assert_eq!(prop(&system, a), a1);
++
++        // leftmost tile, Left: nothing to its left, so its right edge moves left (it shrinks)
++        system.select_window(layout, a);
++        let (a2, b2) = (prop(&system, a), prop(&system, b));
++        system.resize_selection_by(layout, 0.10, ResizeOrientation::Left);
++        assert!(prop(&system, a) < a2 && prop(&system, b) > b2);
++
++        // leftmost tile, shrink Left: no left edge to pull in, so nothing changes
++        let a3 = prop(&system, a);
++        system.resize_selection_by(layout, -0.10, ResizeOrientation::Left);
++        assert_eq!(prop(&system, a), a3);
++    }
++
      #[test]
+     fn manual_resize_ignores_cross_axis_jitter_when_hitting_edge() {
+         let mut system = TraditionalLayoutSystem::default();
 diff --git a/src/ui/settings/commands.rs b/src/ui/settings/commands.rs
-index 05ddb11..deb3a36 100644
+index 05ddb11..413ab7b 100644
 --- a/src/ui/settings/commands.rs
 +++ b/src/ui/settings/commands.rs
-@@ -7,8 +7,12 @@ use crate::actor::reactor::Command;
- use crate::actor::wm_controller::{ConfiguredLayoutCommand, ExecCmd, WmCmd, WmCommand};
- use crate::common::config::{ConfigSource, WorkspaceSelector};
- 
--fn layout(cmd: L) -> WmCommand { WmCommand::ReactorCommand(Command::Layout(cmd)) }
--fn reactor(cmd: R) -> WmCommand { WmCommand::ReactorCommand(Command::Reactor(cmd)) }
-+fn layout(cmd: L) -> WmCommand {
-+    WmCommand::ReactorCommand(Command::Layout(cmd))
-+}
-+fn reactor(cmd: R) -> WmCommand {
-+    WmCommand::ReactorCommand(Command::Reactor(cmd))
-+}
- fn actions() -> &'static [(&'static str, WmCommand)] {
-     static ACTIONS: std::sync::LazyLock<Vec<(&'static str, WmCommand)>> =
-         std::sync::LazyLock::new(|| {
-@@ -728,9 +732,22 @@ fn argument_editor(
+@@ -1,3 +1,4 @@
++// Modified by Veil (2026): exposes the directional resize values. See rift/README.md in the Veil repository.
+ use rift_protocol::{
+     Direction, DisplaySelector, LayoutCommand as L, ReactorCommand as R, ResizeOrientation,
+ };
+@@ -728,9 +729,22 @@ fn argument_editor(
                  ResizeOrientation::Smart,
                  ResizeOrientation::Horizontal,
                  ResizeOrientation::Vertical,

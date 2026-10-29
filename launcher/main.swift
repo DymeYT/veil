@@ -3,6 +3,7 @@
 // Veil commands and themes. Colors come from generated/launcher.json (written by veil-theme).
 // Build: launcher/build.sh. Self-check: "Veil Search.app/Contents/MacOS/veil-search" --selftest
 import AppKit
+import ApplicationServices
 import Carbon.HIToolbox
 import QuickLookThumbnailing
 import SwiftUI
@@ -144,6 +145,18 @@ struct Item: Identifiable {
     var origin: Kind? = nil  // the kind before promotion to TOP HIT, so labels stay accurate
     var key: String { path ?? title }
     var id: String { "\(kind.rawValue)|\(key)" }
+    var isInformational: Bool { if case .copy(let value) = action { return value.isEmpty }; return false }
+    // Copy results derive their identity from user content. They must never become disk-backed ranking or pin keys.
+    var canPersist: Bool {
+        if case .copy = action { return false }
+        return ![Kind.answer, .calc].contains(origin ?? kind) && extra != "secret" && extra != "clip"
+    }
+}
+
+func canRememberQuery(_ query: String) -> Bool {
+    let q = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    let privateCommands = ["clip", "b64", "unb64", "url", "sha256", "password", "upper", "lower", "title", "snake", "camel", "json", "count", "trim"]
+    return !q.isEmpty && !privateCommands.contains { q == $0 || q.hasPrefix($0 + " ") } && !ClipHistory.looksLikeSecret(query)
 }
 
 // Fuzzy score of `name` for query `q` (both compared lowercased), nil when it doesn't match.
@@ -375,6 +388,14 @@ final class Model: NSObject, ObservableObject {
     var usage: [String: Int] = UserDefaults.standard.dictionary(forKey: "usage") as? [String: Int] ?? [:]
     var close: () -> Void = {}
 
+    static func migrateRankingPrivacy(_ store: UserDefaults) -> Bool {
+        guard store.integer(forKey: "rankingPrivacyVersion") < 2 else { return false }
+        // Legacy keys mixed arbitrary clipboard text with titles/paths, so they cannot be safely classified.
+        for key in ["usage", "history", "pins"] { store.removeObject(forKey: key) }
+        store.set(2, forKey: "rankingPrivacyVersion")
+        return true
+    }
+
     func refresh() {
         palette = Palette.load()
         ncCache = ncItems(wsNames)
@@ -406,7 +427,7 @@ final class Model: NSObject, ObservableObject {
             let f = mode == 4 ? q : String(q.dropFirst(4)).trimmingCharacters(in: .whitespaces)
             mdQuery?.stop(); searchingFiles = false
             let clips = ClipHistory.shared.items(f)
-            publish(clips.isEmpty ? [Item(kind: .answer, title: "Clipboard history is empty", subtitle: "Copied text appears here (kept for 8 hours, never saved to disk)",
+            publish(clips.isEmpty ? [Item(kind: .answer, title: ClipHistory.enabled ? "Clipboard history is empty" : "Clipboard history is off", subtitle: ClipHistory.enabled ? "Copied text appears here (kept for 8 hours, never saved to disk)" : "Enable with defaults write app.veil.search clipboardHistory -bool true",
                                           symbol: "doc.on.clipboard", action: .copy(""), score: 0)] : clips)
             return
         }
@@ -559,7 +580,10 @@ final class Model: NSObject, ObservableObject {
             let used = (r.value(forAttribute: kMDItemLastUsedDate as String) as? Date ?? r.value(forAttribute: kMDItemContentModificationDate as String) as? Date)?.timeIntervalSince1970 ?? 0
             let isDir = (r.value(forAttribute: kMDItemContentType as String) as? String) == "public.folder"
             let it = Item(kind: .file, title: name, subtitle: ((path as NSString).deletingLastPathComponent as NSString).abbreviatingWithTildeInPath,
-                          symbol: isDir ? "folder" : "doc", path: path, action: .open(URL(fileURLWithPath: path)), score: group == 0 ? 850 : group == 1 ? 650 : 100)
+                          // a file whose name only starts with the query ranks below apps, settings and answers;
+                          // only an exact name (with or without extension) can be the top hit
+                          symbol: isDir ? "folder" : "doc", path: path, action: .open(URL(fileURLWithPath: path)),
+                          score: (lname == q || (lname as NSString).deletingPathExtension == q) ? 870 : group == 0 ? 700 : group == 1 ? 600 : 100)
             found.append((it, group, used))
         }
         mq.enableUpdates()
@@ -595,6 +619,7 @@ final class Model: NSObject, ObservableObject {
     func activate(_ i: Int? = nil, reveal: Bool = false, paste: Bool = false) {
         guard items.indices.contains(i ?? selected) else { return }
         let it = items[i ?? selected]
+        guard !it.isInformational else { return }
         // permission rows ask, then search again with the new source
         if it.extra.hasPrefix("grant:") {
             let what = String(it.extra.dropFirst(6))
@@ -615,18 +640,32 @@ final class Model: NSObject, ObservableObject {
         if it.extra == "menu" { close(); MenuItems.press(it.id); return }
         if paste {
             let text: String = { if case .copy(let v) = it.action { return v }; return it.path ?? it.title }()
+            // without Accessibility the paste can't happen: copy instead and say so while the panel is still open
+            guard AXIsProcessTrusted() else {
+                copyText(text, secret: it.extra == "secret")
+                toast = "Copied · allow Accessibility to paste"
+                MenuItems.requestTrust()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) { self.toast = ""; self.close() }
+                return
+            }
             close()
-            if !pasteIntoFrontApp(text, secret: it.extra == "secret") { toast = "Allow Accessibility to paste" }
+            let fallback: (Bool) -> Void = { [weak self] pasted in
+                guard !pasted, let self else { return }
+                (NSApp.delegate as? App)?.show(query: self.query)
+                self.toast = "Copied · paste manually"
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) { self.toast = "" }
+            }
+            if !pasteIntoFrontApp(text, secret: it.extra == "secret", completion: fallback) { fallback(false) }
             return
         }
         let q = query.trimmingCharacters(in: .whitespaces)
-        usage[it.key, default: 0] += 1
-        if !q.isEmpty {
+        if it.canPersist && canRememberQuery(q) {
+            usage[it.key, default: 0] += 1
             usage["q:\(q.lowercased().prefix(4))|\(it.key)", default: 0] += 1
             history.removeAll { $0 == q }; history.insert(q, at: 0); history = Array(history.prefix(50))
             UserDefaults.standard.set(history, forKey: "history")
+            UserDefaults.standard.set(usage, forKey: "usage")
         }
-        UserDefaults.standard.set(usage, forKey: "usage")
         if case .copy = it.action, !reveal {  // brief confirmation before the panel goes away
             copyText({ if case .copy(let v) = it.action { return v }; return "" }(), secret: it.extra == "secret")
             toast = "Copied"
@@ -637,7 +676,7 @@ final class Model: NSObject, ObservableObject {
         if reveal, let p = it.path { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: p)]); return }
         switch it.action {
         case .open(let url): NSWorkspace.shared.open(url.isFileURL ? (obsidianURL(for: url.path) ?? url) : url)
-        case .copy(let s): NSPasteboard.general.clearContents(); NSPasteboard.general.setString(s, forType: .string)
+        case .copy(let s): copyText(s, secret: it.extra == "secret")
         case .run(let argv):
             let p = Process()
             p.executableURL = URL(fileURLWithPath: argv[0])
@@ -646,6 +685,18 @@ final class Model: NSObject, ObservableObject {
             if it.extra.hasPrefix("stdin:"), let data = Data(base64Encoded: String(it.extra.dropFirst(6))) {
                 let pipe = Pipe(); p.standardInput = pipe
                 try? p.run(); pipe.fileHandleForWriting.write(data); try? pipe.fileHandleForWriting.close()
+            } else if argv[0].hasSuffix("veil-theme") {
+                // report a refused theme change instead of failing silently
+                let err = Pipe(); p.standardError = err
+                try? p.run()
+                DispatchQueue.global().async {
+                    p.waitUntilExit()
+                    guard p.terminationStatus != 0 else { return }
+                    let msg = String(data: err.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+                        .split(separator: "\n").last.map(String.init) ?? "Theme change failed"
+                    let safe = msg.replacingOccurrences(of: "\\", with: "").replacingOccurrences(of: "\"", with: "'")
+                    _ = try? Process.run(URL(fileURLWithPath: "/usr/bin/osascript"), arguments: ["-e", "display notification \"\(safe)\" with title \"Veil theme\""])
+                }
             } else { try? p.run() }
         }
     }
@@ -685,6 +736,7 @@ final class Model: NSObject, ObservableObject {
 
     func togglePin() {
         guard items.indices.contains(selected) else { return }
+        guard items[selected].canPersist else { toast = "Private results aren't saved"; return }
         let k = items[selected].key
         if let i = pins.firstIndex(of: k) { pins.remove(at: i); toast = "Unpinned" } else { pins.insert(k, at: 0); toast = "Pinned to the start screen" }
         UserDefaults.standard.set(pins, forKey: "pins")
@@ -693,20 +745,27 @@ final class Model: NSObject, ObservableObject {
 
     func trashSelected() {
         guard items.indices.contains(selected), let path = items[selected].path, !path.hasSuffix(".app") else { return }
-        NSWorkspace.shared.recycle([URL(fileURLWithPath: path)]) { _, _ in }
-        toast = "Moved to Trash"
-        items.remove(at: selected)
-        selected = min(selected, max(items.count - 1, 0))
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { self.toast = "" }
+        // the row goes and the toast confirms only once Finder has really moved it
+        NSWorkspace.shared.recycle([URL(fileURLWithPath: path)]) { [weak self] _, error in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                if error == nil, let i = self.items.firstIndex(where: { $0.path == path }) {
+                    self.items.remove(at: i)
+                    self.selected = min(self.selected, max(self.items.count - 1, 0))
+                }
+                self.toast = error == nil ? "Moved to Trash" : "Couldn't move to Trash"
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { self.toast = "" }
+            }
+        }
     }
 
     func copySelected() {
         guard items.indices.contains(selected) else { return }
         let it = items[selected]
+        guard !it.isInformational else { return }
         let s: String
         if case .copy(let v) = it.action { s = v } else { s = it.path ?? it.title }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(s, forType: .string)
+        copyText(s, secret: it.extra == "secret")
         close()
     }
 }
@@ -1181,6 +1240,7 @@ struct Texture: View {
 
 struct LauncherView: View {
     @Environment(\.accessibilityReduceMotion) var reduceMotion
+    @Environment(\.accessibilityReduceTransparency) var reduceTransparency
     @ObservedObject var m: Model
     @FocusState var focused: Bool
     @Namespace var ns
@@ -1231,7 +1291,7 @@ struct LauncherView: View {
                         HStack(spacing: 16) { hint("↵", "open"); hint("⌘K", "actions") }
                     }
                     Spacer(minLength: 12)
-                    Text(p.cased("\(p.s("brand", "VEIL")) // search")).font(mono(10, "Bold")).tracking(1.4).foregroundStyle(p["comment"]).lineLimit(1).fixedSize()
+                    Text(p.cased("\(p.s("brand", "VEIL")) // search")).font(mono(11, "Bold")).tracking(1.4).foregroundStyle(p["comment"]).lineLimit(1).fixedSize()
                 }
                 .padding(.horizontal, 18).frame(height: 32)
                 .background(p["bg_dark"].opacity(0.55))
@@ -1241,8 +1301,8 @@ struct LauncherView: View {
         .frame(width: p.num("width", 860))
         .background(
             ZStack(alignment: .top) {
-                VisualEffect()
-                p["bg_float"].opacity(p.num("opacity", 0.88))
+                if !reduceTransparency { VisualEffect() }
+                p["bg_float"].opacity(reduceTransparency ? 1 : p.num("opacity", 0.88))
                 Texture(kind: p.s("texture", "scanlines"), p: p)
                 accentLine(p)
             }
@@ -1414,11 +1474,11 @@ struct LauncherView: View {
                                 result(item, index: i, p: p)
                             }
                         }
-                    }.padding(.horizontal, 8).padding(.bottom, 8)
+                    }.padding(.horizontal, 8).padding(.bottom, 40)  // the last row can always scroll clear of the fade
                 }
             }
             // fade the clipped bottom edge so a cut-off section header never reads as an empty group
-            .mask(VStack(spacing: 0) { Color.black; LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: 44) })
+            .mask(VStack(spacing: 0) { Color.black; LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: 36) })
             .onChange(of: m.selected) { _, selected in
                 if m.items.indices.contains(selected) { proxy.scrollTo(m.items[selected].id) }
             }
@@ -1492,10 +1552,10 @@ struct LauncherView: View {
 
     func hint(_ key: String, _ label: String) -> some View {
         HStack(spacing: 5) {
-            Text(key).font(mono(10, "Bold")).foregroundStyle(m.palette["dim"])
+            Text(key).font(mono(11, "Bold")).foregroundStyle(m.palette["dim"])
                 .padding(.horizontal, 5).padding(.vertical, 1.5)
                 .background(RoundedRectangle(cornerRadius: 4).stroke(m.palette["border"], lineWidth: 1))
-            Text(label).font(mono(10, "Regular")).foregroundStyle(m.palette["comment"])
+            Text(label).font(mono(11, "Regular")).foregroundStyle(m.palette["comment"])  // 11 pt floor: ~9.3 pt physical at More Space
         }.lineLimit(1).fixedSize()
     }
 }
@@ -1561,6 +1621,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var lastToggle = Date.distantPast
 
     func applicationDidFinishLaunching(_ n: Notification) {
+        if Model.migrateRankingPrivacy(.standard) { model.usage = [:]; model.history = []; model.pins = [] }
         panel = Panel(contentRect: NSRect(x: 0, y: 0, width: 940, height: 640),
                       styleMask: [.borderless, .nonactivatingPanel, .fullSizeContentView], backing: .buffered, defer: false)
         panel.isFloatingPanel = true
@@ -1612,7 +1673,8 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 return e
             case kVK_ANSI_L where cmd: self.showLargeType(); return nil
             case kVK_ANSI_K where cmd: self.model.actionIndex = 0; self.model.actionsOpen = !self.model.currentActions.isEmpty; return nil
-            case kVK_Delete where cmd: self.model.trashSelected(); return nil
+            // ⌘⌫ deletes the query text like every macOS field; Move to Trash stays in the ⌘K actions
+            case kVK_Delete where cmd: if !self.model.query.isEmpty { return e }; self.model.trashSelected(); return nil
             case kVK_DownArrow:
                 if self.model.historyIndex >= 0 { _ = self.model.recallHistory(-1); return nil }
                 self.model.move(1); return nil
@@ -1725,7 +1787,22 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         band.reload(Palette.load())
         ClipHistory.shared.start()
+        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
+                                                         object: nil, queue: .main) { [weak self] _ in self?.syncWindowMotion() }
+        syncWindowMotion()
         NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in self?.band.reload(Palette.load()) }
+    }
+
+    // Follow a live accessibility change without polling or waiting for a theme reapply.
+    func syncWindowMotion() {
+        let animate = !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion &&
+            !FileManager.default.fileExists(atPath: ncRoot + "/generated/quiet")
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: home + "/.local/bin/rift-cli")
+        task.arguments = ["execute", "config", "set", "settings.animate", animate ? "true" : "false"]
+        task.standardOutput = FileHandle.nullDevice
+        task.standardError = FileHandle.nullDevice
+        try? task.run()
     }
 
     // `open -a "Veil Search"` (veil launch, the bar menu) toggles too
@@ -1824,7 +1901,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         w.ignoresMouseEvents = true
         w.isReleasedWhenClosed = false
         w.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
-        w.contentView = NSHostingView(rootView: SplashView(p: p))
+        w.contentView = NSHostingView(rootView: SplashView(p: p, size: screen.frame.size))
         w.alphaValue = 0
         w.orderFrontRegardless()
         NSAnimationContext.runAnimationGroup { $0.duration = 0.25; w.animator().alphaValue = 1 }
@@ -1895,6 +1972,33 @@ func selftest() -> Never {
     }
         precondition(webSearch("c++ & rust").absoluteString == "https://www.google.com/search?q=c%2B%2B%20%26%20rust")
     precondition(score("sfr", "Safari") == nil && score("saf", "Workspace 5 · FREE") == nil)
+    // clipboard history never keeps tokens copied from a terminal, but keeps ordinary long words, URLs and paths
+    precondition(ClipHistory.looksLikeSecret("ghp_16C7e42F292c6912E7710c838347Ae178B4a"))
+    precondition(ClipHistory.looksLikeSecret("eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0In0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U"))
+    precondition(ClipHistory.looksLikeSecret("Xq7pL2mZ9vR4tK8wB3nC6yH1"))
+    precondition(!canRememberQuery("clip private words") && !canRememberQuery("url private words") && canRememberQuery("safari"))
+    precondition(!Item(kind: .answer, title: "private clipboard text", action: .copy("private clipboard text"), extra: "clip").canPersist)
+    precondition(Item(kind: .answer, title: "Weather unavailable", action: .copy("")).isInformational)
+    do {
+        let name = "app.veil.search.selftest.\(UUID().uuidString)"
+        let store = UserDefaults(suiteName: name)!
+        defer { store.removePersistentDomain(forName: name) }
+        for key in ["usage", "history", "pins"] { store.set(["example-private-content"], forKey: key) }
+        precondition(Model.migrateRankingPrivacy(store))
+        precondition(["usage", "history", "pins"].allSatisfy { store.object(forKey: $0) == nil })
+        store.set(["Safari": 1], forKey: "usage")
+        precondition(!Model.migrateRankingPrivacy(store) && store.dictionary(forKey: "usage")?["Safari"] as? Int == 1)
+    }
+    precondition(ClipHistory.looksLikeSecret("export TOKEN=glrt-ExampleCredentialValue1234.01.demo"))
+    precondition(ClipHistory.looksLikeSecret("curl -H 'Authorization: Bearer ExampleCredentialValue123456' https://example.com"))
+    precondition(ClipHistory.looksLikeSecret("config\n-----BEGIN PRIVATE KEY-----\nexample"))
+    precondition(!ClipHistory.looksLikeSecret("https://github.com/DymeYT/veil/pull/12345678"))
+    precondition(!ClipHistory.looksLikeSecret("/Users/someone/Library/Caches/veil-cpu"))
+    precondition(!ClipHistory.looksLikeSecret("internationalization") && !ClipHistory.looksLikeSecret("hello world this is a long sentence 2026"))
+    precondition(!ClipHistory.looksLikeSecret("wifi_scanner_dummy_2.cpp") && !ClipHistory.looksLikeSecret("Screenshot_2026-10-29.png"))
+    precondition(!ClipHistory.looksLikeSecret("3114cc5eb3eb6858a3495690312065fe9d95c609") && !ClipHistory.looksLikeSecret("550e8400-e29b-41d4-a716-446655440000"))
+    precondition(CalendarSource.upcoming("cal").isEmpty)  // "cal" means Calculator or Calendar.app, not the agenda
+    precondition((systemActionItems().first { $0.title == "Lock Screen" }?.score ?? 0) > 0)  // the action beats the Settings pane
     print("veil-search selftest: ok")
     exit(0)
 }

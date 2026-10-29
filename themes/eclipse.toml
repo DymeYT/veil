@@ -40,6 +40,10 @@ STRUGGLE"""
 
 # Shape, type and layout (see ECOSYSTEMS.md). Values may name colors as %role%.
 [style]
+panel_headers = "space"  # control panel structure (sketchybarrc): text | rule | space
+panel_status = "bottom"
+panel_keys = "trailing"
+panel_first = "windows"
 search_symbol = "brand-of-sacrifice"
 bar_layout = "strip"
 bar_position = "bottom"
@@ -71,7 +75,7 @@ anim = "0.32"
 term_font = "IBM Plex Mono"
 term_size = "14"
 term_cell = "10%"
-term_opacity = "0.97"
+term_opacity = "1.0"
 term_blur = "0"
 term_pad_x = "20"
 term_pad_y = "14"
@@ -80,6 +84,7 @@ term_blink = "false"
 prompt_char = "❯"
 ff_sep = "  ·  "
 ff_logo_color = "red"
+ff_layout = "kernel uptime"  # fastfetch readings, order and swatch (veil-theme fastfetch_modules)
 ff_k1 = "SYSTEM"
 ff_k2 = "MACHINE"
 ff_k3 = "KERNEL"
@@ -187,6 +192,7 @@ editor_signcolumn = "auto"
 editor_foldcolumn = "0"
 
 editor_statusline = "0"
+editor_status_layout = "ink"  # Neovim statusline form (templates/nvim.lua layouts)
 
 editor_colorcolumn = "80"
 

@@ -3,13 +3,18 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 app="$HOME/Applications/Veil Search.app"
-out=$(mktemp -d)
-swiftc -O -swift-version 5 -o "$out/veil-search" main.swift splash.swift extras.swift sources.swift integrations.swift review-render.swift 2>&1 | grep -v '^$' || true
-[ -x "$out/veil-search" ] || { echo "build failed"; exit 1; }
-"$out/veil-search" --selftest
-mkdir -p "$app/Contents/MacOS"
-cp "$out/veil-search" "$app/Contents/MacOS/veil-search"
-cat > "$app/Contents/Info.plist" <<PLIST
+mkdir -p "$HOME/Applications"
+out=$(mktemp -d "$HOME/Applications/.veil-build.XXXXXX")
+stage="$out/Veil Search.app"
+keep_stage=false
+trap '[ "$keep_stage" = true ] || rm -rf "$out"' EXIT
+mkdir -p "$stage/Contents/MacOS"
+if ! swiftc -O -swift-version 5 -o "$stage/Contents/MacOS/veil-search" main.swift splash.swift extras.swift sources.swift integrations.swift review-render.swift > "$out/build.log" 2>&1; then
+  cat "$out/build.log"; echo "build failed; installed Veil Search preserved"; exit 1
+fi
+cat "$out/build.log"
+"$stage/Contents/MacOS/veil-search" --selftest
+cat > "$stage/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
@@ -26,11 +31,27 @@ cat > "$app/Contents/Info.plist" <<PLIST
   <key>LSMinimumSystemVersion</key><string>14.0</string>
 </dict></plist>
 PLIST
-# a stable identity keeps macOS permissions across rebuilds (make-signing-identity.sh); ad-hoc otherwise
-# a stable local identity keeps macOS permissions across rebuilds (make-signing-identity.sh); "NC Search Local" is the pre-rename name
-id="-"; for n in "Veil Local" "NC Search Local"; do security find-identity -p codesigning 2>/dev/null | grep -q "\"$n\"" && { id="$n"; break; }; done
-codesign --force --sign "$id" "$app" >/dev/null
-rm -rf "$out"
+if [ "${VEIL_BUILD_ONLY:-0}" = 1 ]; then
+  keep_stage=true
+  echo "built and self-tested (not installed): $stage"
+  exit 0
+fi
+# Preserve a signed installation's designated identity. Never replace it with ad-hoc signing when its key is unavailable.
+cert=$(codesign -d -r- "$app" 2>&1 | sed -n 's/.*certificate leaf = H"\([0-9a-f]*\)".*/\1/p' || true)
+signer="${cert:--}"
+if [ -z "$cert" ]; then
+  for n in "Veil Local" "NC Search Local"; do security find-identity -p codesigning 2>/dev/null | grep -q "\"$n\"" && { signer="$n"; break; }; done
+fi
+codesign --force --sign "$signer" --identifier app.veil.search "$stage" \
+  || { echo "signing failed; installed Veil Search preserved"; exit 1; }
+codesign --verify --strict "$stage"
+backup="$HOME/.config/veil/backups/launcher-$(date +%Y%m%d-%H%M%S)-$$"
+mkdir -p "$backup"
+if [ -d "$app" ]; then mv "$app" "$backup/Veil Search.app"; fi
+if ! mv "$stage" "$app"; then
+  [ ! -d "$backup/Veil Search.app" ] || mv "$backup/Veil Search.app" "$app"
+  echo "install failed; previous Veil Search restored"; exit 1
+fi
 # Restart through launchd when the login agent runs it. KeepAlive can relaunch a copy
 # after a normal quit, so don't start a competing copy with `open` if kickstart fails.
 if launchctl print "gui/$(id -u)/app.veil.search" >/dev/null 2>&1; then

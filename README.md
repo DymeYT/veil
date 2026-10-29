@@ -35,9 +35,9 @@ spreads its detail across the frame instead of giving the eye one subject to sta
 | --- | --- |
 | Veil Search (Spotlight replacement): apps, files, math, settings, workspaces, commands, themes, web, dictionary | ⌘Space (↵ open, ⌘↵ show in Finder, ⌘C copy, ↑↓/Tab move, Esc close) |
 | New terminal window | ⌥Return |
-| Resize tiles with the keyboard | ⌥R, then arrows (Shift shrinks a middle tile), Esc to leave |
+| Resize tiles with the keyboard | ⌥R, then arrows (Shift shrinks a middle tile); Esc or switching apps leaves |
 | Control panel | click the theme chip at the left of the bar |
-| Shortcut cheat sheet | click `?` in the bar, or `veil keys` |
+| Shortcut cheat sheet | click the keys button (󰘥) at the right of the bar, or `veil keys` |
 | Switch theme | control panel, launcher, or `veil-theme apply arasaka` |
 | Undo the last theme change | `veil-theme restore` |
 | Battery saver | `veil quiet` (back: `veil normal`) |
@@ -76,15 +76,28 @@ happens only while it is open (≈1 ms per keystroke; file results stream in fro
 - Actions: lock, sleep, restart/shut down/log out (system confirms), dark mode, empty Trash (asks), volume, mute, keep awake,
   hidden files, eject, quit/hide/force quit apps (`quit safari`; force quit asks), search prefixes (`g`, `yt`, `gh`, `w`, `maps`, `r`, `amz`),
   quick keys from `launcher/aliases.json`, scripts in `launcher/scripts/` (`# @veil title:` headers), new Obsidian note (`note …`).
-- Clipboard history (⌘4 or `clip`): memory only, 8 hours, skips concealed/password-manager copies.
-- Keys: ↵ open · ⌘↵/⌘R reveal · ⌘C copy · ⌘Y Quick Look · ⌘K actions · ⌘L Large Type · ⌘P pin · ⌘⌫ Trash ·
+- Clipboard history (⌘4 or `clip`): memory only, 8 hours, skips concealed/password-manager copies and strings that look
+  like API keys or tokens, including recognized credentials inside commands (a terminal can't mark a copy as private).
+  Off: `defaults write app.veil.search clipboardHistory -bool false` (also clears existing history).
+- Keys: ↵ open · ⌘↵/⌘R reveal · ⌘C copy · ⌘Y Quick Look · ⌘K actions · ⌘L Large Type · ⌘P pin · ⌘⌫ Trash (empty field only) ·
   ⌘1–4 apps/files/actions/clipboard · → accept completion · ↑ on empty field recalls searches · Esc clears, then closes.
 - With permission: contacts (3+ letters), calendar events and reminders (`event …`, `remind …`), Safari tabs,
   menu-bar search (`m …`), paste into the front app (⌥↵).
 
+## Battery
+
+Measured with `powermetrics --samplers tasks -i 60000` on an idle desktop (MacBook Pro, macOS 27): Rift 1.35 ms/s CPU,
+Veil Search 0.84, SketchyBar 0.22, borders 0.02 — together 0.24% of one core, about 2 wake-ups a second, and an energy
+impact of 0.56 against 1047 for the whole system. There is no ambient animation; window and workspace animations run
+only while something moves.
+
 ## Rift patch
 
-`rift/veil.patch` applies to upstream Rift commit `3114cc5` (Apache-2.0). See `rift/README.md`.
+`rift/veil.patch` applies to upstream Rift commit `3114cc5` (Apache-2.0). See `rift/README.md`. After the patch changes,
+`VEIL_REBUILD_RIFT=1 ./install.sh` rebuilds Rift from a fresh copy of that commit.
+Existing Rift source changes are backed up before a rebuild. If the installed Rift uses a local signing identity,
+the rebuild uses that same identity before replacing it; an unavailable key leaves the installed binary intact.
+Veil Search follows changes to Reduce Motion immediately and makes its search card opaque under Reduce Transparency.
 
 ## Credits
 

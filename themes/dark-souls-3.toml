@@ -34,12 +34,23 @@ title = "CINDER"
 search_chip = ""
 tagline = "the fire fades"
 ws = "SHRINE WALLS CATHEDRAL IRITHYLL DREG"
-logo = """C I N D E R
-───────────
-THE AGE OF FIRE"""
+logo = """        ██
+      ▄▄██▄▄
+        ██
+        ██
+        ██
+      ▄████▄
+     ▄██▀▀██▄
+   ▄███▀  ▀███▄
+ █ ██ ██ ██ ██ ██
+     C I N D E R"""
 
 # Shape, type and layout (see ECOSYSTEMS.md). Values may name colors as %role%.
 [style]
+panel_headers = "space"  # control panel structure (sketchybarrc): text | rule | space
+panel_status = "top"
+panel_keys = "column"
+panel_first = "windows"
 search_symbol = "darksign"
 bar_layout = "bare"
 bar_position = "top"
@@ -71,7 +82,7 @@ anim = "0.32"
 term_font = "Victor Mono"
 term_size = "15"
 term_cell = "10%"
-term_opacity = "0.97"
+term_opacity = "1.0"
 term_blur = "0"
 term_pad_x = "22"
 term_pad_y = "18"
@@ -80,6 +91,7 @@ term_blink = "false"
 prompt_char = "»"
 ff_sep = "  …  "
 ff_logo_color = "yellow"
+ff_layout = "title os uptime memory battery break colors:triangle"  # fastfetch readings, order and swatch (veil-theme fastfetch_modules)
 ff_k1 = "EMBER"
 ff_k2 = "AGE"
 ff_k3 = "KERNEL"
@@ -188,6 +200,7 @@ editor_signcolumn = "yes"
 editor_foldcolumn = "1"
 
 editor_statusline = "2"
+editor_status_layout = "ember"  # Neovim statusline form (templates/nvim.lua layouts)
 
 editor_colorcolumn = ""
 

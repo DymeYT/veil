@@ -1,6 +1,5 @@
-# The Cabin (Inscryption) wallpaper
+# The Cabin wallpaper — Wetlands route map
 
-- **Source:** 3840x2160 in-game capture of Leshy's card table (Inscryption, © Daniel Mullins Games / Devolver Digital), from a wallpaper-site download kept at `candidates/inscryption/wc-1546665-3840x2160-desktop-4k-inscryption-game-wallpaper-photo.jpg` (the "wc-" prefix suggests WallpaperCave; original uploader and capture origin unverified). Real game render, not AI. Personal desktop use.
-- **Crop:** 2413x1560 from x=739, y=0 (centres Leshy's eyes over the board and drops the large foreground hand card), Lanczos to 3456x2234 (1.43x). No repainting.
-- **Why:** the game's defining scene — the candlelit card board, creature cards laid out, Leshy's eyes glowing in the dark behind it, totems and candles at the edges. Interest is spread across the board and the dark periphery, so it works through any gap between windows; dark green-black midtones with warm candle points.
-- **Previous:** cabinet keyhole close-up (`candidates/inscryption/cabinet-2026-10-28.*`), replaced because it was a single centred subject.
+2026-10-29 local desktop candidate. Official PlayStation Store gameplay screenshot from Inscryption, copyright Daniel Mullins Games / Devolver Digital. Source product: https://store.playstation.com/en-us/product/UP3643-PPSA07022_00-3600510866394395 ; screenshot kept at candidates/inscryption/ps5/cLUyBtfmarczDt0XRAYealBj.jpg. PlayStation also shows the wooded multi-path map on https://www.playstation.com/en-us/games/inscryption/ .
+
+3840x2160 source; crop 2985x1930 from 0,230, Lanczos resize to 3456x2234. Removes the title caption and cards at the right. The branches, trees and route symbols spread attention across the map, replacing Leshy's large face and the HUD cursor. A small game piece remains at the bottom. Real game render; no generated imagery or repainting. Personal desktop use, not bundled or published. Previous image and notes backed up under ~/claude-cloud-handoff/wallpapers-before-*.

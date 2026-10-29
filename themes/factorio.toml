@@ -34,19 +34,30 @@ chip_label = "FOUNDRY"
 title = "FOUNDRY"
 search_chip = "⚙"
 ws = "RADAR BUILD COMMS MEDIA IDLE"
-logo = """F O U N D R Y
-━━━━━━━━━━━━━
-NAUVIS · SECTOR 1"""
+logo = """         ██
+   ▄█▄▄▄████▄▄▄█▄
+    ████████████
+   ▄███▀    ▀███▄
+ ██████      ██████
+   ▀███▄    ▄███▀
+    ████████████
+   ▀█▀▀▀████▀▀▀█▀
+         ██
+    F O U N D R Y"""
 
 # Shape, type and layout (see ECOSYSTEMS.md). Values may name colors as %role%.
 [style]
+panel_headers = "text"  # control panel structure (sketchybarrc): text | rule | space
+panel_status = "bottom"
+panel_keys = "column"
+panel_first = "system"
 search_symbol = "factorio-gear"
 bar_radius = "2"
 bar_border = "2"
 bar_alpha = "fa"
 font_tag = "Titillium Web:Bold:11.0"
 font_label = "Titillium Web:SemiBold:12.5"
-font_small = "Titillium Web:Bold:10.0"
+font_small = "Titillium Web:Bold:11.0"
 font_chip = "Titillium Web:Bold:12.0"
 chip_radius = "2"
 ws_style = "slot"
@@ -68,6 +79,7 @@ term_pad_y = "10"
 prompt_char = "▶"
 ff_sep = "  ▸  "
 ff_logo_color = "cyan"
+ff_layout = "title separator cpu:FURNACE gpu:ASSEMBLER memory disk:STORAGE battery uptime break colors:square"  # fastfetch readings, order and swatch (veil-theme fastfetch_modules)
 ff_k1 = "PLANET"
 ff_k2 = "ENTITY"
 ff_k3 = "KERNEL"
@@ -175,6 +187,7 @@ editor_signcolumn = "yes:2"
 editor_foldcolumn = "1"
 
 editor_statusline = "3"
+editor_status_layout = "production"  # Neovim statusline form (templates/nvim.lua layouts)
 
 editor_colorcolumn = "120"
 

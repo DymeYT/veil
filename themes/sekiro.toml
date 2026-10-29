@@ -34,12 +34,23 @@ title = "ASHINA"
 search_chip = ""
 tagline = "the way of the shinobi"
 ws = "OUTSKIRTS HIRATA CASTLE DEPTHS FOUNTAIN"
-logo = """A S H I N A
-───────────
-FIELD KIT"""
+logo = """          ██
+      ▄▄██████▄▄
+        ██████
+   ▄▄████████████▄▄
+      ██████████
+▄▄██████████████████▄▄
+    ██████████████
+ █████████▀▀█████████
+ █████████  █████████
+       A S H I N A"""
 
 # Shape, type and layout (see ECOSYSTEMS.md). Values may name colors as %role%.
 [style]
+panel_headers = "text"  # control panel structure (sketchybarrc): text | rule | space
+panel_status = "top"
+panel_keys = "trailing"
+panel_first = "system"
 search_symbol = "ashina-crest"
 ws = "OUTSKIRTS HIRATA CASTLE DEPTHS FOUNTAIN"
 bar_layout = "strip"
@@ -71,8 +82,8 @@ anim = "0.39"
 term_font = "Monaspace Argon"
 term_size = "14"
 term_cell = "10%"
-term_opacity = "0.96"
-term_blur = "16"
+term_opacity = "1.0"
+term_blur = "0"
 term_pad_x = "12"
 term_pad_y = "10"
 term_cursor = "bar"
@@ -80,6 +91,7 @@ term_blink = "false"
 prompt_char = "»"
 ff_sep = "  /  "
 ff_logo_color = "red"
+ff_layout = "title separator os host shell:TOOL uptime memory"  # fastfetch readings, order and swatch (veil-theme fastfetch_modules)
 ff_k1 = "POSTURE"
 ff_k2 = "ASHINA"
 ff_k3 = "KERNEL"
@@ -187,6 +199,7 @@ editor_signcolumn = "yes:2"
 editor_foldcolumn = "0"
 
 editor_statusline = "3"
+editor_status_layout = "kanji"  # Neovim statusline form (templates/nvim.lua layouts)
 
 editor_colorcolumn = "100"
 

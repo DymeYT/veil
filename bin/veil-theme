@@ -48,16 +48,45 @@ def strings_for(theme):
     out["theme_id"] = theme.get("id", BASE)
     out["home"] = str(HOME)  # absolute paths for configs that do not expand ~ (Rift's exec and run_on_start)
     out["editor_cursor_style"] = {"bar": "line", "underline": "underline"}.get(out["term_cursor"], "block")
+    out["ff_modules_json"] = fastfetch_modules(out)
     # Rift window animation follows System Settings > Accessibility > Reduce Motion (read when a theme is applied)
     rm = subprocess.run(["defaults", "read", "com.apple.universalaccess", "reduceMotion"], capture_output=True, text=True).stdout.strip()
-    out["rift_animate"] = "false" if rm == "1" else "true"
+    out["rift_animate"] = "false" if rm == "1" or (GEN / "quiet").exists() else "true"  # Reduce Motion or `veil quiet`
     return out
 
 
+FF_KEYS = {"os": "ff_k1", "host": "ff_k2", "kernel": "ff_k3", "uptime": "ff_k4", "memory": "ff_k5", "battery": "ff_k6"}
+FF_TYPES = set(FF_KEYS) | {"cpu", "gpu", "disk", "display", "shell", "terminal", "packages", "wm", "localip", "datetime", "locale", "swap", "processes"}
+FF_SYMBOLS = {"block", "background", "circle", "diamond", "triangle", "square", "star"}
+
+
+def fastfetch_modules(s):
+    """fastfetch's module list from a theme's `ff_layout`: which readings, in what order, under which names.
+    Tokens: title, separator, break, colors:<symbol>, or type[:Key_name] (underscores become spaces;
+    without a name, os/host/kernel/uptime/memory/battery use the theme's ff_k1..ff_k6)."""
+    modules = []
+    for token in s["ff_layout"].split():
+        kind, _, arg = token.partition(":")
+        if kind in ("title", "separator", "break") and not arg:
+            modules.append(kind)
+        elif kind == "colors":
+            if arg not in FF_SYMBOLS:
+                raise ValueError(f"ff_layout: colors needs one of {sorted(FF_SYMBOLS)}")
+            modules.append({"type": "colors", "symbol": arg})
+        elif kind in FF_TYPES:
+            key = arg.replace("_", " ") if arg else s.get(FF_KEYS.get(kind, ""), "")
+            if not key:
+                raise ValueError(f"ff_layout: {kind} needs a name ({kind}:Name)")
+            modules.append({"type": kind, "key": key})
+        else:
+            raise ValueError(f"ff_layout: unknown module {token!r}")
+    return json.dumps(modules, indent=2, ensure_ascii=False)
+
+
 def fill(text, strings, tpl):
-    """Replace @@key@@ placeholders; JSON-escape inside JSON templates."""
+    """Replace @@key@@ placeholders; JSON-escape inside JSON templates, except *_json values, which are JSON already."""
     esc = (lambda v: json.dumps(v)[1:-1]) if tpl.endswith((".json", ".jsonc")) else str
-    text = re.sub(r"@@(\w+)@@", lambda m: esc(strings[m.group(1)]), text)
+    text = re.sub(r"@@(\w+)@@", lambda m: strings[m.group(1)] if m.group(1).endswith("_json") else esc(strings[m.group(1)]), text)
     return text
 
 
@@ -162,12 +191,22 @@ def plan(name):
         try:
             new = render(tpl, live, kind, theme, mapping)
         except (ValueError, OSError) as e:
+            if kind == "cursor":  # a user's settings.json with comments or trailing commas: theme everything else
+                print(f"  skipped: {live} is not plain JSON ({e}); Cursor keeps its current colors", file=sys.stderr)
+                continue
             sys.exit(f"refusing to apply: {live} would be invalid ({e}); nothing was changed")
         old = live.read_text() if live.exists() else None
         if new != old:
             mode = live.stat().st_mode if live.exists() else (TPL / tpl).stat().st_mode if tpl else 0o644
             changes.append((live, old, new, mode, reload))
     return theme, changes
+
+
+def prune_backups(keep=20):
+    """One folder per apply adds up: keep the newest `keep` (restore walks back through them) and `original`."""
+    old = sorted(p for p in BACKUPS.iterdir() if p.is_dir() and (p / "manifest.json").exists())[:-keep]
+    for p in old:
+        shutil.rmtree(p, ignore_errors=True)
 
 
 def write_atomic(path, text, mode):
@@ -288,6 +327,7 @@ def apply(name):
         files.append({"path": str(live), "backup": f"{i}-{live.name}" if old is not None else None})
     previous = (ROOT / "current").read_text().strip() if (ROOT / "current").exists() else BASE
     (backup / "manifest.json").write_text(json.dumps({"previous": previous, "files": files}, indent=2))
+    prune_backups()
     try:
         for live, _, new, mode, _ in changes:
             write_atomic(live, new, mode)
@@ -317,6 +357,9 @@ def main(argv):
     elif cmd == "status":
         cur = (ROOT / "current").read_text().strip() if (ROOT / "current").exists() else BASE
         _, changes = plan(cur)
+        # toggling Reduce Motion or quiet mode after an apply only flips Rift's `animate` line: not a hand edit
+        motion_only = lambda old, new: {l for l in set((old or "").splitlines()) ^ set(new.splitlines())} <= {"animate = true", "animate = false"}
+        changes = [c for c in changes if not motion_only(c[1], c[2])]
         print(f"current: {load_theme(cur)['name']}")
         for live, *_ in changes:
             print(f"  drifted from template: {live}")
@@ -335,11 +378,12 @@ def main(argv):
             sys.exit("no backups to restore")
         prev = restore(backups[-1])
         shutil.rmtree(backups[-1])
-        print(f"restored {backups[-1].name} (theme: {prev}); reload apps as after apply")
+        print(f"restored {backups[-1].name} (theme: {load_theme(prev)['name']})")
         if not os.environ.get("VEIL_NO_RELOAD"):
+            # the same reloads as apply (Ghostty, SketchyBar, borders), so nothing waits for a manual step
+            reload_configs([(live, reload) for _, live, _, reload in targets()], prev)
             system_accents(load_theme(prev))
-            subprocess.run(["sketchybar", "--reload"], capture_output=True)
-            subprocess.run(["bash", "-c", f"pgrep -xq borders && exec bash {CFG / 'borders/bordersrc'} || exec /opt/homebrew/bin/brew services restart borders"], capture_output=True)
+        print("  manual: New shells pick up fzf colors; btop, cava and Neovim on next launch")
     else:
         print(__doc__.strip())
 

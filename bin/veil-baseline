@@ -1,0 +1,191 @@
+#!/usr/bin/env python3
+"""First-write recovery records. Run capture before any theme mutation.
+
+capture --fresh-install is only for a known clean installation; existing generated
+launcher/config ownership overrides that flag. Legacy missing originals are recorded
+as unavailable, never silently replaced with current themed values.
+"""
+import argparse
+import json
+import os
+from pathlib import Path
+import plistlib
+import subprocess
+import tempfile
+
+
+class UnavailableError(ValueError):
+    """Exit 3 distinguishes an honestly missing legacy original from a restore failure."""
+
+
+def atomic(path, data):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, name = tempfile.mkstemp(prefix='.' + path.name, dir=path.parent)
+    try:
+        with os.fdopen(fd, 'wb') as f:
+            f.write(data)
+        os.replace(name, path)
+    finally:
+        Path(name).unlink(missing_ok=True)
+
+
+class Baseline:
+    def __init__(self, home, root):
+        self.home, self.root = Path(home), Path(root)
+        self.original = self.root / 'backups/original'
+
+    def late(self):
+        return any((self.home / p).exists() for p in
+                   ('Applications/Veil Search.app', 'Applications/NC Search.app', '.local/bin/veil')) or any((self.root / p).exists() for p in
+                   ('generated/launcher.json', 'generated/reload-status.json',
+                    'backups/original/cursor-layout-v2.json'))
+
+    def marker(self, name, suffix):
+        return self.original / (name + '.' + suffix)
+
+    def known(self, name):
+        return any(p.exists() for p in [self.original / name,
+                   self.marker(name, 'absent'), self.marker(name, 'unavailable')])
+
+    def capture_file(self, name, source, clean):
+        if self.known(name):
+            return
+        if not clean:
+            atomic(self.marker(name, 'unavailable'), b'No trustworthy pre-Veil baseline.\n')
+        elif source.exists():
+            if not source.is_file() or source.is_symlink():
+                raise ValueError(f'refusing non-regular baseline source: {source}')
+            atomic(self.original / name, source.read_bytes())
+        else:
+            atomic(self.marker(name, 'absent'), b'Absent before first installation.\n')
+
+    def files(self):
+        return {'ghostty.config.ghostty': self.home / 'Library/Application Support/com.mitchellh.ghostty/config.ghostty',
+                'cava.config': self.home / '.config/cava/config'}
+
+    def capture(self, fresh=False, bridge=None, run=subprocess.run):
+        clean = fresh and not self.late()
+        if clean and bridge is None and not self.known('wallpaper.json'):
+            raise ValueError('clean first capture requires --wallpaper-helper; no baselines changed')
+        # Fetch/validate native state before writing records. No desktop mutations.
+        wallpaper = None
+        if clean and bridge and not self.known('wallpaper.json'):
+            result = run([str(bridge), 'capture'], check=True, capture_output=True)
+            wallpaper = json.loads(result.stdout)
+            self.validate_wallpaper(wallpaper)
+        appearance = None
+        if clean and not self.known('appearance.json'):
+            result = run(['/usr/bin/defaults', 'export', 'NSGlobalDomain', '-'], check=True, capture_output=True)
+            prefs = plistlib.loads(result.stdout)
+            appearance = {k: prefs[k] for k in ('AppleAccentColor', 'AppleHighlightColor') if k in prefs}
+        for name, source in self.files().items():
+            self.capture_file(name, source, clean)
+        if not self.known('appearance.json'):
+            if clean:
+                atomic(self.original / 'appearance.json', json.dumps(appearance).encode())
+            else:
+                atomic(self.marker('appearance.json', 'unavailable'), b'No trustworthy pre-Veil baseline.\n')
+        if not self.known('wallpaper.json'):
+            if wallpaper:
+                atomic(self.original / 'wallpaper.json', json.dumps(wallpaper).encode())
+            else:
+                atomic(self.marker('wallpaper.json', 'unavailable'), b'No trustworthy pre-Veil desktop URL baseline.\n')
+        return clean
+
+    def validate_wallpaper(self, data):
+        from urllib.parse import urlparse, unquote
+        if not isinstance(data, dict) or data.get('version') != 1 or data.get('scope') != 'connected-displays-current-space':
+            raise ValueError('unsupported wallpaper snapshot')
+        entries = data.get('screens')
+        if not isinstance(entries, list) or not entries:
+            raise ValueError('no wallpaper screens')
+        ids = set()
+        for row in entries:
+            if not isinstance(row, dict) or not isinstance(row.get('url'), str):
+                raise ValueError('invalid wallpaper screen entry')
+            uid = row.get('uuid')
+            if not isinstance(uid, str) or not uid or uid in ids:
+                raise ValueError('invalid/duplicate screen UUID')
+            ids.add(uid)
+            url = urlparse(row.get('url', ''))
+            p = Path(unquote(url.path)).resolve()
+            if url.scheme != 'file' or url.netloc not in ('', 'localhost') or not p.is_file():
+                raise ValueError('wallpaper is not an existing local image')
+            if p.is_relative_to(self.root.resolve()) or any(s in ('veil', 'night-city') for s in p.parts):
+                raise ValueError('refusing a Veil-owned wallpaper as original')
+        return data
+
+    def restore_files(self):
+        # Preflight all readable baselines before writing any target.
+        pending = []
+        for name, target in self.files().items():
+            if (self.original / name).is_file():
+                pending.append((target, (self.original / name).read_bytes()))
+            elif self.marker(name, 'absent').is_file():
+                pending.append((target, None))
+            else:
+                print(f'NOT RESTORED: {name}: original unavailable')
+        for target, content in pending:
+            if target.is_symlink():
+                raise ValueError(f'refusing symlink restore target: {target}')
+        for target, content in pending:
+            if content is None:
+                target.unlink(missing_ok=True)
+            else:
+                atomic(target, content)
+
+    def restore_appearance(self, run=subprocess.run):
+        path = self.original / 'appearance.json'
+        if not path.is_file():
+            raise UnavailableError('appearance original unavailable; kept current preferences')
+        data = json.loads(path.read_text())
+        if not isinstance(data, dict):
+            raise ValueError('invalid appearance baseline')
+        if 'AppleAccentColor' in data:
+            int(data['AppleAccentColor'])  # validate before making either preference change
+        if 'AppleHighlightColor' in data and not isinstance(data['AppleHighlightColor'], str):
+            raise ValueError('invalid highlight baseline')
+        for key in ('AppleAccentColor', 'AppleHighlightColor'):
+            if key in data:
+                flag = '-int' if key == 'AppleAccentColor' else '-string'
+                run(['/usr/bin/defaults', 'write', '-g', key, flag, str(data[key])], check=True)
+            else:
+                # An absent key is an original state, not a hard-coded default.
+                run(['/usr/bin/defaults', 'delete', '-g', key], capture_output=True)
+
+    def restore_wallpaper(self, bridge, run=subprocess.run):
+        path = self.original / 'wallpaper.json'
+        if not path.is_file():
+            raise UnavailableError('wallpaper original unavailable; choose a wallpaper in System Settings')
+        self.validate_wallpaper(json.loads(path.read_text()))
+        run([str(bridge), 'restore', str(path)], check=True)
+
+
+def main():
+    p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument('command', choices=['capture', 'restore-files', 'restore-appearance', 'restore-wallpaper'])
+    p.add_argument('--fresh-install', action='store_true')
+    p.add_argument('--wallpaper-helper', type=Path)
+    args = p.parse_args()
+    b = Baseline(Path.home(), Path(__file__).resolve().parent.parent)
+    if args.command == 'capture':
+        clean = b.capture(args.fresh_install, args.wallpaper_helper)
+        print('Baseline capture: clean first install' if clean else 'Baseline capture: legacy; missing originals marked unavailable')
+    elif args.command == 'restore-files':
+        b.restore_files()
+    elif args.command == 'restore-appearance':
+        b.restore_appearance()
+    else:
+        if not args.wallpaper_helper:
+            p.error('--wallpaper-helper is required')
+        b.restore_wallpaper(args.wallpaper_helper)
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except UnavailableError as e:
+        print(f'baseline: NOT VERIFIED / unavailable: {e}', file=__import__('sys').stderr)
+        raise SystemExit(3)
+    except (ValueError, OSError, subprocess.SubprocessError) as e:
+        raise SystemExit(f'baseline: {e}')

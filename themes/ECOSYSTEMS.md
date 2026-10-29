@@ -60,8 +60,8 @@ sign/fold gutters, statusline and column guides. Obsidian gets actual heading/qu
 compositions through its existing CSS snippet. These are backed up and reversible. Workspace
 settings can override global editor settings; Ghostty frame changes may need a new window.
 
-Run `python3 agents/compare_themes.py` for all 66 comparisons. The automatic gate requires
-at least three substantially different non-launcher surface groups per pair, with two
+Run `python3 tools/compare_themes.py` for all 66 comparisons. The automatic gate requires
+at least four substantially different non-launcher surface groups per pair, with two
 categorical differences to count a group (a real window-mode change counts by itself).
 Palette, art, display names, sounds, spacing and launcher IDs cannot satisfy that test.
 The independent judgment agent must still evaluate rendered/native-size appearance; passing
@@ -80,3 +80,32 @@ candidate's border geometry. Color remains theme-specific. Eclipse also removes 
 redundant inset frame and reduces its launcher/bar strokes to a single point. These changes
 are unapproved candidates pending independent Claude visual review, not a new quality baseline.
 Read REVIEW-START-HERE.md for the independent two-phase review protocol.
+
+## Panel, fastfetch and statusline forms (2026-10-29)
+
+These three surfaces now change structure per environment, not only colour. The control panel keeps the same actions,
+in the same order within each group and with the same shortcuts, so muscle memory carries across themes; what changes
+is how it is organised. `python3 tools/compare_themes.py` counts them as the `panel`, `terminal` (fastfetch) and `editor`
+(statusline) groups, and `test_theme.py` requires every pair to differ in at least four surface groups.
+
+| Environment | Control panel (`panel_*`) | fastfetch (`ff_layout`) | Neovim statusline (`editor_status_layout`) |
+|---|---|---|---|
+| Night City | text, status top, keys column, windows first | os host kernel uptime memory battery; swatch block; type mark | hud |
+| Arasaka | text, status top, keys column, system first | host os cpu memory processes uptime; swatch none; type mark | directive |
+| Pharloom | rule, status top, keys trailing, windows first | os uptime memory; swatch diamond; type mark | thread |
+| Hallownest | space, status top, keys trailing, windows first | uptime memory battery; swatch none; type mark | quiet |
+| Foundry | text, status bottom, keys column, system first | cpu gpu memory disk battery uptime; swatch square; picture mark | production |
+| The Cabin | rule, status top, keys column, system first | host os uptime memory battery; swatch none; picture mark | ledger |
+| New York | text, status top, keys trailing, windows first | os host uptime battery; swatch circle; picture mark | route |
+| Paradis | rule, status top, keys trailing, windows first | os kernel uptime memory battery; swatch none; picture mark | field |
+| Eclipse | space, status bottom, keys trailing, windows first | kernel uptime; swatch none; type mark | ink |
+| Guidance | rule, status top, keys column, system first | os host uptime memory; swatch star; picture mark | atlas |
+| Cinder | space, status top, keys column, windows first | os uptime memory battery; swatch triangle; picture mark | ember |
+| Ashina | text, status top, keys trailing, system first | os host shell uptime memory; swatch none; picture mark | kanji |
+
+- `panel_headers`: `text` names each group, `rule` adds a hairline after the name, `space` leaves an empty row instead.
+- `panel_status`: `bottom` puts the readings line next to a bottom bar. `panel_keys`: `trailing` writes the shortcut after
+  the action and drops the column. `panel_first`: which group leads.
+- `ff_layout` tokens are `title`, `separator`, `break`, `colors:<symbol>` and `module[:Name]` (see `fastfetch_modules` in
+  `bin/veil-theme`). Statusline forms are defined in `templates/nvim.lua`; `hud` keeps LazyVim's own.
+- Hallownest and Eclipse hide the statusline (`editor_statusline = 0`); their forms apply when it is turned on.

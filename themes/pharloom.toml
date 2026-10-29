@@ -40,6 +40,10 @@ silk and song"""
 
 # Shape, type and layout (see ECOSYSTEMS.md). Values may name colors as %role%.
 [style]
+panel_headers = "rule"  # control panel structure (sketchybarrc): text | rule | space
+panel_status = "top"
+panel_keys = "trailing"
+panel_first = "windows"
 search_symbol = "hornet-needle"
 bar_radius = "3"
 bar_alpha = "f2"
@@ -60,13 +64,14 @@ gap_inner = "14"
 term_font = "Monaspace Xenon"
 term_size = "14"
 term_cell = "14%"
-term_opacity = "0.96"
+term_opacity = "1.0"
 term_pad_x = "22"
 term_pad_y = "16"
 term_cursor = "bar"
 prompt_char = "›"
 ff_sep = "  ·  "
 ff_logo_color = "cyan"
+ff_layout = "title os uptime memory break colors:diamond"  # fastfetch readings, order and swatch (veil-theme fastfetch_modules)
 ff_k1 = "Realm"
 ff_k2 = "Vessel"
 ff_k3 = "Kernel"
@@ -169,6 +174,7 @@ editor_signcolumn = "auto"
 editor_foldcolumn = "0"
 
 editor_statusline = "2"
+editor_status_layout = "thread"  # Neovim statusline form (templates/nvim.lua layouts)
 
 editor_colorcolumn = ""
 

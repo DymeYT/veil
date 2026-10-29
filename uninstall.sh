@@ -20,11 +20,7 @@ if [ -f "$O/appearance.json" ]; then
   defaults write -g AppleAccentColor -int "$(jq -r .AppleAccentColor "$O/appearance.json")"
   defaults write -g AppleHighlightColor "$(jq -r .AppleHighlightColor "$O/appearance.json")"
 fi
-defaults write -g AppleIconAppearanceTheme RegularDark
 defaults delete -g com.apple.sound.beep.sound 2>/dev/null
-defaults delete com.apple.universalaccess cursorOutline 2>/dev/null
-defaults delete com.apple.universalaccess cursorFill 2>/dev/null
-defaults write com.apple.universalaccess cursorIsCustomized -bool false
 # no pre-rice copies of the alert sound or pointer colours were kept, so these return to system defaults
 
 cursor="$HOME/Library/Application Support/Cursor/User/settings.json"

@@ -10,14 +10,31 @@ brew install --cask ghostty font-jetbrains-mono-nerd-font font-symbols-only-nerd
   font-zen-maru-gothic font-victor-mono font-nunito font-maple-mono font-ibm-plex-mono  # theme fonts
 
 mkdir -p "$HOME/.local/bin"
-if [ ! -x "$HOME/.local/bin/rift" ]; then
+# VEIL_REBUILD_RIFT=1 ./install.sh rebuilds after rift/veil.patch changes (a plain re-run keeps the installed build)
+if [ ! -x "$HOME/.local/bin/rift" ] || [ -n "${VEIL_REBUILD_RIFT:-}" ]; then
   # upstream Rift at a tested commit plus rift/veil.patch (Hyprland-style animations, directional resize)
   src="$HOME/Developer/veil-rift"
   [ -d "$src" ] || git clone https://github.com/acsandmann/rift "$src"
-  git -C "$src" checkout -q "$RIFT_COMMIT"
-  git -C "$src" apply --check "$NC/rift/veil.patch" 2>/dev/null && git -C "$src" apply "$NC/rift/veil.patch"
+  if ! git -C "$src" diff --quiet HEAD; then
+    saved="$NC/backups/rift-source/$(date +%Y%m%d-%H%M%S).patch"
+    mkdir -p "$(dirname "$saved")"
+    git -C "$src" diff --binary HEAD > "$saved"
+    echo "Saved previous Rift source changes: $saved"
+  fi
+  # this clone is Veil's own: reset it so an older copy of the patch never blocks the current one
+  git -C "$src" checkout -q -f "$RIFT_COMMIT"
+  # Veil's config needs the patched build: stop if the patch does not apply
+  git -C "$src" apply "$NC/rift/veil.patch" || { echo "rift/veil.patch did not apply to $src"; exit 1; }
   (cd "$src" && cargo build --release --locked --bin rift --bin rift-cli)
-  cp "$src/target/release/rift" "$src/target/release/rift-cli" "$HOME/.local/bin/"
+  # Keep the installed designated requirement, so rebuilding does not discard its Accessibility grant.
+  # Do this before swapping either executable. A locked/unavailable signing key leaves the running build intact.
+  cert=$(codesign -d -r- "$HOME/.local/bin/rift" 2>&1 | sed -n 's/.*certificate leaf = H"\([0-9a-f]*\)".*/\1/p' || true)
+  if [ -n "$cert" ]; then
+    codesign --force --sign "$cert" --identifier git.acsandmann.rift "$src/target/release/rift" \
+      || { echo "Rift built, but its existing signing key is unavailable. Installed Rift was preserved."; exit 1; }
+  fi
+  # replace by rename: overwriting a running binary in place can get it killed by code signing
+  for b in rift rift-cli; do cp "$src/target/release/$b" "$HOME/.local/bin/.$b.new" && mv -f "$HOME/.local/bin/.$b.new" "$HOME/.local/bin/$b"; done
 fi
 cc -O2 -o "$NC/bin/veil-metrics" "$NC/bin/metrics.c"
 # keep the user's pre-Veil settings so uninstall.sh can put them back (first install only)
@@ -65,7 +82,7 @@ grep -qF "$line" "$HOME/.zshrc" 2>/dev/null || printf '\n# Veil theme colors (fz
 
 cat <<'EOF'
 Installed. One-time macOS steps, if not already done:
-  - System Settings → Privacy & Security → Accessibility: allow rift and borders
+  - System Settings → Privacy & Security → Accessibility: allow Rift and Veil Search
   - System Settings → Keyboard → Keyboard Shortcuts → Spotlight: turn off ⌘Space (Veil Search uses it)
   - System Settings → Menu Bar: turn on "Show menu bar background" (so the revealed menu bar covers the bar cleanly)
   - First ⌥Return: allow rift to control Ghostty (opens new terminal windows)

@@ -26,7 +26,8 @@ PANEL='CONTROL PANEL'; WINDOW_GROUP='WINDOWS'; SYSTEM_GROUP='SYSTEM'; THEME_GROU
 KEYS_LABEL=''; QUICK='none'
 case "$THEME" in
   arasaka) PANEL='OPERATIONS'; WINDOW_GROUP='WORKSTATION'; SYSTEM_GROUP='SYSTEM SERVICES'; SHOW_GRAPH=off; QUICK=search ;;
-  elden-ring) PANEL='FIELD GUIDE'; WINDOW_GROUP='SITES OF GRACE'; SYSTEM_GROUP='TRAVERSAL'; QUICK=search ;;
+  # Guidance reads like a map legend: named sites, no numbered slots, machine readings kept in the field guide
+  elden-ring) PANEL='FIELD GUIDE'; WINDOW_GROUP='SITES OF GRACE'; SYSTEM_GROUP='TRAVERSAL'; QUICK=search; CPU_POS=popup.city; SHOW_GRAPH=off ;;
   dark-souls-3) PANEL='BONFIRE'; WINDOW_GROUP='EMBER REGISTER'; SYSTEM_GROUP='ASHEN TOOLS'; CPU_POS=popup.city; NET_POS=popup.city; SHOW_APP=off; SHOW_GRAPH=off ;;
   sekiro) PANEL='SHINOBI KIT'; WINDOW_GROUP='DOJO INDEX'; SYSTEM_GROUP='PROSTHETIC TOOLS'; QUICK=terminal ;;
   pharloom) PANEL='DESK'; WINDOW_GROUP='ARRANGEMENT'; SYSTEM_GROUP='UTILITIES'; CPU_POS=popup.city; NET_POS=popup.city; SHOW_APP=off; SHOW_GRAPH=off ;;
@@ -37,6 +38,8 @@ case "$THEME" in
   paradis) PANEL='FIELD DESK'; WINDOW_GROUP='WORKSPACE'; SYSTEM_GROUP='EQUIPMENT'; CPU_POS=popup.city; SHOW_GRAPH=off; QUICK=terminal ;;
   eclipse) PANEL='Desk'; WINDOW_GROUP='Windows'; SYSTEM_GROUP='Utilities'; THEME_GROUP='Appearance'; CPU_POS=popup.city; NET_POS=popup.city; VOL_POS=popup.city; SHOW_APP=off; SHOW_GRAPH=off ;;
 esac
+
+CPU_FREQ=10; [ -f "$HOME/.config/veil/generated/quiet" ] && CPU_FREQ=30  # `veil quiet` survives reloads
 
 # Top bars line up with the notch (38pt safe area on this MacBook): edge bars match its height exactly,
 # floating islands sit centered on it, so the notch never hangs below or floats above the bar.
@@ -75,7 +78,8 @@ case "$WS" in
 esac
 # Rift binding mode (RESIZE while Alt + R mode is on); mode-event.sh shows and hides it
 sketchybar --add item mode $WSPOS --set mode drawing=off icon.drawing=off label.font="$F_CHIP" label.color=0xff070a12 \
-  background.drawing=on background.color=0xff00e5ff background.corner_radius=$CHIP_RADIUS
+  background.drawing=on background.color=0xff00e5ff background.corner_radius=$CHIP_RADIUS \
+  updates=on script="$HOME/.config/sketchybar/plugins/mode-event.sh" --subscribe mode front_app_switched
 case "$QUICK" in
   search) sketchybar --add item quick left --set quick icon='⌘' label='SEARCH' click_script="$B/veil launch" ;;
   terminal|tools) sketchybar --add item quick left --set quick icon='⌥⏎' label='TERMINAL' click_script="$B/veil term" ;;
@@ -94,7 +98,7 @@ sketchybar --add item battery right --set battery icon="${TAGS[4]}" update_freq=
 # CPU sparkline sits right of the CPU value (fed by the cpu script, no extra polling)
 sketchybar --add graph cpu.graph right 34 --set cpu.graph graph.color=0xff00e5ff graph.fill_color=0x3300e5ff graph.line_width=1.2 \
   drawing="$SHOW_GRAPH" background.drawing=on background.color=0x00000000 background.height=16 padding_left=0 padding_right=6 icon.drawing=off label.drawing=off
-[ "$CPU_POS" = right ] && sketchybar --add item cpu "$CPU_POS" --set cpu icon="${TAGS[0]}" label='—' label.padding_right=4 update_freq=10 script="$P"
+[ "$CPU_POS" = right ] && sketchybar --add item cpu "$CPU_POS" --set cpu icon="${TAGS[0]}" label='—' label.padding_right=4 update_freq="$CPU_FREQ" script="$P"
 sketchybar --add item music right --set music icon='󰝚' icon.font="$GLYPH" icon.color=0xffff4fbc label.max_chars=28 drawing=off updates=on script="$P" --subscribe music music_change spotify_change
 sketchybar --add item keys right --set keys icon='󰘥' icon.font="$GLYPH" icon.color=0xff76849c label="$KEYS_LABEL" label.drawing=on script="$P" click_script='sketchybar --set keys popup.drawing=toggle' $POPUP --subscribe keys mouse.exited.global
 
@@ -106,9 +110,9 @@ left_items=(city)
 [ "$SHOW_APP" = on ] && left_items+=(app)
 if [ "$COMPOSE" = center ]; then
   sketchybar --add bracket island.l "${left_items[@]}" --set island.l $island
-  sketchybar --add bracket island.c ws.0 ws.1 ws.2 ws.3 ws.4 --set island.c $island
+  sketchybar --add bracket island.c ws.0 ws.1 ws.2 ws.3 ws.4 mode --set island.c $island
 else
-  sketchybar --add bracket island.l "${left_items[@]}" ws.0 ws.1 ws.2 ws.3 ws.4 --set island.l $island
+  sketchybar --add bracket island.l "${left_items[@]}" ws.0 ws.1 ws.2 ws.3 ws.4 mode --set island.l $island
 fi
 right_items=(keys music battery clock)
 [ "$CPU_POS" = right ] && right_items+=(cpu memory)
@@ -127,21 +131,44 @@ fi
 
 # shortcuts sheet
 sketchybar --add item keys.title popup.keys --set keys.title icon='KEYS' icon.font="$F_SMALL" icon.color=0xfffcee09 label='SHORTCUTS' label.color=0xff76849c
-keys=('⌘ Space|Launcher' '⌥ 1-5|Switch workspace' '⇧⌥ 1-5|Move window to workspace' '⌥ H J K L|Focus left/down/up/right' '⇧⌥ H J K L|Move window' '⌥ F|Fullscreen in gaps' '⌥ V|Float / tile window' '⌥ Z|Pause / resume tiling' '⌥ ⏎|New terminal' '⌥ Tab|Last workspace' '⌃⌥ 1 / 2|Tiled / scrolling layout' '⇧⌥ R|Reload Rift config')
+# workspace names with their numbers, so styles that show no numeral (diamond, rule, bracket) still map to ⌥N
+WSN=(@@ws@@); ws_line=''; for i in "${!WSN[@]}"; do ws_line="$ws_line${ws_line:+  }$((i + 1)) ${WSN[$i]}"; done
+keys=('⌘ Space|Launcher' 'Left chip|Control panel (click)' "⌥ 1-5|Go to  $ws_line" '⇧⌥ 1-5|Move window to workspace' '⌥ H J K L|Focus left/down/up/right' '⇧⌥ H J K L|Move window' '⌥ F|Fullscreen in gaps' '⌥ V|Float / tile window' '⌥ Z|Pause / resume tiling' '⌥ ⏎|New terminal' '⌥ Tab|Last workspace' '⌥ R|Resize tiles (arrows; esc leaves)' '⌃⌥ 1-4|Tiled / scrolling / split / master layout' '⇧⌥ R|Reload Rift config')
 for i in "${!keys[@]}"; do sketchybar --add item keys.$i popup.keys --set keys.$i icon="${keys[$i]%%|*}" icon.font="$F_LABEL" icon.width=96 icon.align=center icon.padding_left=10 icon.padding_right=10 \
   icon.background.drawing=on icon.background.color=0xff151b2d icon.background.border_color=0xff334563 icon.background.border_width=1 \
   icon.background.corner_radius=$CHIP_RADIUS icon.background.height=20 icon.color=0xffd9f4ff label="${keys[$i]#*|}" click_script='sketchybar --set keys popup.drawing=off'; done
 
+# Panel structure is the environment's (themes/*.toml [style]); the actions, their order within a group and
+# their shortcuts are the same everywhere, so muscle memory carries across themes.
+P_HEADERS='@@panel_headers@@'  # text: group names | rule: name and a hairline | space: an empty row between groups
+P_STATUS='@@panel_status@@'    # top | bottom (bottom bars keep the readings next to the bar)
+P_KEYS='@@panel_keys@@'        # column: shortcuts in a left column | trailing: after the action, no column
+P_FIRST='@@panel_first@@'      # windows | system: which group leads
+
 # Control rows identify the action or its real shortcut; decorative row numbers are gone.
 header() {
-  sketchybar --add item "menu.h.$1" popup.city --set "menu.h.$1" icon="$2" icon.color=0xff76849c icon.font="$F_SMALL" label.drawing=off
+  case "$P_HEADERS" in
+    space) sketchybar --add item "menu.h.$1" popup.city --set "menu.h.$1" icon.drawing=off label.drawing=off ;;
+    rule) sketchybar --add item "menu.h.$1" popup.city --set "menu.h.$1" icon="$2" icon.color=0xff76849c icon.font="$F_SMALL" \
+            label='────────────' label.color=0xff26324a ;;
+    *) sketchybar --add item "menu.h.$1" popup.city --set "menu.h.$1" icon="$2" icon.color=0xff76849c icon.font="$F_SMALL" label.drawing=off ;;
+  esac
 }
-row() {  # ID LABEL COMMAND [shortcut or mark] [icon color]
-  sketchybar --add item "menu.$1" popup.city --set "menu.$1" icon="${4:-—}" icon.font="$F_SMALL" icon.width=66 icon.align=left \
-    icon.color="${5:-0xff76849c}" label="$2" click_script="sketchybar --set city popup.drawing=off; $3"
+row() {  # ID LABEL COMMAND [real shortcut, or a mark; rows without one show a quiet dash] [color]
+  if [ "$P_KEYS" = trailing ]; then
+    label="$2"; case "$4" in *⌘*|*⌥*|*⌃*|*⇧*) label="$2   $4" ;; esac  # marks are column furniture; only shortcuts follow
+    sketchybar --add item "menu.$1" popup.city --set "menu.$1" icon.drawing=off label="$label" label.padding_left=14 \
+      ${5:+label.color=$5} click_script="sketchybar --set city popup.drawing=off; $3"
+  else
+    sketchybar --add item "menu.$1" popup.city --set "menu.$1" icon="${4:-—}" icon.font="$F_SMALL" icon.width=76 icon.align=left \
+      icon.color="${5:-0xff76849c}" label="$2" click_script="sketchybar --set city popup.drawing=off; $3"
+  fi
+}
+status_line() {
+  sketchybar --add item menu.status popup.city --set menu.status icon='STATUS' icon.color=0xff76849c icon.font="$F_SMALL" label='…' label.color=0xff8794ad
 }
 sketchybar --add item menu.title popup.city --set menu.title icon='@@title@@' icon.font="$F_CHIP" icon.color=0xfffcee09 label="$PANEL" label.color=0xff76849c
-sketchybar --add item menu.status popup.city --set menu.status icon='STATUS' icon.color=0xff76849c icon.font="$F_SMALL" label='…' label.color=0xff8794ad
+[ "$P_STATUS" = bottom ] || status_line
 
 # Readings that are not on the bar appear in the status line when the panel opens (no polling).
 window_controls() {
@@ -149,28 +176,28 @@ window_controls() {
   row pause 'Pause / resume tiling' "$B/rift-cli execute space toggle-activated" '⌥ Z'
   row tile 'Tiled layout' "$B/rift-cli execute workspace set-layout traditional" '⌃⌥ 1'
   row scroll 'Scrolling layout' "$B/rift-cli execute workspace set-layout scrolling" '⌃⌥ 2'
-  row settings 'Window manager settings' "$B/rift-cli settings" 'SETUP'
+  row bsp 'Split (BSP) layout' "$B/rift-cli execute workspace set-layout bsp" '⌃⌥ 3'
+  row master 'Master and stack layout' "$B/rift-cli execute workspace set-layout master_stack" '⌃⌥ 4'
+  row resize 'Resize tiles with the keyboard' "$B/rift-cli execute binding-mode resize" '⌥ R'
 }
 system_controls() {
   header system "$SYSTEM_GROUP"
   row launch 'Search apps, files and commands' "$B/veil launch" '⌘ Space'
   row terminal 'New terminal' "$B/veil term" '⌥ ⏎'
-  row btop 'System monitor' "$B/veil btop" 'MONITOR'
-  row eco 'Quiet mode on / off' "$B/veil toggle-quiet" 'QUIET'
+  row btop 'System monitor' "$B/veil btop"
+  row eco 'Quiet mode on / off' "$B/veil toggle-quiet"
 }
 # The first module follows the way each environment is used.
-case "$THEME" in
-  factorio|arasaka|inscryption) system_controls; window_controls ;;
-  *) window_controls; system_controls ;;
-esac
+if [ "$P_FIRST" = system ]; then system_controls; window_controls; else window_controls; system_controls; fi
 header appearance "$THEME_GROUP"
 # the launcher's environment picker shows each palette; a 12-row list here was noise
 row environment 'Change environment…' "osascript -l JavaScript -e \"ObjC.import('Foundation'); \$.NSDistributedNotificationCenter.defaultCenter.postNotificationNameObjectUserInfoDeliverImmediately('app.veil.search.show', 'theme', \$(), true)\"" '◐'
 MAINT_GROUP=Maintenance; [ "$THEME_GROUP" = "$(printf '%s' "$THEME_GROUP" | tr '[:lower:]' '[:upper:]')" ] && MAINT_GROUP=MAINTENANCE  # follow the theme's heading case
 header maintenance "$MAINT_GROUP"
-row reload 'Reload config' "$B/veil reload" 'RELOAD'
-row recover 'Recover windows' "$B/veil recover" 'REPAIR'
-row quit 'Quit window manager' "$B/veil quit" 'QUIT' 0xffff5370
+row reload 'Reload config' "$B/veil reload"
+row recover 'Recover windows' "$B/veil recover"
+row quit 'Quit window manager…' "osascript -e 'display dialog \"Quit the window manager? Windows stop tiling until you choose Recover windows.\" buttons {\"Cancel\", \"Quit\"} default button \"Cancel\" with icon caution' && $B/veil quit" '×' 0xffff5370
+[ "$P_STATUS" = bottom ] && status_line
 # Each menu keeps the same usable actions but borrows its surface grammar from its environment.
 case "$THEME" in
   factorio)
@@ -179,7 +206,6 @@ case "$THEME" in
     ;;
   inscryption)
     sketchybar --set city popup.height=29 popup.background.border_width=2
-    sketchybar --set '/menu\.h\..*/' label.drawing=on label='────────────' label.color=0xff26324a
     ;;
   hallownest|eclipse)
     sketchybar --set city popup.height=30 popup.background.shadow.drawing=off

@@ -2,30 +2,40 @@
 set -e
 export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 case "${1:-help}" in
+ # quiet mode is kept in a flag file, so theme changes, reloads and reboots respect it (veil-theme reads it)
  quiet)
+  touch "$HOME/.config/veil/generated/quiet"
   rift-cli execute config set settings.animate false
-  sketchybar --set cpu update_freq=30
+  sketchybar --set cpu update_freq=30 2>/dev/null || true  # only themes that show CPU on the bar poll it
   ;;
  normal)
-  rift-cli execute config set settings.animate true
-  sketchybar --set cpu update_freq=10
+  rm -f "$HOME/.config/veil/generated/quiet"
+  # Reduce Motion (System Settings) still keeps animations off
+  [ "$(defaults read com.apple.universalaccess reduceMotion 2>/dev/null)" = 1 ] || rift-cli execute config set settings.animate true
+  sketchybar --set cpu update_freq=10 2>/dev/null || true
   ;;
  toggle-quiet)
-  if [ "$(rift-cli execute config get 2>/dev/null | jq -r '.settings.animate')" = true ]; then "$0" quiet; else "$0" normal; fi ;;
+  if [ -f "$HOME/.config/veil/generated/quiet" ]; then "$0" normal; else "$0" quiet; fi ;;
  pause) rift-cli execute space toggle-activated ;;
  reload) rift-cli execute config reload; sketchybar --reload ;;
- recover) rift service restart ;;
- quit) rift service stop ;;
- keys) sed -n '/^\[keys\]/,$p' "$HOME/.config/rift/config.toml" ;;
+ # recover brings back everything selftest checks; `start` re-enables Rift if it was quit
+ recover)
+  rift service start 2>/dev/null || true; rift service restart 2>/dev/null || true
+  brew services restart sketchybar >/dev/null; brew services restart borders >/dev/null
+  launchctl kickstart -k "gui/$(id -u)/app.veil.search" 2>/dev/null || true ;;
+ quit) rift service stop ;;  # also stops Rift starting at login; `veil recover` turns it back on
+ keys)
+  sed -n '/^\[keys\]/,/^\[binding_modes/p' "$HOME/.config/rift/config.toml" | grep '^"' \
+    | sed -E 's/^"([^"]+)" = (.*)$/\1\t\2/; s/Alt/⌥/g; s/Shift/⇧/g; s/Ctrl/⌃/g; s/ \+ //g' | column -t -s $'\t' ;;
  launch) open -a "$HOME/Applications/Veil Search.app" ;;  # the app toggles its panel on reopen
  # new Ghostty window (open -a only focuses a running Ghostty); first use asks once for Automation permission
  term)
   osascript -e 'tell application "Ghostty"' -e 'if it is running then new window' -e 'activate' -e 'end tell' >/dev/null ;;
  # btop needs ~80 columns: open it tiled, then fill the tiling area once Rift has placed it (⌥F restores)
  btop)
-  open -na Ghostty.app --args --title=NC//SYSTEM --quit-after-last-window-closed=true --command=btop
+  open -na Ghostty.app --args --title=VEIL//SYSTEM --quit-after-last-window-closed=true --command=btop
   for _ in $(seq 30); do
-   id=$(rift-cli query workspaces 2>/dev/null | jq -c 'first(.[] | select(.is_active) | .windows[] | select(.title == "NC//SYSTEM") | .id) // empty')
+   id=$(rift-cli query workspaces 2>/dev/null | jq -c 'first(.[] | select(.is_active) | .windows[] | select(.title == "VEIL//SYSTEM") | .id) // empty')
    [ -n "$id" ] && { rift-cli execute window focus --window-id "$id" >/dev/null; rift-cli execute window toggle-fullscreen-within-gaps >/dev/null; break; }
    sleep 0.1
   done ;;
@@ -42,6 +52,8 @@ case "${1:-help}" in
   check "rift answers queries" "perl -e 'alarm 5; exec @ARGV' rift-cli query workspaces"
   check "bar has all items" "[ \$(sketchybar --query bar | jq '.items|length') -gt 30 ]"
   check "theme files match templates" "veil-theme status | grep -q 'all files match'"
+  # Spotlight keeps ⌘Space unless its shortcut (symbolic hot key 64) is off; then Veil Search can't open with it
+  check "Spotlight has released ⌘Space" "[ \"\$(defaults export com.apple.symbolichotkeys - | plutil -extract AppleSymbolicHotKeys.64.enabled raw -)\" = false ]"
   exit $fail
   ;;
  # launcher menu entry: run the selftest and show the result as a notification

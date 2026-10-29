@@ -3,7 +3,7 @@ export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 TAGS='@@tag_mode@@'   # text: tags are words | icons: tags are glyphs that also show the level
 CASE='@@value_case@@' # upper | lower | title, for words the bar writes (WIFI, MUTE, MON 26)
 CLOCK_DATE='@@clock_date@@'; CLOCK_TIME='@@clock_time@@'
-cased() { case "$CASE" in upper) tr '[:lower:]' '[:upper:]' ;; lower) tr '[:upper:]' '[:lower:]' ;; *) awk '{ for (i = 1; i <= NF; i++) $i = toupper(substr($i, 1, 1)) tolower(substr($i, 2)) } 1' ;; esac; }
+cased() { case "$CASE" in upper) tr '[:lower:]' '[:upper:]' ;; lower) tr '[:upper:]' '[:lower:]' ;; *) LC_ALL=C awk '{ for (i = 1; i <= NF; i++) if ($i ~ /^[A-Za-z]+$/ && $i !~ /^(CPU|MEM|VOL|NET|VPN|LAN|WIFI)$/) $i = toupper(substr($i, 1, 1)) tolower(substr($i, 2)) } 1' ;; esac; }  # title case leaves numbers, symbols and acronyms alone
 case "$NAME" in
  clock) sketchybar --set "$NAME" icon="$(date "+$CLOCK_DATE" | cased)" label="$(date "+$CLOCK_TIME")" ;;
  battery)
@@ -52,12 +52,15 @@ case "$NAME" in
  city)
   if [[ "$SENDER" == mouse.clicked ]]; then
    # one status line, read when the panel opens: no background polling for readings that are off the bar
-   anim=$(rift-cli execute config get 2>/dev/null | jq -r '.settings.animate')
-   quiet=OFF; [ "$anim" = false ] && quiet=ON
+   # quiet mode is the user's switch (veil quiet); Reduce Motion is the system's, and is reported on its own
+   quiet=OFF; [ -f "$HOME/.config/veil/generated/quiet" ] && quiet=ON
+   extra=''; [ "$(defaults read com.apple.universalaccess reduceMotion 2>/dev/null)" = 1 ] && extra="$extra  ·  MOTION OFF BY SYSTEM"
+   # ⌥Z pauses tiling on the focused display's space: say so, or the pause looks like a broken window manager
+   rift-cli query displays 2>/dev/null | jq -e 'any(.[]; .is_active_context and (.is_active_space | not))' >/dev/null && extra="$extra  ·  TILING PAUSED"
    read -r cpu mem < <("$HOME/.local/bin/veil-metrics" "$HOME/Library/Caches/veil-cpu")
    vol=$(osascript -e 'if output muted of (get volume settings) then return "MUTE"' -e 'return (output volume of (get volume settings) as text) & "%"' 2>/dev/null)
    if route -n get default >/dev/null 2>&1; then net=ONLINE; else net=OFFLINE; fi
-   status="CPU ${cpu:-?}%  ·  MEM ${mem:-?}G  ·  VOL ${vol:-?}  ·  $net  ·  QUIET $quiet"
+   status="CPU ${cpu:-?}%  ·  MEM ${mem:-?}G  ·  VOL ${vol:-?}  ·  $net  ·  QUIET $quiet$extra"
    sketchybar --set menu.status label="$(echo "$status" | cased)" --set city popup.drawing=toggle
   else
    sketchybar --set city popup.drawing=off

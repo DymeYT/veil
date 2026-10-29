@@ -10,6 +10,7 @@ return {
       vim.opt.cursorline = @@editor_cursorline@@
       vim.opt.scrolloff = @@editor_scrolloff@@
       vim.opt.wrap = @@editor_wrap@@
+      vim.opt.smoothscroll = false  -- no "<<<" marker on partly scrolled wrapped lines
       vim.opt.winborder = "@@border_style@@" == "square" and "single" or "rounded"
       -- LazyVim turns spell on for prose; the squiggles read as noise across a themed editor
       -- LazyVim turns spell on in its own autocmd group, which runs after ours: remove that group once loaded
@@ -52,11 +53,59 @@ return {
       end,
   } },
   { "LazyVim/LazyVim", opts = { colorscheme = "tokyonight" } },
-  -- statusline mode pill in the environment's accent instead of tokyonight's blue
+  -- statusline: mode pill in the environment's accent, and each environment's own form (style editor_status_layout)
   { "nvim-lualine/lualine.nvim", optional = true,
     opts = function(_, opts)
       local t = vim.deepcopy(require("lualine.themes.tokyonight"))
       t.normal.a.bg = "#00e5ff"; t.normal.b.fg = "#00e5ff"
       opts.options = opts.options or {}; opts.options.theme = t
+      local none = { left = "", right = "" }
+      local clock = function() return os.date("%H:%M") end
+      local bracket = function(s) return s ~= "" and "[" .. s .. "]" or s end
+      local initial = function(s) return s:sub(1, 1) end
+      local kanji = { NORMAL = "常", INSERT = "入", VISUAL = "視", ["V-LINE"] = "行", ["V-BLOCK"] = "矩",
+                      COMMAND = "令", REPLACE = "替", TERMINAL = "端", SELECT = "選" }
+      local layouts = {
+        -- hud (Night City): LazyVim's full powerline, unchanged
+        directive = { comp = { left = "│", right = "│" }, sections = {  -- Arasaka: terse operations line
+          lualine_a = { { "mode", fmt = string.upper } }, lualine_b = { { "filename", path = 1 } }, lualine_c = {},
+          lualine_x = { "diagnostics" }, lualine_y = { "location" }, lualine_z = { clock } } },
+        thread = { comp = { left = "·", right = "·" }, sections = {  -- Pharloom: one quiet thread, no blocks
+          lualine_a = {}, lualine_b = {}, lualine_c = { { "mode", fmt = string.lower }, "filename", "diff" },
+          lualine_x = { "filetype" }, lualine_y = {}, lualine_z = { "progress" } } },
+        quiet = { sections = {  -- Hallownest: the page and where you are, nothing else
+          lualine_a = {}, lualine_b = {}, lualine_c = { "filename" }, lualine_x = { "location" }, lualine_y = {}, lualine_z = {} } },
+        production = { comp = { left = "┃", right = "┃" }, sections = {  -- Foundry: bracketed instrument readouts
+          lualine_a = { { "mode", fmt = bracket } }, lualine_b = { { "branch", fmt = bracket }, "diff" },
+          lualine_c = { { "filename", path = 1 } }, lualine_x = { "diagnostics", "filetype" },
+          lualine_y = { { "progress", fmt = bracket } }, lualine_z = { { "location", fmt = bracket } } } },
+        ledger = { icons = false, sections = {  -- The Cabin: a handwritten page count, lower case, no icons
+          lualine_a = { { "mode", fmt = string.lower } }, lualine_b = {}, lualine_c = { { "filename", fmt = string.lower } },
+          lualine_x = {}, lualine_y = {}, lualine_z = { function() return "page " .. vim.fn.line(".") .. " of " .. vim.fn.line("$") end } } },
+        route = { comp = { left = "─●─", right = "─●─" }, sections = {  -- New York: the file as a line of stops
+          lualine_a = { { "mode", fmt = initial } }, lualine_b = {}, lualine_c = { "branch", "filename", "diagnostics" },
+          lualine_x = {}, lualine_y = { "progress" }, lualine_z = { "location" } } },
+        field = { sections = {  -- Paradis: field report with 24-hour military time
+          lualine_a = { { "mode", fmt = string.upper } }, lualine_b = { "filename" }, lualine_c = { "diagnostics" },
+          lualine_x = { "filetype" }, lualine_y = {}, lualine_z = { function() return os.date("%H%M") end } } },
+        ink = { sections = {  -- Eclipse: mode and position only (the statusline is usually hidden)
+          lualine_a = { "mode" }, lualine_b = {}, lualine_c = {}, lualine_x = {}, lualine_y = {}, lualine_z = { "location" } } },
+        atlas = { comp = { left = "—", right = "—" }, sections = {  -- Guidance: a map legend, title-case mode
+          lualine_a = { { "mode", fmt = function(s) return s:sub(1, 1) .. s:sub(2):lower() end } }, lualine_b = { "branch" },
+          lualine_c = { { "filename", path = 1 } }, lualine_x = {}, lualine_y = {}, lualine_z = { "progress" } } },
+        ember = { comp = { left = "·", right = "·" }, sections = {  -- Cinder: line of the whole, like a bonfire count
+          lualine_a = { "mode" }, lualine_b = {}, lualine_c = { "filename" }, lualine_x = { "diff" }, lualine_y = {},
+          lualine_z = { function() return vim.fn.line(".") .. " ⁄ " .. vim.fn.line("$") end } } },
+        kanji = { sections = {  -- Ashina: the mode as a single kanji tag
+          lualine_a = { { "mode", fmt = function(s) return kanji[s] or s end } }, lualine_b = { "branch" },
+          lualine_c = { "filename" }, lualine_x = {}, lualine_y = {}, lualine_z = { "location" } } },
+      }
+      local l = layouts["@@editor_status_layout@@"]
+      if l then
+        opts.options.section_separators = l.sep or none
+        opts.options.component_separators = l.comp or none
+        if l.icons == false then opts.options.icons_enabled = false end
+        opts.sections = l.sections
+      end
     end },
 }

@@ -1,6 +1,12 @@
 #!/bin/bash
 # Rift workspace/window events: draw the active, occupied and empty workspaces in the theme's style.
 # One query and one sketchybar call per event; widths stay fixed so the bar never shifts.
+# Workspace switches redraw at once. windows_changed comes in bursts while windows move, and only changes which
+# workspaces are occupied, so only the last event of a 150 ms burst queries Rift and redraws.
+if [ "$RIFT_EVENT_TYPE" = windows_changed ]; then
+  tok="${TMPDIR:-/tmp}/veil-windows-event"; me="$$"
+  echo "$me" > "$tok"; sleep 0.15; [ "$(cat "$tok" 2>/dev/null)" = "$me" ] || exit 0
+fi
 names=(@@ws@@)
 STYLE='@@ws_style@@'
 THEME='@@theme_id@@'
@@ -18,8 +24,8 @@ while IFS=$'\t' read -r i active count; do
     pill|slot)
       dot='  '; [ "$count" -gt 0 ] && dot=' •'
       num="0$((i+1))"; [ "$STYLE" = slot ] && num="$((i+1))"
-      # Field-desk tabs are names, while the factory keeps numbered shortcut slots.
-      [ "$THEME" = paradis ] && num=''
+      # Field-desk (Paradis) and field-guide (Guidance) tabs are names; the factory keeps numbered shortcut slots.
+      case "$THEME" in paradis|elden-ring) num='' ;; esac
       base=(icon="$num" label="$n$dot" background.corner_radius="$WS_RADIUS")
       if [ "$STYLE" = slot ]; then
         case $state in

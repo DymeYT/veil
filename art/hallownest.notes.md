@@ -1,7 +1,5 @@
-# Hallownest wallpaper
+# Hallownest wallpaper — City of Tears
 
-- **Source:** official Hollow Knight press/gameplay screenshot of the City of Tears (Team Cherry), 1920x1080, kept at `candidates/hallownest/cinematic/City_of_Tears.jpg`. Rights: Team Cherry; personal desktop use.
-- **Crop:** 1312x848 from x=20, y=232, which removes the HUD (masks and geo counter) and the lunging sentry; Lanczos upscale 2.63x to 3456x2234. No repainting.
-- **Why:** the City of Tears in rain — iron railings, spires, twin lamps, stone arches, pipes. The Knight and a husk are small parts of the scene rather than its subject, so the eye wanders and any gap between windows still reads as Hallownest. Dark blue midtones with small cool lights, matching the theme palette.
-- **Limits:** soft at 100% from the upscale (clean line art holds up better than the previous blurred source).
-- **Previous:** abstract mist crop (`candidates/hallownest/mist-2026-10-28.*`), replaced because it had no recognisable place.
+Local desktop candidate, 2026-10-29. Hand-painted fan art attributed to cata_dioptric, from the With Quirrel collection (source lists 2020): https://www.pixiv.net/en/artworks/94435592 . Local download: candidates/hallownest/fanart/wallhaven-xedzpo.png, mirror https://wallhaven.cc/w/xedzpo . The original creator page was inaccessible in this session; attribution was cross-checked through the indexed source record. This is not Team Cherry promotional art.
+
+3144x1500 source; crop 2320x1500 from 0,0, Lanczos resize to 3456x2234. Architecture, repeating lamps, windows and rain share the visual weight. The two small figures remain low in the right third; people/characters are not categorically excluded. No generated imagery or repainting. The deliberately painterly texture is visible at full size. Personal use only; not bundled or published. Previous image and notes are backed up under ~/claude-cloud-handoff/wallpapers-before-*.
