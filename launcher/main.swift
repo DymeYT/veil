@@ -619,7 +619,7 @@ final class Model: NSObject, ObservableObject {
     var userMoved = false  // keep the selection on a row only after the user picked it
     func move(_ d: Int) { if !items.isEmpty { selected = (selected + d + items.count) % items.count; userMoved = true } }
 
-    /// Columns in the result grid (Foundry's console and Cinder's ember board are two-up); 1 for lists.
+    /// Columns in the result grid (Foundry's console and Cinder's register are two-up); 1 for lists.
     var gridColumns: Int { ["console", "embers"].contains(palette.s("layout", "")) ? 2 : 1 }
 
     /// Grid moves: up/down by a row, left/right by a column, stopping at the edges instead of wrapping.
@@ -1412,7 +1412,7 @@ struct LauncherView: View {
             VStack(spacing: 0) {
                 HStack(spacing: 0) {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("EMBER REGISTER").font(mono(11, "Bold")).tracking(2).foregroundStyle(p["yellow"])
+                        Text("BOREAL VALLEY").font(mono(11, "Bold")).tracking(2).foregroundStyle(p["yellow"])
                         Text("\(m.items.count) traces in the archive").font(mono(10)).foregroundStyle(p["comment"])
                     }.padding(.leading, 18)
                     Spacer(minLength: 8)

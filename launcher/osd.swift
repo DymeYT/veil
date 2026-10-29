@@ -194,7 +194,7 @@ struct OSDView: View {
         .overlay(Rectangle().stroke(p["fg"].opacity(0.18), lineWidth: 1))
     }
 
-    // Cinder: a serif label over an ember bar that glows
+    // Cinder (Irithyll): a serif label over a moonlit bar that glows
     var cinder: some View {
         VStack(spacing: 7) {
             HStack {
@@ -206,16 +206,16 @@ struct OSDView: View {
                 GeometryReader { g in
                     ZStack(alignment: .leading) {
                         Capsule().fill(p["fg"].opacity(0.1))
-                        Capsule().fill(LinearGradient(colors: [p["red"], p["yellow"]], startPoint: .leading, endPoint: .trailing))
+                        Capsule().fill(LinearGradient(colors: [p["blue"], p["white"]], startPoint: .leading, endPoint: .trailing))
                             .frame(width: g.size.width * l)
-                            .shadow(color: p["yellow"].opacity(0.7), radius: 6)
+                            .shadow(color: p["cyan"].opacity(0.75), radius: 7)
                     }
                 }.frame(height: 4)
             }
         }
         .padding(.horizontal, 18).padding(.vertical, 12)
         .background(RoundedRectangle(cornerRadius: 6).fill(p["bg_dark"].opacity(0.95)))
-        .overlay(RoundedRectangle(cornerRadius: 6).stroke(p["yellow"].opacity(0.25), lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 6).stroke(p["cyan"].opacity(0.22), lineWidth: 1))
         .shadow(color: .black.opacity(0.5), radius: 12, y: 5)
     }
 
