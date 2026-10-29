@@ -40,8 +40,8 @@ STRUGGLE"""
 
 # Shape, type and layout (see ECOSYSTEMS.md). Values may name colors as %role%.
 [style]
-panel_headers = "space"  # control panel structure (sketchybarrc): text | rule | space
-panel_status = "bottom"
+panel_headers = "rule"  # control panel structure (sketchybarrc): text | rule | space
+panel_status = "top"
 panel_keys = "trailing"
 panel_first = "windows"
 search_symbol = "brand-of-sacrifice"
@@ -84,7 +84,7 @@ term_blink = "false"
 prompt_char = "❯"
 ff_sep = "  ·  "
 ff_logo_color = "red"
-ff_layout = "kernel uptime"  # fastfetch readings, order and swatch (veil-theme fastfetch_modules)
+ff_layout = "title separator host uptime memory battery"  # fastfetch readings, order and swatch (veil-theme fastfetch_modules)
 ff_k1 = "SYSTEM"
 ff_k2 = "MACHINE"
 ff_k3 = "KERNEL"

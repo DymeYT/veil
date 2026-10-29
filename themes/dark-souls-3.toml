@@ -33,21 +33,13 @@ chip_label = "CINDER"
 title = "CINDER"
 search_chip = ""
 tagline = "the fire fades"
-ws = "SHRINE WALLS CATHEDRAL IRITHYLL DREG"
-logo = """        ██
-      ▄▄██▄▄
-        ██
-        ██
-        ██
-      ▄████▄
-     ▄██▀▀██▄
-   ▄███▀  ▀███▄
- █ ██ ██ ██ ██ ██
-     C I N D E R"""
+logo = """C I N D E R
+───────────
+IRITHYLL"""
 
 # Shape, type and layout (see ECOSYSTEMS.md). Values may name colors as %role%.
 [style]
-panel_headers = "space"  # control panel structure (sketchybarrc): text | rule | space
+panel_headers = "text"  # control panel structure (sketchybarrc): text | rule | space
 panel_status = "top"
 panel_keys = "column"
 panel_first = "windows"
@@ -91,7 +83,7 @@ term_blink = "false"
 prompt_char = "»"
 ff_sep = "  …  "
 ff_logo_color = "yellow"
-ff_layout = "title os uptime memory battery break colors:triangle"  # fastfetch readings, order and swatch (veil-theme fastfetch_modules)
+ff_layout = "title separator os uptime memory battery"  # fastfetch readings, order and swatch (veil-theme fastfetch_modules)
 ff_k1 = "EMBER"
 ff_k2 = "AGE"
 ff_k3 = "KERNEL"

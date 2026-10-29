@@ -1650,7 +1650,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             guard let self, e.window === self.panel else { return e }
             let cmd = e.modifierFlags.contains(.command), ctrl = e.modifierFlags.contains(.control)
             // a second ⌘Space closes the launcher even when the search field has the keyboard
-            if cmd, Int(e.keyCode) == kVK_Space { self.hide(); return nil }
+            if cmd, Int(e.keyCode) == kVK_Space { self.lastToggle = Date(); self.hide(); return nil }  // the hotkey must not reopen it
             // ⌘K action panel takes the keyboard while open
             if self.model.actionsOpen {
                 let n = self.model.currentActions.count
@@ -1681,9 +1681,10 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
                    tv.selectedRange().location == (self.model.query as NSString).length {
                     self.model.query += rest; return nil
                 }
-                if self.model.gridColumns > 1 { self.model.moveGrid(dx: 1, dy: 0); return nil }
+                // in a grid, ←/→ move tiles once you're navigating them (or the field is empty); otherwise they edit the query
+                if self.model.gridColumns > 1 && (self.model.userMoved || self.model.query.isEmpty) { self.model.moveGrid(dx: 1, dy: 0); return nil }
                 return e
-            case kVK_LeftArrow where !cmd && self.model.gridColumns > 1:
+            case kVK_LeftArrow where !cmd && self.model.gridColumns > 1 && (self.model.userMoved || self.model.query.isEmpty):
                 self.model.moveGrid(dx: -1, dy: 0); return nil
             case kVK_ANSI_L where cmd: self.showLargeType(); return nil
             case kVK_ANSI_K where cmd: self.model.actionIndex = 0; self.model.actionsOpen = !self.model.currentActions.isEmpty; return nil

@@ -29,7 +29,8 @@ final class OSD {
         let p = palette()
         guard let screen = NSScreen.screens.first(where: { $0.safeAreaInsets.top > 0 }) ?? NSScreen.main else { return }
         let size = NSSize(width: 300, height: 64)
-        let top = screen.frame.maxY - max(screen.safeAreaInsets.top, 24) - 6
+        let barBelowNotch: CGFloat = p.s("bar_position", "top") == "top" ? 38 : 0
+        let top = screen.frame.maxY - max(screen.safeAreaInsets.top, 24) - barBelowNotch - 10
         let frame = NSRect(x: screen.frame.midX - size.width / 2, y: top - size.height, width: size.width, height: size.height)
         if panel == nil || themeID != p.s("theme_id", "") {
             let w = panel ?? NSPanel(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
@@ -69,6 +70,7 @@ struct OSDView: View {
         let name = p.s("ui_mono", "")
         return name.isEmpty ? .system(size: size, weight: .bold).monospacedDigit() : .custom(name, size: size).weight(.bold)
     }
+    var r: CGFloat { min(max(p.num("radius_window", 12), 6), 16) }
     var symbol: String {
         switch m.kind {
         case .volume:
@@ -123,7 +125,7 @@ struct OSDView: View {
             }
         }
         .padding(.horizontal, 16).padding(.vertical, 12)
-        .background(p["bg_dark"].opacity(0.96))
+        .background(RoundedRectangle(cornerRadius: 4, style: .continuous).fill(p["bg_dark"].opacity(0.96)))
         .overlay(Brackets().stroke(p["cyan"], lineWidth: 1.5))
         .shadow(color: p["cyan"].opacity(0.25), radius: 12)
     }
@@ -147,6 +149,7 @@ struct OSDView: View {
             }.padding(.horizontal, 14).padding(.vertical, 11)
         }
         .background(Color(red: 0.93, green: 0.91, blue: 0.86))
+        .clipShape(RoundedRectangle(cornerRadius: r * 0.6, style: .continuous))
         .shadow(color: .black.opacity(0.45), radius: 14, y: 6)
     }
 
@@ -155,7 +158,6 @@ struct OSDView: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
                 Text(m.title.uppercased()).font(ui(13, .bold)).foregroundStyle(p["fg"])
-                Text(String(repeating: ".", count: 18)).font(ui(13)).foregroundStyle(p["comment"]).lineLimit(1)
                 Spacer(minLength: 0)
                 Text(m.level == nil ? m.detail.uppercased() : "\(percent)%").font(ui(13, .bold)).foregroundStyle(p["cyan"])
             }
@@ -169,8 +171,8 @@ struct OSDView: View {
             }
         }
         .padding(.horizontal, 16).padding(.vertical, 12)
-        .background(p["surface"])
-        .overlay(Rectangle().stroke(p["fg"].opacity(0.4), lineWidth: 1))
+        .background(RoundedRectangle(cornerRadius: r * 0.5, style: .continuous).fill(p["surface"]))
+        .overlay(RoundedRectangle(cornerRadius: r * 0.5, style: .continuous).stroke(p["fg"].opacity(0.3), lineWidth: 1))
         .shadow(color: .black.opacity(0.4), radius: 10, y: 4)
     }
 
@@ -190,8 +192,8 @@ struct OSDView: View {
             }
         }
         .padding(.horizontal, 20).padding(.vertical, 12)
-        .background(Color.black.opacity(0.94))
-        .overlay(Rectangle().stroke(p["fg"].opacity(0.18), lineWidth: 1))
+        .background(RoundedRectangle(cornerRadius: r * 0.5, style: .continuous).fill(Color.black.opacity(0.94)))
+        .overlay(RoundedRectangle(cornerRadius: r * 0.5, style: .continuous).stroke(p["fg"].opacity(0.16), lineWidth: 1))
     }
 
     // Cinder (Irithyll): a serif label over a moonlit bar that glows
@@ -289,7 +291,8 @@ final class MediaKeys {
         }
         guard let t = CGEvent.tapCreate(tap: .cgSessionEventTap, place: .headInsertEventTap, options: .defaultTap,
                                         eventsOfInterest: CGEventMask(1 << 14), callback: callback, userInfo: nil) else {
-            NSLog("veil-search: media keys need Accessibility; leaving them to macOS")
+            // not trusted yet: keys stay with macOS, and we try again until Accessibility is granted
+            DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in self?.start() }
             return
         }
         tap = t
@@ -309,20 +312,29 @@ final class MediaKeys {
         return NSAppleScript(source: src)?.executeAndReturnError(&err).stringValue ?? ""
     }
 
+    private let audio = DispatchQueue(label: "veil.volume")  // AppleScript can stall: never on the main thread
+
     func volume(_ dir: Int) {
-        let now = (Double(script("output volume of (get volume settings)")) ?? 50) / 100
-        let target = MediaKeys.stepped(now, dir)
-        let v = Int((target * 100).rounded())
-        _ = script("set volume output volume \(v)" + (v > 0 ? " without output muted" : ""))
-        _ = try? Process.run(URL(fileURLWithPath: "/opt/homebrew/bin/sketchybar"), arguments: ["--trigger", "volume_change", "INFO=\(v)"])
-        OSD.shared.show(.volume, level: target, title: "Volume")
+        audio.async {
+            // HDMI/DisplayPort speakers report no level ("missing value"); macOS can't set those either
+            guard let raw = Double(self.script("output volume of (get volume settings)")) else {
+                DispatchQueue.main.async { OSD.shared.show(.volume, level: nil, title: "Volume", detail: "Set on the device") }
+                return
+            }
+            let target = MediaKeys.stepped(raw / 100, dir)
+            let v = Int((target * 100).rounded())
+            _ = self.script("set volume output volume \(v)" + (v > 0 ? " without output muted" : ""))
+            _ = try? Process.run(URL(fileURLWithPath: "/opt/homebrew/bin/sketchybar"), arguments: ["--trigger", "volume_change", "INFO=\(v)"])
+            DispatchQueue.main.async { OSD.shared.show(.volume, level: target, title: "Volume") }
+        }
     }
 
     func brightness(_ dir: Int) {
         guard let now = Brightness.get() else { return }
         let target = MediaKeys.stepped(Double(now), dir)
-        Brightness.set(Float(max(target, 0.01)))  // 0 would turn the panel fully off
-        OSD.shared.show(.brightness, level: target, title: "Brightness")
+        let set = max(target, 0.01)  // 0 would turn the panel fully off
+        Brightness.set(Float(set))
+        OSD.shared.show(.brightness, level: set, title: "Brightness")
     }
 }
 
@@ -351,6 +363,7 @@ final class StateWatch {
     private var warned: Double = 1          // lowest battery threshold already announced
     private let path = NWPathMonitor()
     private var online: Bool?
+    private var woke = Date.distantPast
 
     func start() {
         monitor = NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged) { [weak self] e in
@@ -368,12 +381,15 @@ final class StateWatch {
             DispatchQueue.main.async {
                 guard let self else { return }
                 defer { self.online = up }
-                guard let was = self.online, was != up else { return }
+                guard let was = self.online, was != up, Date().timeIntervalSince(self.woke) > 20 else { return }
                 let via = p.usesInterfaceType(.wifi) ? "Wi-Fi" : p.usesInterfaceType(.wiredEthernet) ? "Ethernet" : "Network"
                 OSD.shared.show(.network, level: nil, title: via, detail: up ? "Back online" : "Offline")
             }
         }
         path.start(queue: .global(qos: .utility))
+        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.woke = Date()
+        }
         // keyboard input source switches (only matters with more than one source)
         DistributedNotificationCenter.default().addObserver(forName: Notification.Name("com.apple.Carbon.TISNotifySelectedKeyboardInputSourceChanged"),
                                                             object: nil, queue: .main) { _ in

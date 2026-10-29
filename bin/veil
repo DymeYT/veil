@@ -5,13 +5,13 @@ case "${1:-help}" in
  # quiet mode is kept in a flag file, so theme changes, reloads and reboots respect it (veil-theme reads it)
  quiet)
   touch "$HOME/.config/veil/generated/quiet"
-  rift-cli execute config set settings.animate false
+  rift-cli execute config set settings.animate false || true  # Rift may be down; the flag still applies on its next start
   sketchybar --set cpu update_freq=30 2>/dev/null || true  # only themes that show CPU on the bar poll it
   ;;
  normal)
   rm -f "$HOME/.config/veil/generated/quiet"
   # Reduce Motion (System Settings) still keeps animations off
-  [ "$(defaults read com.apple.universalaccess reduceMotion 2>/dev/null)" = 1 ] || rift-cli execute config set settings.animate true
+  [ "$(defaults read com.apple.universalaccess reduceMotion 2>/dev/null)" = 1 ] || rift-cli execute config set settings.animate true || true
   sketchybar --set cpu update_freq=10 2>/dev/null || true
   ;;
  toggle-quiet)

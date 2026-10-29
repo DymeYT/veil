@@ -2,6 +2,10 @@
 # Install Veil: dependencies, Rift (with Veil's patch), configs and login services. Safe to re-run.
 set -euo pipefail
 NC="$HOME/.config/veil"
+# fail early, before installing anything, if the build tools are missing
+for tool in brew cargo swiftc git; do
+  command -v "$tool" >/dev/null || { echo "Veil needs $tool (Homebrew, Rust via rustup, Xcode Command Line Tools, git). Install it and re-run."; exit 1; }
+done
 RIFT_COMMIT=3114cc5eb3eb6858a3495690312065fe9d95c609  # tested on macOS 27.0.1
 
 brew install sketchybar FelixKratz/formulae/borders fzf zoxide starship bat eza btop fastfetch cava jq

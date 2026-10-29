@@ -31,13 +31,13 @@ while IFS=$'\t' read -r i active count; do
         case $state in
           active) args+=(--set "$s" "${base[@]}" background.drawing=on background.color=0xff00e5ff background.border_width=1 background.border_color=0xff00e5ff icon.color=0xff070a12 label.color=0xff070a12) ;;
           busy) args+=(--set "$s" "${base[@]}" background.drawing=on background.color=0xff151b2d background.border_width=1 background.border_color=0xff334563 icon.color=0xff8794ad label.color=0xffd9f4ff) ;;
-          empty) args+=(--set "$s" "${base[@]}" background.drawing=on background.color=0xff151b2d background.border_width=1 background.border_color=0xff26324a icon.color=0xff76849c label.color=0xff76849c) ;;
+          empty) args+=(--set "$s" "${base[@]}" background.drawing=on background.color=0xff151b2d background.border_width=1 background.border_color=0xff26324a icon.color=0xff76849c label.color=0xff8794ad) ;;
         esac
       else
         case $state in
           active) args+=(--set "$s" "${base[@]}" background.drawing=on background.color=0xff182e3d icon.color=0xff00e5ff label.color=0xff00e5ff) ;;
           busy) args+=(--set "$s" "${base[@]}" background.drawing=off icon.color=0xff8794ad label.color=0xffd9f4ff) ;;
-          empty) args+=(--set "$s" "${base[@]}" background.drawing=off icon.color=0xff76849c label.color=0xff76849c) ;;
+          empty) args+=(--set "$s" "${base[@]}" background.drawing=off icon.color=0xff76849c label.color=0xff8794ad) ;;
         esac
       fi ;;
     underline)  # roman numeral + name, a thread under the active one
@@ -46,47 +46,47 @@ while IFS=$'\t' read -r i active count; do
       case $state in
         active) args+=(--set "$s" "${base[@]}" background.drawing=on icon.color=0xfffcee09 label.color=0xffffffff) ;;
         busy) args+=(--set "$s" "${base[@]}" background.drawing=off icon.color=0xff8794ad label.color=0xffd9f4ff) ;;
-        empty) args+=(--set "$s" "${base[@]}" background.drawing=off icon.color=0xff76849c label.color=0xff76849c) ;;
+        empty) args+=(--set "$s" "${base[@]}" background.drawing=off icon.color=0xff76849c label.color=0xff8794ad) ;;
       esac ;;
     rule)  # corporate tabs: names only, a red rule over the active one
       base=(label="$n" background.height=2 background.y_offset=12 background.corner_radius=0 background.color=0xff00e5ff)
       case $state in
         active) args+=(--set "$s" "${base[@]}" background.drawing=on label.color=0xffffffff) ;;
         busy) args+=(--set "$s" "${base[@]}" background.drawing=off label.color=0xffd9f4ff) ;;
-        empty) args+=(--set "$s" "${base[@]}" background.drawing=off label.color=0xff76849c) ;;
+        empty) args+=(--set "$s" "${base[@]}" background.drawing=off label.color=0xff8794ad) ;;
       esac ;;
     diamond)  # glyph with a small numeral, so ⌥N is findable without counting
       case $state in
         active) args+=(--set "$s" icon=◆ icon.color=0xff00e5ff label="$((i+1))" label.color=0xffd9f4ff background.drawing=off) ;;
         busy) args+=(--set "$s" icon=◈ icon.color=0xffd9f4ff label="$((i+1))" label.color=0xff8794ad background.drawing=off) ;;
-        empty) args+=(--set "$s" icon=◇ icon.color=0xff76849c label="$((i+1))" label.color=0xff76849c background.drawing=off) ;;
+        empty) args+=(--set "$s" icon=◇ icon.color=0xff76849c label="$((i+1))" label.color=0xff8794ad background.drawing=off) ;;
       esac ;;
     bracket)  # typewriter: plain type, the active one struck in ink on a plate
       w=(label.width=$(( (${#n} + 2) * 8 )) label.align=center background.corner_radius=0 background.border_width=0)
       case $state in
         active) args+=(--set "$s" "${w[@]}" label="$n" label.color=0xff070a12 background.drawing=on background.color=0xff00e5ff) ;;
         busy) args+=(--set "$s" "${w[@]}" label="$n" label.color=0xffd9f4ff background.drawing=off) ;;
-        empty) args+=(--set "$s" "${w[@]}" label="$n" label.color=0xff76849c background.drawing=off) ;;
+        empty) args+=(--set "$s" "${w[@]}" label="$n" label.color=0xff8794ad background.drawing=off) ;;
       esac ;;
     kanji)  # kanji numeral + name; the active one in the accent
       base=(icon="${kanji[$i]}" label="$n" background.drawing=off)
       case $state in
         active) args+=(--set "$s" "${base[@]}" icon.color=0xff00e5ff label.color=0xffffffff) ;;
         busy) args+=(--set "$s" "${base[@]}" icon.color=0xff8794ad label.color=0xffd9f4ff) ;;
-        empty) args+=(--set "$s" "${base[@]}" icon.color=0xff76849c label.color=0xff76849c) ;;
+        empty) args+=(--set "$s" "${base[@]}" icon.color=0xff76849c label.color=0xff8794ad) ;;
       esac ;;
     bullet)  # subway line bullets
       c=${lines[$i]}; b=${bullets[$i]}; ink=0xffffffff; [ "$b" = N ] && ink=0xff070a12
       case $state in
         active) args+=(--set "$s" icon="$b" label="$n" icon.background.color=0xff$c icon.color=$ink label.color=0xffffffff background.drawing=off) ;;
         busy) args+=(--set "$s" icon="$b" label="$n" icon.background.color=0x99$c icon.color=$ink label.color=0xff8794ad background.drawing=off) ;;
-        empty) args+=(--set "$s" icon="$b" label="$n" icon.background.color=0x55$c icon.color=$ink label.color=0xff76849c background.drawing=off) ;;
+        empty) args+=(--set "$s" icon="$b" label="$n" icon.background.color=0x55$c icon.color=$ink label.color=0xff8794ad background.drawing=off) ;;
       esac ;;
     dot)  # ● ◉ ○ + name
       case $state in
         active) args+=(--set "$s" icon=● icon.color=0xff00e5ff label="$n" label.drawing=on label.color=0xffffffff background.drawing=off) ;;
         busy) args+=(--set "$s" icon=◉ icon.color=0xff8794ad label="$n" label.drawing=on label.color=0xffd9f4ff background.drawing=off) ;;
-        empty) args+=(--set "$s" icon=○ icon.color=0xff76849c label="$n" label.drawing=on label.color=0xff76849c background.drawing=off) ;;
+        empty) args+=(--set "$s" icon=○ icon.color=0xff76849c label="$n" label.drawing=on label.color=0xff8794ad background.drawing=off) ;;
       esac ;;
   esac
 done < <("$HOME/.local/bin/rift-cli" query workspaces 2>/dev/null | /usr/bin/jq -r '.[] | [.index, .is_active, .window_count] | @tsv')

@@ -48,5 +48,7 @@
  "theme_id": "@@theme_id@@",
  "title_pos": "@@title_pos@@",
  "wallpaper": "@@wallpaper@@",
- "notch_band": "@@notch_band@@"
+ "notch_band": "@@notch_band@@",
+ "bar_position": "@@bar_position@@",
+ "radius_window": "@@l_radius@@"
 }
