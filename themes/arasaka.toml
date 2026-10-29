@@ -174,7 +174,7 @@ border_active = "0xe6%cyan%"
 
 border_inactive = "0x00000000"
 ws_style = "rule"
-chip_style = "filled"
+chip_style = "outline"
 font_tag = "Avenir Next Condensed:Bold:11.5"
 font_label = "Avenir Next Condensed:Demi Bold:12.5"
 font_small = "Avenir Next Condensed:Bold:11.0"
