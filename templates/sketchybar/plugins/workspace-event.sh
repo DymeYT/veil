@@ -1,6 +1,12 @@
 #!/bin/bash
 # Rift workspace/window events: draw the active, occupied and empty workspaces in the theme's style.
 # One query and one sketchybar call per event; widths stay fixed so the bar never shifts.
+# Workspace switches redraw at once. windows_changed comes in bursts while windows move, and only changes which
+# workspaces are occupied, so only the last event of a 150 ms burst queries Rift and redraws.
+if [ "$RIFT_EVENT_TYPE" = windows_changed ]; then
+  tok="${TMPDIR:-/tmp}/veil-windows-event"; me="$$"
+  echo "$me" > "$tok"; sleep 0.15; [ "$(cat "$tok" 2>/dev/null)" = "$me" ] || exit 0
+fi
 names=(@@ws@@)
 STYLE='@@ws_style@@'
 THEME='@@theme_id@@'

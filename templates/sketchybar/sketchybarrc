@@ -109,9 +109,9 @@ left_items=(city)
 [ "$SHOW_APP" = on ] && left_items+=(app)
 if [ "$COMPOSE" = center ]; then
   sketchybar --add bracket island.l "${left_items[@]}" --set island.l $island
-  sketchybar --add bracket island.c ws.0 ws.1 ws.2 ws.3 ws.4 --set island.c $island
+  sketchybar --add bracket island.c ws.0 ws.1 ws.2 ws.3 ws.4 mode --set island.c $island
 else
-  sketchybar --add bracket island.l "${left_items[@]}" ws.0 ws.1 ws.2 ws.3 ws.4 --set island.l $island
+  sketchybar --add bracket island.l "${left_items[@]}" ws.0 ws.1 ws.2 ws.3 ws.4 mode --set island.l $island
 fi
 right_items=(keys music battery clock)
 [ "$CPU_POS" = right ] && right_items+=(cpu memory)

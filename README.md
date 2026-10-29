@@ -76,7 +76,8 @@ happens only while it is open (≈1 ms per keystroke; file results stream in fro
 - Actions: lock, sleep, restart/shut down/log out (system confirms), dark mode, empty Trash (asks), volume, mute, keep awake,
   hidden files, eject, quit/hide/force quit apps (`quit safari`; force quit asks), search prefixes (`g`, `yt`, `gh`, `w`, `maps`, `r`, `amz`),
   quick keys from `launcher/aliases.json`, scripts in `launcher/scripts/` (`# @veil title:` headers), new Obsidian note (`note …`).
-- Clipboard history (⌘4 or `clip`): memory only, 8 hours, skips concealed/password-manager copies.
+- Clipboard history (⌘4 or `clip`): memory only, 8 hours, skips concealed/password-manager copies and strings that look
+  like API keys or tokens (a terminal can't mark a copy as private). Off: `defaults write app.veil.search clipboardHistory -bool false`.
 - Keys: ↵ open · ⌘↵/⌘R reveal · ⌘C copy · ⌘Y Quick Look · ⌘K actions · ⌘L Large Type · ⌘P pin · ⌘⌫ Trash (empty field only) ·
   ⌘1–4 apps/files/actions/clipboard · → accept completion · ↑ on empty field recalls searches · Esc clears, then closes.
 - With permission: contacts (3+ letters), calendar events and reminders (`event …`, `remind …`), Safari tabs,

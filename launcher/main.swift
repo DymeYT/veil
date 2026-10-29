@@ -1928,6 +1928,15 @@ func selftest() -> Never {
     }
         precondition(webSearch("c++ & rust").absoluteString == "https://www.google.com/search?q=c%2B%2B%20%26%20rust")
     precondition(score("sfr", "Safari") == nil && score("saf", "Workspace 5 · FREE") == nil)
+    // clipboard history never keeps tokens copied from a terminal, but keeps ordinary long words, URLs and paths
+    precondition(ClipHistory.looksLikeSecret("ghp_16C7e42F292c6912E7710c838347Ae178B4a"))
+    precondition(ClipHistory.looksLikeSecret("eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0In0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U"))
+    precondition(ClipHistory.looksLikeSecret("Xq7pL2mZ9vR4tK8wB3nC6yH1"))
+    precondition(!ClipHistory.looksLikeSecret("https://github.com/DymeYT/veil/pull/12345678"))
+    precondition(!ClipHistory.looksLikeSecret("/Users/someone/Library/Caches/veil-cpu"))
+    precondition(!ClipHistory.looksLikeSecret("internationalization") && !ClipHistory.looksLikeSecret("hello world this is a long sentence 2026"))
+    precondition(!ClipHistory.looksLikeSecret("wifi_scanner_dummy_2.cpp") && !ClipHistory.looksLikeSecret("Screenshot_2026-10-29.png"))
+    precondition(!ClipHistory.looksLikeSecret("3114cc5eb3eb6858a3495690312065fe9d95c609") && !ClipHistory.looksLikeSecret("550e8400-e29b-41d4-a716-446655440000"))
     precondition(CalendarSource.upcoming("cal").isEmpty)  // "cal" means Calculator or Calendar.app, not the agenda
     precondition((systemActionItems().first { $0.title == "Lock Screen" }?.score ?? 0) > 0)  // the action beats the Settings pane
     print("veil-search selftest: ok")
