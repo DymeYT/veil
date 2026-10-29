@@ -74,7 +74,7 @@ enum CalendarSource {
     // "cal", "today", "events": the next 24 hours, with Join for meeting links
     static func upcoming(_ q: String) -> [Item] {
         let l = q.lowercased()
-        guard ["cal", "calendar", "today", "events", "agenda", "next meeting"].contains(l) else { return [] }
+        guard ["calendar", "today", "events", "agenda", "next meeting"].contains(l) else { return [] }  // "cal" stays Calculator/Calendar
         guard events == .fullAccess else { return [grantRow("Calendar", "calendar")] }
         let now = Date(), end = now.addingTimeInterval(86400)
         let evs = store.events(matching: store.predicateForEvents(withStart: now.addingTimeInterval(-1800), end: end, calendars: nil))
@@ -111,6 +111,7 @@ enum CalendarSource {
             title = body.replacingCharacters(in: r, with: "").replacingOccurrences(of: "  ", with: " ")
                 .trimmingCharacters(in: CharacterSet.whitespaces.union(CharacterSet(charactersIn: ",")))
             for tail in [" at", " on", " by"] where title.lowercased().hasSuffix(tail) { title = String(title.dropLast(tail.count)) }
+            if title.isEmpty { title = body }  // "event lunch friday 1pm": the detector took every word
         }
         let f = DateFormatter(); f.dateFormat = "EEE d MMM, h:mm a"
         if isEvent {
@@ -126,7 +127,7 @@ enum CalendarSource {
 
     static func perform(_ extra: String) -> String {
         let p = extra.split(separator: "\u{1F}", omittingEmptySubsequences: false).map(String.init)
-        guard p.count == 3, let t = Double(p[2]) else { return "" }
+        guard p.count == 3, let t = Double(p[2]), !p[1].isEmpty else { return "" }
         if p[0] == "event" {
             let e = EKEvent(eventStore: store)
             e.title = p[1]; e.startDate = Date(timeIntervalSince1970: t); e.endDate = e.startDate.addingTimeInterval(3600)

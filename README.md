@@ -82,6 +82,13 @@ happens only while it is open (≈1 ms per keystroke; file results stream in fro
 - With permission: contacts (3+ letters), calendar events and reminders (`event …`, `remind …`), Safari tabs,
   menu-bar search (`m …`), paste into the front app (⌥↵).
 
+## Battery
+
+Measured with `powermetrics --samplers tasks -i 60000` on an idle desktop (MacBook Pro, macOS 27): Rift 1.35 ms/s CPU,
+Veil Search 0.84, SketchyBar 0.22, borders 0.02 — together 0.24% of one core, about 2 wake-ups a second, and an energy
+impact of 0.56 against 1047 for the whole system. There is no ambient animation; window and workspace animations run
+only while something moves.
+
 ## Rift patch
 
 `rift/veil.patch` applies to upstream Rift commit `3114cc5` (Apache-2.0). See `rift/README.md`.

@@ -10,6 +10,7 @@ return {
       vim.opt.cursorline = @@editor_cursorline@@
       vim.opt.scrolloff = @@editor_scrolloff@@
       vim.opt.wrap = @@editor_wrap@@
+      vim.opt.smoothscroll = false  -- no "<<<" marker on partly scrolled wrapped lines
       vim.opt.winborder = "@@border_style@@" == "square" and "single" or "rounded"
       -- LazyVim turns spell on for prose; the squiggles read as noise across a themed editor
       -- LazyVim turns spell on in its own autocmd group, which runs after ours: remove that group once loaded

@@ -58,10 +58,10 @@ app_rules = [
 "Alt + Return" = { exec = ["@@home@@/.local/bin/veil", "term"] }
 "Alt + Shift + R" = "reload_config"
 "Alt + R" = { binding_mode = "resize" }
-"Alt + Shift + Equal" = "resize_window_grow"
-"Alt + Shift + Minus" = "resize_window_shrink"
 "Alt + Ctrl + 1" = { set_workspace_layout = { mode = "traditional" } }
 "Alt + Ctrl + 2" = { set_workspace_layout = { mode = "scrolling" } }
+"Alt + Ctrl + 3" = { set_workspace_layout = { mode = "bsp" } }
+"Alt + Ctrl + 4" = { set_workspace_layout = { mode = "master_stack" } }
 "Alt + H" = { move_focus = "left" }
 "Alt + Shift + H" = { move_node = "left" }
 "Alt + J" = { move_focus = "down" }
@@ -70,14 +70,6 @@ app_rules = [
 "Alt + Shift + K" = { move_node = "up" }
 "Alt + L" = { move_focus = "right" }
 "Alt + Shift + L" = { move_node = "right" }
-"Alt + Left" = { move_focus = "left" }
-"Alt + Shift + Left" = { move_node = "left" }
-"Alt + Down" = { move_focus = "down" }
-"Alt + Shift + Down" = { move_node = "down" }
-"Alt + Up" = { move_focus = "up" }
-"Alt + Shift + Up" = { move_node = "up" }
-"Alt + Right" = { move_focus = "right" }
-"Alt + Shift + Right" = { move_node = "right" }
 "Alt + 1" = { switch_to_workspace = 0 }
 "Alt + Shift + 1" = { move_window_to_workspace = 0 }
 "Alt + 2" = { switch_to_workspace = 1 }
@@ -125,6 +117,8 @@ app_rules = [
 "Alt + Shift + R" = "reload_config"
 "Alt + Ctrl + 1" = { set_workspace_layout = { mode = "traditional" } }
 "Alt + Ctrl + 2" = { set_workspace_layout = { mode = "scrolling" } }
+"Alt + Ctrl + 3" = { set_workspace_layout = { mode = "bsp" } }
+"Alt + Ctrl + 4" = { set_workspace_layout = { mode = "master_stack" } }
 "Alt + H" = { move_focus = "left" }
 "Alt + Shift + H" = { move_node = "left" }
 "Alt + J" = { move_focus = "down" }
@@ -133,14 +127,6 @@ app_rules = [
 "Alt + Shift + K" = { move_node = "up" }
 "Alt + L" = { move_focus = "right" }
 "Alt + Shift + L" = { move_node = "right" }
-"Alt + Left" = { move_focus = "left" }
-"Alt + Shift + Left" = { move_node = "left" }
-"Alt + Down" = { move_focus = "down" }
-"Alt + Shift + Down" = { move_node = "down" }
-"Alt + Up" = { move_focus = "up" }
-"Alt + Shift + Up" = { move_node = "up" }
-"Alt + Right" = { move_focus = "right" }
-"Alt + Shift + Right" = { move_node = "right" }
 "Alt + 1" = { switch_to_workspace = 0 }
 "Alt + Shift + 1" = { move_window_to_workspace = 0 }
 "Alt + 2" = { switch_to_workspace = 1 }

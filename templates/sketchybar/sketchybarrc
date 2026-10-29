@@ -127,7 +127,7 @@ fi
 
 # shortcuts sheet
 sketchybar --add item keys.title popup.keys --set keys.title icon='KEYS' icon.font="$F_SMALL" icon.color=0xfffcee09 label='SHORTCUTS' label.color=0xff76849c
-keys=('⌘ Space|Launcher' '⌥ 1-5|Switch workspace' '⇧⌥ 1-5|Move window to workspace' '⌥ H J K L|Focus left/down/up/right' '⇧⌥ H J K L|Move window' '⌥ F|Fullscreen in gaps' '⌥ V|Float / tile window' '⌥ Z|Pause / resume tiling' '⌥ ⏎|New terminal' '⌥ Tab|Last workspace' '⌃⌥ 1 / 2|Tiled / scrolling layout' '⇧⌥ R|Reload Rift config')
+keys=('⌘ Space|Launcher' '⌥ 1-5|Switch workspace' '⇧⌥ 1-5|Move window to workspace' '⌥ H J K L|Focus left/down/up/right' '⇧⌥ H J K L|Move window' '⌥ F|Fullscreen in gaps' '⌥ V|Float / tile window' '⌥ Z|Pause / resume tiling' '⌥ ⏎|New terminal' '⌥ Tab|Last workspace' '⌥ R|Resize tiles (arrows; esc leaves)' '⌃⌥ 1-4|Tiled / scrolling / split / master layout' '⇧⌥ R|Reload Rift config')
 for i in "${!keys[@]}"; do sketchybar --add item keys.$i popup.keys --set keys.$i icon="${keys[$i]%%|*}" icon.font="$F_LABEL" icon.width=96 icon.align=center icon.padding_left=10 icon.padding_right=10 \
   icon.background.drawing=on icon.background.color=0xff151b2d icon.background.border_color=0xff334563 icon.background.border_width=1 \
   icon.background.corner_radius=$CHIP_RADIUS icon.background.height=20 icon.color=0xffd9f4ff label="${keys[$i]#*|}" click_script='sketchybar --set keys popup.drawing=off'; done
@@ -149,7 +149,9 @@ window_controls() {
   row pause 'Pause / resume tiling' "$B/rift-cli execute space toggle-activated" '⌥ Z'
   row tile 'Tiled layout' "$B/rift-cli execute workspace set-layout traditional" '⌃⌥ 1'
   row scroll 'Scrolling layout' "$B/rift-cli execute workspace set-layout scrolling" '⌃⌥ 2'
-  row settings 'Window manager settings' "$B/rift-cli settings" 'SETUP'
+  row bsp 'Split (BSP) layout' "$B/rift-cli execute workspace set-layout bsp" '⌃⌥ 3'
+  row master 'Master and stack layout' "$B/rift-cli execute workspace set-layout master_stack" '⌃⌥ 4'
+  row resize 'Resize tiles with the keyboard' "$B/rift-cli execute binding-mode resize" '⌥ R'
 }
 system_controls() {
   header system "$SYSTEM_GROUP"
@@ -170,7 +172,7 @@ MAINT_GROUP=Maintenance; [ "$THEME_GROUP" = "$(printf '%s' "$THEME_GROUP" | tr '
 header maintenance "$MAINT_GROUP"
 row reload 'Reload config' "$B/veil reload" 'RELOAD'
 row recover 'Recover windows' "$B/veil recover" 'REPAIR'
-row quit 'Quit window manager' "$B/veil quit" 'QUIT' 0xffff5370
+row quit 'Quit window manager…' "osascript -e 'display dialog \"Quit the window manager? Windows stop tiling until you choose Recover windows.\" buttons {\"Cancel\", \"Quit\"} default button \"Cancel\" with icon caution' && $B/veil quit" 'QUIT' 0xffff5370
 # Each menu keeps the same usable actions but borrows its surface grammar from its environment.
 case "$THEME" in
   factorio)

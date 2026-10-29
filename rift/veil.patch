@@ -603,7 +603,7 @@ index 0f33b65..6d38cc7 100644
              || (orientation == ResizeOrientation::Smart && state.columns[col].windows.len() > 1);
          state.mutate(&self.settings, |state| {
 diff --git a/src/layout_engine/systems/traditional.rs b/src/layout_engine/systems/traditional.rs
-index 4af2b04..77c04b5 100644
+index 4af2b04..a7a91c1 100644
 --- a/src/layout_engine/systems/traditional.rs
 +++ b/src/layout_engine/systems/traditional.rs
 @@ -51,7 +51,9 @@ impl TraditionalLayoutSystem {
@@ -756,6 +756,53 @@ index 4af2b04..77c04b5 100644
      }
  
      #[test]
+@@ -5949,6 +5988,46 @@ mod tests {
+         assert!(after > before);
+     }
+ 
++    #[test]
++    fn directional_resize_moves_only_the_pressed_edge() {
++        let mut system = TraditionalLayoutSystem::default();
++        let layout = system.create_layout();
++        let root = system.root(layout);
++        system.tree.data.layout.set_kind(root, LayoutKind::Horizontal);
++        let (a, b, c) = (w(61), w(62), w(63));
++        for wid in [a, b, c] {
++            system.add_window_after_selection(layout, wid);
++        }
++        let prop = |system: &TraditionalLayoutSystem, wid| {
++            let node = system.tree.data.window.node_for(layout, wid).unwrap();
++            system.tree.data.layout.proportion(&system.tree.map, node).unwrap()
++        };
++
++        // middle tile, Left: grows into its left neighbour only
++        system.select_window(layout, b);
++        let (a0, b0, c0) = (prop(&system, a), prop(&system, b), prop(&system, c));
++        system.resize_selection_by(layout, 0.10, ResizeOrientation::Left);
++        assert!(prop(&system, b) > b0 && prop(&system, a) < a0);
++        assert_eq!(prop(&system, c), c0);
++
++        // middle tile, Right: grows into its right neighbour only
++        let (a1, c1) = (prop(&system, a), prop(&system, c));
++        system.resize_selection_by(layout, 0.10, ResizeOrientation::Right);
++        assert!(prop(&system, c) < c1);
++        assert_eq!(prop(&system, a), a1);
++
++        // leftmost tile, Left: nothing to its left, so its right edge moves left (it shrinks)
++        system.select_window(layout, a);
++        let (a2, b2) = (prop(&system, a), prop(&system, b));
++        system.resize_selection_by(layout, 0.10, ResizeOrientation::Left);
++        assert!(prop(&system, a) < a2 && prop(&system, b) > b2);
++
++        // leftmost tile, shrink Left: no left edge to pull in, so nothing changes
++        let a3 = prop(&system, a);
++        system.resize_selection_by(layout, -0.10, ResizeOrientation::Left);
++        assert_eq!(prop(&system, a), a3);
++    }
++
+     #[test]
+     fn manual_resize_ignores_cross_axis_jitter_when_hitting_edge() {
+         let mut system = TraditionalLayoutSystem::default();
 diff --git a/src/ui/settings/commands.rs b/src/ui/settings/commands.rs
 index 05ddb11..deb3a36 100644
 --- a/src/ui/settings/commands.rs

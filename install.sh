@@ -15,7 +15,9 @@ if [ ! -x "$HOME/.local/bin/rift" ]; then
   src="$HOME/Developer/veil-rift"
   [ -d "$src" ] || git clone https://github.com/acsandmann/rift "$src"
   git -C "$src" checkout -q "$RIFT_COMMIT"
-  git -C "$src" apply --check "$NC/rift/veil.patch" 2>/dev/null && git -C "$src" apply "$NC/rift/veil.patch"
+  # Veil's config needs the patched build: stop if the patch neither applies nor is already applied
+  git -C "$src" apply --reverse --check "$NC/rift/veil.patch" 2>/dev/null \
+    || git -C "$src" apply "$NC/rift/veil.patch" || { echo "rift/veil.patch did not apply to $src"; exit 1; }
   (cd "$src" && cargo build --release --locked --bin rift --bin rift-cli)
   cp "$src/target/release/rift" "$src/target/release/rift-cli" "$HOME/.local/bin/"
 fi
@@ -65,7 +67,7 @@ grep -qF "$line" "$HOME/.zshrc" 2>/dev/null || printf '\n# Veil theme colors (fz
 
 cat <<'EOF'
 Installed. One-time macOS steps, if not already done:
-  - System Settings → Privacy & Security → Accessibility: allow rift and borders
+  - System Settings → Privacy & Security → Accessibility: allow Rift and Veil Search
   - System Settings → Keyboard → Keyboard Shortcuts → Spotlight: turn off ⌘Space (Veil Search uses it)
   - System Settings → Menu Bar: turn on "Show menu bar background" (so the revealed menu bar covers the bar cleanly)
   - First ⌥Return: allow rift to control Ghostty (opens new terminal windows)

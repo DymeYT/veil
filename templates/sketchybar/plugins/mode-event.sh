@@ -3,5 +3,5 @@
 if [ -z "$RIFT_BINDING_MODE" ] || [ "$RIFT_BINDING_MODE" = default ]; then
   /opt/homebrew/bin/sketchybar --set mode drawing=off
 else
-  /opt/homebrew/bin/sketchybar --set mode drawing=on label="$(printf '%s' "$RIFT_BINDING_MODE" | tr '[:lower:]' '[:upper:]')"
+  /opt/homebrew/bin/sketchybar --set mode drawing=on label="$(printf '%s' "$RIFT_BINDING_MODE" | tr '[:lower:]' '[:upper:]') · ESC"
 fi

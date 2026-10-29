@@ -209,7 +209,7 @@ func timeAnswer(_ q: String) -> Item? {
 // MARK: system actions
 
 let systemActions: [(String, String, String, [String])] = [
-    ("Lock Screen", "Sleeps the display; locks when a password is required after sleep", "lock", ["/usr/bin/pmset", "displaysleepnow"]),
+    ("Lock Screen", "Locks the Mac now (⌃⌘Q)", "lock", ["/usr/bin/osascript", "-e", "tell application \"System Events\" to keystroke \"q\" using {control down, command down}"]),
     ("Sleep", "Puts the Mac to sleep", "moon.zzz", ["/usr/bin/pmset", "sleepnow"]),
     ("Restart…", "Asks before restarting", "restart", ["/usr/bin/osascript", "-e", "tell application \"loginwindow\" to «event aevtrrst»"]),
     ("Shut Down…", "Asks before shutting down", "power", ["/usr/bin/osascript", "-e", "tell application \"loginwindow\" to «event aevtrsdn»"]),
@@ -224,7 +224,9 @@ let systemActions: [(String, String, String, [String])] = [
 
 func systemActionItems() -> [Item] {
     // ranked below apps and files with the same prefix; restart/shut down/log out lowest of all
-    systemActions.map { Item(kind: .action, title: $0.0, subtitle: $0.1, symbol: $0.2, action: .run($0.3), score: $0.0.hasSuffix("…") ? -250 : -120) }
+    // Lock Screen ranks above the System Settings pane of the same name: typing "lock" means lock
+    systemActions.map { Item(kind: .action, title: $0.0, subtitle: $0.1, symbol: $0.2, action: .run($0.3),
+                             score: $0.0 == "Lock Screen" ? 120 : $0.0.hasSuffix("…") ? -250 : -120) }
 }
 
 // "quit safari", "hide music": act on running apps
@@ -243,7 +245,7 @@ func runningAppActions(_ q: String) -> [Item] {
             case "Quit": argv = ["/usr/bin/osascript", "-e", "tell application id \"\(app.bundleIdentifier ?? "")\" to quit"]
             case "Hide": argv = ["/usr/bin/osascript", "-e", "tell application \"System Events\" to set visible of (first process whose unix id is \(pid)) to false"]
             default: argv = ["/usr/bin/osascript", "-e",
-                "display dialog \"Force quit \(n)? Unsaved changes will be lost.\" buttons {\"Cancel\", \"Force Quit\"} default button \"Cancel\" with icon caution",
+                "display dialog \"Force quit \(n.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\""))? Unsaved changes will be lost.\" buttons {\"Cancel\", \"Force Quit\"} default button \"Cancel\" with icon caution",
                 "-e", "do shell script \"kill -9 \(pid)\""]
             }
             return Item(kind: .action, title: "\(verb) \(n)", subtitle: "Running application", symbol: sym, path: app.bundleURL?.path,

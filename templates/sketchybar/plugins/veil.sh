@@ -3,7 +3,7 @@ export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 TAGS='@@tag_mode@@'   # text: tags are words | icons: tags are glyphs that also show the level
 CASE='@@value_case@@' # upper | lower | title, for words the bar writes (WIFI, MUTE, MON 26)
 CLOCK_DATE='@@clock_date@@'; CLOCK_TIME='@@clock_time@@'
-cased() { case "$CASE" in upper) tr '[:lower:]' '[:upper:]' ;; lower) tr '[:upper:]' '[:lower:]' ;; *) awk '{ for (i = 1; i <= NF; i++) $i = toupper(substr($i, 1, 1)) tolower(substr($i, 2)) } 1' ;; esac; }
+cased() { case "$CASE" in upper) tr '[:lower:]' '[:upper:]' ;; lower) tr '[:upper:]' '[:lower:]' ;; *) LC_ALL=C awk '{ for (i = 1; i <= NF; i++) if ($i ~ /^[A-Za-z]+$/ && $i !~ /^(CPU|MEM|VOL|NET|VPN|LAN|WIFI)$/) $i = toupper(substr($i, 1, 1)) tolower(substr($i, 2)) } 1' ;; esac; }  # title case leaves numbers, symbols and acronyms alone
 case "$NAME" in
  clock) sketchybar --set "$NAME" icon="$(date "+$CLOCK_DATE" | cased)" label="$(date "+$CLOCK_TIME")" ;;
  battery)

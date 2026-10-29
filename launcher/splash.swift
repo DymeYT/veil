@@ -45,7 +45,7 @@ struct SplashView: View {
             if let img = artImage {
                 // slow push-in across the splash
                 Image(nsImage: img).resizable().interpolation(.high).aspectRatio(contentMode: .fill)
-                    .frame(width: 2056, height: 1329)
+                    .frame(width: splashSize.width, height: splashSize.height)
                     .scaleEffect(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 1 : 1.07 - 0.07 * (1 - pow(1 - t, 2)), anchor: .center)
                 // legibility: darken toward the title corner, keep the art breathing elsewhere
                 LinearGradient(stops: [.init(color: .clear, location: 0.35), .init(color: p["bg_dark"].opacity(0.88), location: 1)],
@@ -60,7 +60,7 @@ struct SplashView: View {
                     .position(x: 1028, y: SceneArt.titleY(p.s("scene", "neon")))
             }
         }
-        .frame(width: 2056, height: 1329)
+        .frame(width: splashSize.width, height: splashSize.height)
         .clipped()
     }
 }
@@ -833,6 +833,9 @@ struct WallpaperView: View {
             SceneArt.wallpaper = true
             SceneArt.draw(p.s("scene", "neon"), ctx: &ctx, size: size, t: 0.35, p: p)
         }
-        .frame(width: 2056, height: 1329)
+        .frame(width: splashSize.width, height: splashSize.height)
     }
 }
+
+/// The splash and offscreen renders fill the main screen at its point size (2056×1329 when there is no screen).
+let splashSize = NSScreen.main?.frame.size ?? CGSize(width: 2056, height: 1329)

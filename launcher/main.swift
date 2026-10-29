@@ -559,7 +559,10 @@ final class Model: NSObject, ObservableObject {
             let used = (r.value(forAttribute: kMDItemLastUsedDate as String) as? Date ?? r.value(forAttribute: kMDItemContentModificationDate as String) as? Date)?.timeIntervalSince1970 ?? 0
             let isDir = (r.value(forAttribute: kMDItemContentType as String) as? String) == "public.folder"
             let it = Item(kind: .file, title: name, subtitle: ((path as NSString).deletingLastPathComponent as NSString).abbreviatingWithTildeInPath,
-                          symbol: isDir ? "folder" : "doc", path: path, action: .open(URL(fileURLWithPath: path)), score: group == 0 ? 850 : group == 1 ? 650 : 100)
+                          // a file whose name only starts with the query ranks below apps, settings and answers;
+                          // only an exact name (with or without extension) can be the top hit
+                          symbol: isDir ? "folder" : "doc", path: path, action: .open(URL(fileURLWithPath: path)),
+                          score: (lname == q || (lname as NSString).deletingPathExtension == q) ? 870 : group == 0 ? 700 : group == 1 ? 600 : 100)
             found.append((it, group, used))
         }
         mq.enableUpdates()
@@ -621,7 +624,8 @@ final class Model: NSObject, ObservableObject {
         }
         let q = query.trimmingCharacters(in: .whitespaces)
         usage[it.key, default: 0] += 1
-        if !q.isEmpty {
+        let secretQuery = ["b64 ", "unb64 ", "sha256 ", "password"].contains { q.lowercased().hasPrefix($0) } || it.extra == "secret"
+        if !q.isEmpty && !secretQuery {
             usage["q:\(q.lowercased().prefix(4))|\(it.key)", default: 0] += 1
             history.removeAll { $0 == q }; history.insert(q, at: 0); history = Array(history.prefix(50))
             UserDefaults.standard.set(history, forKey: "history")
@@ -646,6 +650,18 @@ final class Model: NSObject, ObservableObject {
             if it.extra.hasPrefix("stdin:"), let data = Data(base64Encoded: String(it.extra.dropFirst(6))) {
                 let pipe = Pipe(); p.standardInput = pipe
                 try? p.run(); pipe.fileHandleForWriting.write(data); try? pipe.fileHandleForWriting.close()
+            } else if argv[0].hasSuffix("veil-theme") {
+                // report a refused theme change instead of failing silently
+                let err = Pipe(); p.standardError = err
+                try? p.run()
+                DispatchQueue.global().async {
+                    p.waitUntilExit()
+                    guard p.terminationStatus != 0 else { return }
+                    let msg = String(data: err.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+                        .split(separator: "\n").last.map(String.init) ?? "Theme change failed"
+                    let safe = msg.replacingOccurrences(of: "\\", with: "").replacingOccurrences(of: "\"", with: "'")
+                    _ = try? Process.run(URL(fileURLWithPath: "/usr/bin/osascript"), arguments: ["-e", "display notification \"\(safe)\" with title \"Veil theme\""])
+                }
             } else { try? p.run() }
         }
     }
@@ -1414,11 +1430,11 @@ struct LauncherView: View {
                                 result(item, index: i, p: p)
                             }
                         }
-                    }.padding(.horizontal, 8).padding(.bottom, 8)
+                    }.padding(.horizontal, 8).padding(.bottom, 40)  // the last row can always scroll clear of the fade
                 }
             }
             // fade the clipped bottom edge so a cut-off section header never reads as an empty group
-            .mask(VStack(spacing: 0) { Color.black; LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: 44) })
+            .mask(VStack(spacing: 0) { Color.black; LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: 36) })
             .onChange(of: m.selected) { _, selected in
                 if m.items.indices.contains(selected) { proxy.scrollTo(m.items[selected].id) }
             }
@@ -1612,7 +1628,8 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 return e
             case kVK_ANSI_L where cmd: self.showLargeType(); return nil
             case kVK_ANSI_K where cmd: self.model.actionIndex = 0; self.model.actionsOpen = !self.model.currentActions.isEmpty; return nil
-            case kVK_Delete where cmd: self.model.trashSelected(); return nil
+            // ⌘⌫ deletes the query text like every macOS field; Move to Trash stays in the ⌘K actions
+            case kVK_Delete where cmd: if !self.model.query.isEmpty { return e }; self.model.trashSelected(); return nil
             case kVK_DownArrow:
                 if self.model.historyIndex >= 0 { _ = self.model.recallHistory(-1); return nil }
                 self.model.move(1); return nil

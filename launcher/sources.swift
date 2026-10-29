@@ -393,7 +393,8 @@ final class Weather {
         guard l == "weather" || l.hasPrefix("weather ") else { return nil }
         let city = l == "weather" ? (UserDefaults.standard.string(forKey: "weatherCity") ?? TimeZone.current.identifier.split(separator: "/").last.map { $0.replacingOccurrences(of: "_", with: " ") } ?? "New York")
                                   : String(l.dropFirst(8)).trimmingCharacters(in: .whitespaces)
-        if let (t, item) = cache[city], Date().timeIntervalSince(t) < 1800 { return item }
+        // answers last 30 min; failures ("offline", "no such place") 60 s, so the placeholder never spins forever
+        if let (t, item) = cache[city], Date().timeIntervalSince(t) < (item.extra == "weather-failed" ? 60 : 1800) { return item }
         let placeholder = Item(kind: .answer, title: "Weather in \(city.capitalized)…", subtitle: "Fetching from Open-Meteo", symbol: "cloud.sun", action: .copy(""), score: 1900)
         guard !loading.contains(city), let enc = city.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
               let geo = URL(string: "https://geocoding-api.open-meteo.com/v1/search?count=1&name=\(enc)") else { return placeholder }
@@ -405,20 +406,32 @@ final class Weather {
         return placeholder
     }
 
+    private func fail(_ city: String, _ title: String, refresh: @escaping () -> Void) {
+        DispatchQueue.main.async {
+            self.loading.remove(city)
+            self.cache[city] = (Date(), Item(kind: .answer, title: title, subtitle: "Weather · try again in a minute", symbol: "cloud.slash",
+                                             action: .copy(""), score: 1900, extra: "weather-failed"))
+            refresh()
+        }
+    }
+
     private func fetch(city: String, geo: URL, refresh: @escaping () -> Void) {
         loading.insert(city)
-        URLSession.shared.dataTask(with: geo) { d, _, _ in
-            guard let d, let o = try? JSONSerialization.jsonObject(with: d) as? [String: Any], let r = (o["results"] as? [[String: Any]])?.first,
+        URLSession.shared.dataTask(with: geo) { d, _, err in
+            guard let d else { return self.fail(city, err == nil ? "Weather unavailable" : "Couldn't reach Open-Meteo (offline?)", refresh: refresh) }
+            guard let o = try? JSONSerialization.jsonObject(with: d) as? [String: Any], let r = (o["results"] as? [[String: Any]])?.first,
                   let lat = r["latitude"] as? Double, let lon = r["longitude"] as? Double,
                   let fx = URL(string: "https://api.open-meteo.com/v1/forecast?latitude=\(lat)&longitude=\(lon)&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m&daily=temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=1") else {
-                DispatchQueue.main.async { self.loading.remove(city) }; return
+                return self.fail(city, "No place called \(city.capitalized)", refresh: refresh)
             }
             let name = [r["name"] as? String, r["country_code"] as? String].compactMap { $0 }.joined(separator: ", ")
             URLSession.shared.dataTask(with: fx) { d2, _, _ in
                 DispatchQueue.main.async {
                     self.loading.remove(city)
                     guard let d2, let o2 = try? JSONSerialization.jsonObject(with: d2) as? [String: Any],
-                          let cur = o2["current"] as? [String: Any], let t = cur["temperature_2m"] as? Double else { return }
+                          let cur = o2["current"] as? [String: Any], let t = cur["temperature_2m"] as? Double else {
+                        return self.fail(city, "Weather unavailable for \(city.capitalized)", refresh: refresh)
+                    }
                     let code = cur["weather_code"] as? Int ?? 0
                     let (desc, sym) = Weather.describe(code)
                     let daily = o2["daily"] as? [String: Any]
@@ -427,7 +440,7 @@ final class Weather {
                     func fmt(_ c: Double) -> String { useF ? "\(Int((c * 9 / 5 + 32).rounded()))°F" : "\(Int(c.rounded()))°C" }
                     let range = [hi.map { "H " + fmt($0) }, lo.map { "L " + fmt($0) }].compactMap { $0 }.joined(separator: " · ")
                     let item = Item(kind: .answer, title: "\(fmt(t)) · \(desc)", subtitle: "\(name)   \(range)", symbol: sym,
-                                    action: .open(URL(string: "https://open-meteo.com/en/docs")!), score: 1900)
+                                    action: .open(safeURL("https://www.google.com/search?q=weather+\(city.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")")), score: 1900)
                     self.cache[city] = (Date(), item)
                     refresh()
                 }

@@ -50,7 +50,7 @@ def strings_for(theme):
     out["editor_cursor_style"] = {"bar": "line", "underline": "underline"}.get(out["term_cursor"], "block")
     # Rift window animation follows System Settings > Accessibility > Reduce Motion (read when a theme is applied)
     rm = subprocess.run(["defaults", "read", "com.apple.universalaccess", "reduceMotion"], capture_output=True, text=True).stdout.strip()
-    out["rift_animate"] = "false" if rm == "1" else "true"
+    out["rift_animate"] = "false" if rm == "1" or (GEN / "quiet").exists() else "true"  # Reduce Motion or `veil quiet`
     return out
 
 
@@ -162,6 +162,9 @@ def plan(name):
         try:
             new = render(tpl, live, kind, theme, mapping)
         except (ValueError, OSError) as e:
+            if kind == "cursor":  # a user's settings.json with comments or trailing commas: theme everything else
+                print(f"  skipped: {live} is not plain JSON ({e}); Cursor keeps its current colors", file=sys.stderr)
+                continue
             sys.exit(f"refusing to apply: {live} would be invalid ({e}); nothing was changed")
         old = live.read_text() if live.exists() else None
         if new != old:
@@ -317,6 +320,9 @@ def main(argv):
     elif cmd == "status":
         cur = (ROOT / "current").read_text().strip() if (ROOT / "current").exists() else BASE
         _, changes = plan(cur)
+        # toggling Reduce Motion or quiet mode after an apply only flips Rift's `animate` line: not a hand edit
+        motion_only = lambda old, new: {l for l in set((old or "").splitlines()) ^ set(new.splitlines())} <= {"animate = true", "animate = false"}
+        changes = [c for c in changes if not motion_only(c[1], c[2])]
         print(f"current: {load_theme(cur)['name']}")
         for live, *_ in changes:
             print(f"  drifted from template: {live}")
