@@ -48,16 +48,45 @@ def strings_for(theme):
     out["theme_id"] = theme.get("id", BASE)
     out["home"] = str(HOME)  # absolute paths for configs that do not expand ~ (Rift's exec and run_on_start)
     out["editor_cursor_style"] = {"bar": "line", "underline": "underline"}.get(out["term_cursor"], "block")
+    out["ff_modules_json"] = fastfetch_modules(out)
     # Rift window animation follows System Settings > Accessibility > Reduce Motion (read when a theme is applied)
     rm = subprocess.run(["defaults", "read", "com.apple.universalaccess", "reduceMotion"], capture_output=True, text=True).stdout.strip()
     out["rift_animate"] = "false" if rm == "1" or (GEN / "quiet").exists() else "true"  # Reduce Motion or `veil quiet`
     return out
 
 
+FF_KEYS = {"os": "ff_k1", "host": "ff_k2", "kernel": "ff_k3", "uptime": "ff_k4", "memory": "ff_k5", "battery": "ff_k6"}
+FF_TYPES = set(FF_KEYS) | {"cpu", "gpu", "disk", "display", "shell", "terminal", "packages", "wm", "localip", "datetime", "locale", "swap", "processes"}
+FF_SYMBOLS = {"block", "background", "circle", "diamond", "triangle", "square", "star"}
+
+
+def fastfetch_modules(s):
+    """fastfetch's module list from a theme's `ff_layout`: which readings, in what order, under which names.
+    Tokens: title, separator, break, colors:<symbol>, or type[:Key_name] (underscores become spaces;
+    without a name, os/host/kernel/uptime/memory/battery use the theme's ff_k1..ff_k6)."""
+    modules = []
+    for token in s["ff_layout"].split():
+        kind, _, arg = token.partition(":")
+        if kind in ("title", "separator", "break") and not arg:
+            modules.append(kind)
+        elif kind == "colors":
+            if arg not in FF_SYMBOLS:
+                raise ValueError(f"ff_layout: colors needs one of {sorted(FF_SYMBOLS)}")
+            modules.append({"type": "colors", "symbol": arg})
+        elif kind in FF_TYPES:
+            key = arg.replace("_", " ") if arg else s.get(FF_KEYS.get(kind, ""), "")
+            if not key:
+                raise ValueError(f"ff_layout: {kind} needs a name ({kind}:Name)")
+            modules.append({"type": kind, "key": key})
+        else:
+            raise ValueError(f"ff_layout: unknown module {token!r}")
+    return json.dumps(modules, indent=2, ensure_ascii=False)
+
+
 def fill(text, strings, tpl):
-    """Replace @@key@@ placeholders; JSON-escape inside JSON templates."""
+    """Replace @@key@@ placeholders; JSON-escape inside JSON templates, except *_json values, which are JSON already."""
     esc = (lambda v: json.dumps(v)[1:-1]) if tpl.endswith((".json", ".jsonc")) else str
-    text = re.sub(r"@@(\w+)@@", lambda m: esc(strings[m.group(1)]), text)
+    text = re.sub(r"@@(\w+)@@", lambda m: strings[m.group(1)] if m.group(1).endswith("_json") else esc(strings[m.group(1)]), text)
     return text
 
 

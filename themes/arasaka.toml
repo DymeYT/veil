@@ -39,6 +39,7 @@ CORPORATE NETWORK"""
 
 # Shape, type and layout (see ECOSYSTEMS.md). Values may name colors as %role%.
 [style]
+ff_layout = "title separator host os cpu:PROCESSOR memory processes:ACTIVE_JOBS uptime"  # fastfetch readings, order and swatch (veil-theme fastfetch_modules)
 search_symbol = "arasaka-logo"
 ws = "OPS EXEC RND INTEL VAULT"
 bar_radius = "0"

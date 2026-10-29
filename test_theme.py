@@ -162,6 +162,23 @@ with tempfile.TemporaryDirectory() as tmp:
         commands = [c for _, c in reloads.call_args.args[0] if isinstance(c, list)]
         assert any("reload_config" in " ".join(c) for c in commands), "restore must reload Ghostty"
 
+# fastfetch: every theme renders valid JSON with its own readings and order, and every module is a real fastfetch module
+ff_layouts = {}
+for t in (ROOT / "themes").glob("*.toml"):
+    values = nct.strings_for(nct.load_theme(t.stem))
+    config = __import__("json").loads(nct.fill((ROOT / "templates/fastfetch.jsonc").read_text(), values, "fastfetch.jsonc"))
+    for module in config["modules"]:
+        kind = module if isinstance(module, str) else module["type"]
+        assert kind in nct.FF_TYPES | {"title", "separator", "break", "colors"}, (t.stem, kind)
+        assert isinstance(module, str) or kind == "colors" or module["key"], (t.stem, module)
+    assert config["logo"]["source"] == values["logo"]
+    ff_layouts[t.stem] = values["ff_layout"]
+assert len(set(ff_layouts.values())) == len(ff_layouts), f"fastfetch layouts are shared: {ff_layouts}"
+try:
+    nct.fastfetch_modules({"ff_layout": "title colors:sparkles"}); raise AssertionError("bad swatch accepted")
+except ValueError:
+    pass
+
 # JankyBorders draws a square "ghost box" ~10pt outside windows for fractional widths (issue #173)
 for t in (ROOT / "themes").glob("*.toml"):
     w = float(nct.strings_for(nct.load_theme(t.stem)).get("border_width", "1"))

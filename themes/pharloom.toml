@@ -67,6 +67,7 @@ term_cursor = "bar"
 prompt_char = "›"
 ff_sep = "  ·  "
 ff_logo_color = "cyan"
+ff_layout = "title os uptime memory break colors:diamond"  # fastfetch readings, order and swatch (veil-theme fastfetch_modules)
 ff_k1 = "Realm"
 ff_k2 = "Vessel"
 ff_k3 = "Kernel"

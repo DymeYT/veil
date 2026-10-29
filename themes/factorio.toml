@@ -34,9 +34,16 @@ chip_label = "FOUNDRY"
 title = "FOUNDRY"
 search_chip = "⚙"
 ws = "RADAR BUILD COMMS MEDIA IDLE"
-logo = """F O U N D R Y
-━━━━━━━━━━━━━
-NAUVIS · SECTOR 1"""
+logo = """         ██
+   ▄█▄▄▄████▄▄▄█▄
+    ████████████
+   ▄███▀    ▀███▄
+ ██████      ██████
+   ▀███▄    ▄███▀
+    ████████████
+   ▀█▀▀▀████▀▀▀█▀
+         ██
+    F O U N D R Y"""
 
 # Shape, type and layout (see ECOSYSTEMS.md). Values may name colors as %role%.
 [style]
@@ -68,6 +75,7 @@ term_pad_y = "10"
 prompt_char = "▶"
 ff_sep = "  ▸  "
 ff_logo_color = "cyan"
+ff_layout = "title separator cpu:FURNACE gpu:ASSEMBLER memory disk:STORAGE battery uptime break colors:square"  # fastfetch readings, order and swatch (veil-theme fastfetch_modules)
 ff_k1 = "PLANET"
 ff_k2 = "ENTITY"
 ff_k3 = "KERNEL"

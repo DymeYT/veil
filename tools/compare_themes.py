@@ -11,7 +11,7 @@ loader.exec_module(nct)
 GROUPS = {
     'bar': ('bar_layout','bar_position','bar_compose','ws_style','chip_style','tag_mode'),
     'windows': ('window_mode',),
-    'terminal': ('term_font','term_titlebar','term_quick_position','term_cursor','prompt_format','prompt_right_format'),
+    'terminal': ('term_font','term_titlebar','term_quick_position','term_cursor','prompt_format','prompt_right_format','ff_layout'),
     'editor': ('cursor_sidebar','cursor_show_tabs','cursor_breadcrumbs','cursor_sticky','cursor_numbers','cursor_wrap','cursor_highlight','cursor_minimap','cursor_activity'),
     'notes': ('note_font','note_heading_align','note_rule_style','note_heading_case','note_quote_style','note_quote_font_style'),
     'tools': ('btop_boxes','btop_proc_tree','btop_proc_left','btop_proc_graphs','btop_mem_graphs','fzf_layout','fzf_border'),

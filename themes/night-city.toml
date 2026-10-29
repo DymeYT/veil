@@ -85,6 +85,7 @@ ff_k4 = "UPTIME"
 ff_k5 = "MEMORY"
 ff_k6 = "POWER"
 ff_logo_color = "cyan"
+ff_layout = "title separator os host kernel uptime memory battery break colors:block"  # fastfetch readings, order and swatch (veil-theme fastfetch_modules)
 btop_graph = "braille"
 btop_rounded = "true"
 ui_font = "JetBrainsMono Nerd Font"
