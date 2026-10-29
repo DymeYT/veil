@@ -92,7 +92,8 @@ only while something moves.
 
 ## Rift patch
 
-`rift/veil.patch` applies to upstream Rift commit `3114cc5` (Apache-2.0). See `rift/README.md`.
+`rift/veil.patch` applies to upstream Rift commit `3114cc5` (Apache-2.0). See `rift/README.md`. After the patch changes,
+`VEIL_REBUILD_RIFT=1 ./install.sh` rebuilds Rift from a fresh copy of that commit.
 
 ## Credits
 

@@ -10,16 +10,18 @@ brew install --cask ghostty font-jetbrains-mono-nerd-font font-symbols-only-nerd
   font-zen-maru-gothic font-victor-mono font-nunito font-maple-mono font-ibm-plex-mono  # theme fonts
 
 mkdir -p "$HOME/.local/bin"
-if [ ! -x "$HOME/.local/bin/rift" ]; then
+# VEIL_REBUILD_RIFT=1 ./install.sh rebuilds after rift/veil.patch changes (a plain re-run keeps the installed build)
+if [ ! -x "$HOME/.local/bin/rift" ] || [ -n "${VEIL_REBUILD_RIFT:-}" ]; then
   # upstream Rift at a tested commit plus rift/veil.patch (Hyprland-style animations, directional resize)
   src="$HOME/Developer/veil-rift"
   [ -d "$src" ] || git clone https://github.com/acsandmann/rift "$src"
-  git -C "$src" checkout -q "$RIFT_COMMIT"
-  # Veil's config needs the patched build: stop if the patch neither applies nor is already applied
-  git -C "$src" apply --reverse --check "$NC/rift/veil.patch" 2>/dev/null \
-    || git -C "$src" apply "$NC/rift/veil.patch" || { echo "rift/veil.patch did not apply to $src"; exit 1; }
+  # this clone is Veil's own: reset it so an older copy of the patch never blocks the current one
+  git -C "$src" checkout -q -f "$RIFT_COMMIT"
+  # Veil's config needs the patched build: stop if the patch does not apply
+  git -C "$src" apply "$NC/rift/veil.patch" || { echo "rift/veil.patch did not apply to $src"; exit 1; }
   (cd "$src" && cargo build --release --locked --bin rift --bin rift-cli)
-  cp "$src/target/release/rift" "$src/target/release/rift-cli" "$HOME/.local/bin/"
+  # replace by rename: overwriting a running binary in place can get it killed by code signing
+  for b in rift rift-cli; do cp "$src/target/release/$b" "$HOME/.local/bin/.$b.new" && mv -f "$HOME/.local/bin/.$b.new" "$HOME/.local/bin/$b"; done
 fi
 cc -O2 -o "$NC/bin/veil-metrics" "$NC/bin/metrics.c"
 # keep the user's pre-Veil settings so uninstall.sh can put them back (first install only)
