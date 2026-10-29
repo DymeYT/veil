@@ -1,0 +1,24 @@
+# machine state
+generated/
+current
+backups/
+bin/veil-metrics
+__pycache__/
+.DS_Store
+
+# copyrighted wallpapers and working images: bring your own (see README); notes and symbols are kept
+art/*.jpg
+art/candidates/
+art/ai-generated/
+art/live/
+
+# private review captures, research images and assistant working files
+review/
+research/
+agents/
+.claude/
+.superdesign/
+CLAUDE.md
+CLAUDE-HANDOFF.md
+HANDOFF.md
+REVIEW-START-HERE.md

@@ -1,0 +1,190 @@
+# Hollow Knight — near-monochrome blue-black, pale text, soul blue, dream lavender, pale-gold chip.
+name = "Hallownest"
+macos_accent = -1
+[colors]
+bg = "0a1025"
+bg_dark = "070c21"
+bg_float = "11192f"
+surface = "17233b"
+ws_active = "203451"
+border = "2c3d5a"
+selection = "2d4265"
+line = "3b5271"
+comment = "828a97"
+dim = "8b93a2"
+fg = "dde5e8"
+white = "ffffff"
+cyan = "89c8e4"
+magenta = "a99ad8"
+yellow = "ddd8bd"
+red = "e07a4f"
+green = "8cbf96"
+blue = "7389d6"
+bright_red = "eda07f"
+bright_green = "afd6b6"
+bright_yellow = "f2e7c4"
+bright_blue = "9eadeb"
+bright_magenta = "c8bdea"
+bright_cyan = "b6d6f2"
+
+[strings]
+tagline = "NO COST TOO GREAT"
+chip_icon = ""
+chip_label = "HALLOWNEST"
+title = "HALLOWNEST"
+search_chip = ""
+ws = "WEB CODE CHAT MEDIA BENCH"
+logo = """H A L L O W N E S T
+──────── ◆ ────────"""
+
+# Shape, type and layout (see ECOSYSTEMS.md). Values may name colors as %role%.
+[style]
+search_symbol = "knight-mask"
+bar_layout = "islands"
+font_tag = "Cinzel:Bold:10.5"
+font_label = "Cinzel:Regular:12.0"
+font_small = "Cinzel:Bold:10.5"
+font_chip = "Cinzel:Bold:11.5"
+chip_style = "text"
+ws_style = "diamond"
+value_case = "upper"
+app_glyph = "—"
+border_width = "1.0"
+border_active = "0xe6%cyan%"
+gap_top = "22"
+gap_outer = "22"
+gap_inner = "18"
+term_font = "IBM Plex Mono"
+term_size = "14"
+term_cell = "16%"
+term_opacity = "0.92"
+term_blur = "20"
+term_pad_x = "26"
+term_pad_y = "20"
+term_cursor = "underline"
+prompt_char = "›"
+ff_sep = "  ·  "
+ff_logo_color = "white"
+ff_k1 = "KINGDOM"
+ff_k2 = "VESSEL"
+ff_k3 = "KERNEL"
+ff_k4 = "TIME"
+ff_k5 = "SOUL"
+ff_k6 = "LIFEBLOOD"
+ui_font = "Cinzel"
+ui_mono = "IBM Plex Mono"
+l_radius = "22"
+l_row = "soft"
+l_texture = "none"
+l_line = "none"
+l_glow = "false"
+l_border = "0"
+l_opacity = "0.84"
+gap_bottom = "22"
+anim = "0.4"
+l_tile = "diamond"
+l_head = "rule"
+l_frame = "none"
+l_place = "center"
+l_prompt = "What do you seek?"
+l_width = "760"
+fzf_border = "none"
+fzf_pointer = "›"
+fzf_prompt = "›"
+fzf_sep = " "
+btop_boxes = "cpu proc"
+clock_date = "%d %B"
+sound = "Purr"
+l_scene = "cavern"
+wallpaper = "art"
+term_titlebar = "transparent"
+term_quick_position = "center"
+term_quick_anim = "0.26"
+prompt_format = "$directory$line_break$character"
+prompt_right_format = "$git_branch$git_status$cmd_duration"
+prompt_newline = "true"
+prompt_depth = "2"
+note_font = "EB Garamond"
+note_width = "660px"
+note_line_height = "1.85"
+note_radius = "12px"
+note_heading_weight = "500"
+note_nav_size = "14px"
+btop_proc_tree = "false"
+btop_proc_left = "false"
+btop_proc_graphs = "false"
+btop_mem_graphs = "false"
+fzf_layout = "reverse"
+fzf_height = "45%"
+editor_relative_numbers = "false"
+editor_cursorline = "false"
+editor_scrolloff = "12"
+editor_wrap = "true"
+ff_logo_position = "top"
+l_layout = "airy"
+l_row_height = "52"
+cursor_line_height = "26"
+cursor_minimap = "false"
+cursor_activity = "default"
+cursor_tabs = "fit"
+cursor_indent = "20"
+
+cursor_sidebar = "right"
+
+cursor_show_tabs = "single"
+
+cursor_breadcrumbs = "false"
+
+cursor_sticky = "false"
+
+cursor_numbers = "off"
+
+cursor_wrap = "on"
+
+cursor_whitespace = "none"
+
+cursor_minimap_side = "right"
+
+note_heading_align = "center"
+
+note_rule_style = "none"
+
+note_rule_width = "0px"
+
+note_tracking = "0.12em"
+
+note_heading_case = "none"
+
+note_quote_width = "1px"
+
+note_quote_style = "solid"
+
+note_quote_font_style = "italic"
+
+note_callout_border = "0px"
+
+editor_numbers = "false"
+
+editor_signcolumn = "no"
+
+editor_foldcolumn = "0"
+
+editor_statusline = "0"
+
+editor_colorcolumn = ""
+
+cursor_highlight = "none"
+
+term_split_opacity = "0.92"
+
+window_mode = "traditional"
+
+bar_compose = "split"
+
+bar_radius = "18"
+
+bar_border = "0"
+
+border_style = "round"
+
+border_inactive = "0x00000000"

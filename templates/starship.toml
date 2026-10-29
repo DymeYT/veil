@@ -1,0 +1,18 @@
+add_newline = @@prompt_newline@@
+format = "@@prompt_format@@"
+right_format = "@@prompt_right_format@@"
+[directory]
+style = "bold cyan"
+truncation_length = @@prompt_depth@@
+truncate_to_repo = true
+[git_branch]
+symbol = " "
+style = "bold purple"
+[git_status]
+style = "bold purple"
+[character]
+success_symbol = "[@@prompt_char@@](bold yellow)"
+error_symbol = "[@@prompt_char@@](bold red)"
+[cmd_duration]
+min_time = 2000
+style = "yellow"

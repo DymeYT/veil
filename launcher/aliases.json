@@ -1,0 +1,7 @@
+{
+  "so": {"url": "https://stackoverflow.com/search?q={q}"},
+  "npm": {"url": "https://www.npmjs.com/search?q={q}"},
+  "mdn": {"url": "https://developer.mozilla.org/en-US/search?q={q}"},
+  "tr": {"url": "https://translate.google.com/?sl=auto&tl=en&text={q}"},
+  "term": {"open": "/Applications/Ghostty.app"}
+}

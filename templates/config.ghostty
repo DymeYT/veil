@@ -1,0 +1,61 @@
+# font
+font-family = @@term_font@@
+font-size = @@term_size@@
+adjust-cell-height = @@term_cell@@
+
+# theme
+# @@title@@
+background = 090d17
+foreground = d9f4ff
+cursor-color = fcee09
+selection-background = 26385a
+selection-foreground = ffffff
+palette = 0=#151b2d
+palette = 1=#ff5370
+palette = 2=#5af7a5
+palette = 3=#fcee09
+palette = 4=#57a6ff
+palette = 5=#ff4fbc
+palette = 6=#00e5ff
+palette = 7=#d9f4ff
+palette = 8=#76849c
+palette = 9=#ff7890
+palette = 10=#8affbf
+palette = 11=#fff680
+palette = 12=#93c6ff
+palette = 13=#ff8ed4
+palette = 14=#80f3ff
+palette = 15=#ffffff
+
+# window
+background-opacity = @@term_opacity@@
+background-blur = @@term_blur@@
+macos-titlebar-style = @@term_titlebar@@
+window-padding-x = @@term_pad_x@@
+window-padding-y = @@term_pad_y@@
+window-padding-balance = true
+window-save-state = always
+unfocused-split-opacity = @@term_split_opacity@@
+
+# cursor
+cursor-style = @@term_cursor@@
+cursor-style-blink = @@term_blink@@
+mouse-hide-while-typing = true
+
+# behavior
+copy-on-select = clipboard
+confirm-close-surface = true
+shell-integration-features = no-cursor,sudo,title
+
+# drop-down terminal from anywhere (Quake style)
+keybind = global:alt+space=toggle_quick_terminal
+quick-terminal-position = @@term_quick_position@@
+quick-terminal-animation-duration = @@term_quick_anim@@
+
+# splits
+keybind = cmd+d=new_split:right
+keybind = cmd+shift+d=new_split:down
+keybind = cmd+h=goto_split:left
+keybind = cmd+l=goto_split:right
+keybind = cmd+j=goto_split:bottom
+keybind = cmd+k=goto_split:top

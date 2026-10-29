@@ -1,0 +1,50 @@
+{
+  "logo": {
+    "type": "data",
+    "position": "@@ff_logo_position@@",
+    "source": "@@logo@@",
+    "color": {
+      "1": "@@ff_logo_color@@"
+    }
+  },
+  "display": {
+    "separator": "@@ff_sep@@",
+    "color": {
+      "keys": "cyan",
+      "title": "yellow"
+    }
+  },
+  "modules": [
+    "title",
+    "separator",
+    {
+      "type": "os",
+      "key": "@@ff_k1@@"
+    },
+    {
+      "type": "host",
+      "key": "@@ff_k2@@"
+    },
+    {
+      "type": "kernel",
+      "key": "@@ff_k3@@"
+    },
+    {
+      "type": "uptime",
+      "key": "@@ff_k4@@"
+    },
+    {
+      "type": "memory",
+      "key": "@@ff_k5@@"
+    },
+    {
+      "type": "battery",
+      "key": "@@ff_k6@@"
+    },
+    "break",
+    {
+      "type": "colors",
+      "symbol": "circle"
+    }
+  ]
+}

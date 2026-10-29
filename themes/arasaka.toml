@@ -1,0 +1,182 @@
+# Corporate crimson: red primary accent, amber secondary, near-black warm surfaces.
+name = "Arasaka"
+macos_accent = 0  # red
+[colors]
+bg = "0b0708"
+bg_dark = "070405"
+bg_float = "150c0e"
+surface = "1d1214"
+ws_active = "3a1418"
+border = "3a2226"
+selection = "4a1c22"
+line = "4d2a2f"
+comment = "91787b"
+dim = "a08488"
+fg = "f2e4e1"
+white = "ffffff"
+cyan = "ff2a4a"
+magenta = "ff9e3d"
+yellow = "f4eee8"
+red = "ff5c5c"
+green = "7ee08a"
+blue = "6f8cff"
+bright_red = "ff8080"
+bright_green = "a6f0b0"
+bright_yellow = "fbf7f2"
+bright_blue = "9fb3ff"
+bright_magenta = "ffbe7a"
+bright_cyan = "ff7a8c"
+
+[strings]
+tagline = "CORPORATE NETWORK"
+chip_icon = ""
+chip_label = "ARASAKA"
+title = "ARASAKA"
+search_chip = "ARASAKA"
+logo = """A R A S A K A
+─────────────
+CORPORATE NETWORK"""
+
+# Shape, type and layout (see ECOSYSTEMS.md). Values may name colors as %role%.
+[style]
+search_symbol = "arasaka-logo"
+ws = "OPS EXEC RND INTEL VAULT"
+bar_radius = "0"
+chip_radius = "0"
+ws_radius = "2"
+border_style = "round"
+l_radius = "2"
+btop_rounded = "false"
+l_tile = "square"
+fzf_border = "sharp"
+sound = "Basso"
+l_scene = "tower"
+wallpaper = "art"
+term_titlebar = "tabs"
+term_quick_position = "right"
+term_quick_anim = "0.10"
+prompt_format = "$directory$git_branch$git_status$character"
+prompt_right_format = "$cmd_duration"
+prompt_newline = "false"
+prompt_depth = "3"
+note_font = "Helvetica Neue"
+note_width = "720px"
+note_line_height = "1.5"
+note_radius = "0px"
+note_heading_weight = "700"
+note_nav_size = "12px"
+btop_proc_tree = "true"
+btop_proc_left = "false"
+btop_proc_graphs = "false"
+btop_mem_graphs = "true"
+fzf_layout = "default"
+fzf_height = "50%"
+editor_relative_numbers = "true"
+editor_cursorline = "true"
+editor_scrolloff = "4"
+editor_wrap = "false"
+ff_logo_position = "left"
+l_layout = "ops"
+l_row_height = "40"
+cursor_line_height = "22"
+cursor_minimap = "true"
+cursor_activity = "default"
+cursor_tabs = "shrink"
+cursor_indent = "12"
+
+cursor_sidebar = "right"
+
+cursor_show_tabs = "multiple"
+
+cursor_breadcrumbs = "true"
+
+cursor_sticky = "true"
+
+cursor_numbers = "relative"
+
+cursor_wrap = "off"
+
+cursor_whitespace = "boundary"
+
+cursor_minimap_side = "left"
+
+note_heading_align = "left"
+
+note_rule_style = "double"
+
+note_rule_width = "3px"
+
+note_tracking = "0.08em"
+
+note_heading_case = "uppercase"
+
+note_quote_width = "4px"
+
+note_quote_style = "solid"
+
+note_quote_font_style = "normal"
+
+note_callout_border = "2px"
+
+editor_numbers = "true"
+
+editor_signcolumn = "yes:2"
+
+editor_foldcolumn = "1"
+
+editor_statusline = "2"
+
+editor_colorcolumn = "100"
+
+cursor_highlight = "line"
+
+term_split_opacity = "0.90"
+
+window_mode = "master_stack"
+
+gap_top = "10"
+
+gap_outer = "8"
+
+gap_inner = "8"
+
+gap_bottom = "8"
+
+term_font = "Menlo"
+
+ui_mono = "Menlo"
+
+term_pad_x = "10"
+
+term_pad_y = "8"
+
+term_size = "13"
+
+term_opacity = "1.0"
+
+term_blur = "0"
+
+bar_compose = "split"
+
+bar_layout = "strip"
+
+bar_border = "2"
+
+border_width = "1.0"
+
+border_active = "0xe6%cyan%"
+
+border_inactive = "0x00000000"
+ws_style = "rule"
+chip_style = "filled"
+font_tag = "Avenir Next Condensed:Bold:11.5"
+font_label = "Avenir Next Condensed:Demi Bold:12.5"
+font_small = "Avenir Next Condensed:Bold:10.0"
+font_chip = "Avenir Next Condensed:Heavy:12.5"
+ui_font = "Avenir Next Condensed"
+l_frame = "none"
+l_line = "solid"
+l_texture = "none"
+l_glow = "false"
+value_case = "upper"
+tags = "CPU MEM NET VOL PWR"

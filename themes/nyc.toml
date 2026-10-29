@@ -1,0 +1,192 @@
+# New York City at night — asphalt dark, warm window light, subway-line colors, taxi-yellow chip.
+name = "New York"
+macos_accent = 1
+[colors]
+bg = "080d17"
+bg_dark = "03060a"
+bg_float = "0b111d"
+surface = "121b32"
+ws_active = "33251a"
+border = "1b253c"
+selection = "363940"
+line = "334159"
+comment = "788497"
+dim = "969da8"
+fg = "f0f4f3"
+white = "ffffff"
+cyan = "ff6319"
+magenta = "c65abd"
+yellow = "fccc0a"
+red = "ef433d"
+green = "3aa05a"
+blue = "4a83db"
+bright_red = "f4685f"
+bright_green = "6cbe45"
+bright_yellow = "fde066"
+bright_blue = "6f9ee6"
+bright_magenta = "d36fca"
+bright_cyan = "ff8c52"
+
+[strings]
+tagline = "40.7128° N  ·  74.0060° W"
+chip_icon = "NYC"
+chip_label = "40.7°N"
+title = "NEW YORK"
+search_chip = "NYC"
+ws = "WEB WORK TALK MEDIA OFF"
+logo = """          ▐
+          █
+     ▗▖  ▐█▌    ▗▄
+  ▄▖ ██  ███  ▄ ██
+  ██▌██▐▌███▐██▌██ ▄
+  ██▌██▐▌███▐██▌██▐█
+  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+  NEW YORK CITY"""
+
+# Shape, type and layout (see ECOSYSTEMS.md). Values may name colors as %role%.
+[style]
+bar_layout = "strip"
+bar_radius = "0"
+font_tag = "Helvetica Neue:Bold:11.5"
+font_label = "Helvetica Neue:Medium:12.5"
+font_small = "Helvetica Neue:Bold:10.0"
+font_chip = "Helvetica Neue:Bold:12.0"
+chip_radius = "0"
+ws_style = "bullet"
+ws_colors = "%red% %green% %blue% %yellow% %magenta%"
+tags = "CPU RAM NET VOL PWR"
+value_case = "title"
+app_glyph = "·"
+border_style = "round"
+border_width = "1.0"
+border_active = "0xe6%cyan%"
+gap_top = "10"
+gap_outer = "8"
+gap_inner = "8"
+term_font = "Monaspace Neon"
+term_size = "14"
+term_cell = "8%"
+term_opacity = "1.0"
+term_blur = "0"
+term_pad_x = "14"
+term_pad_y = "10"
+prompt_char = "→"
+ff_sep = "  →  "
+ff_logo_color = "white"
+ff_k1 = "Borough"
+ff_k2 = "Building"
+ff_k3 = "Kernel"
+ff_k4 = "Since"
+ff_k5 = "Memory"
+ff_k6 = "MetroCard"
+btop_graph = "block"
+btop_rounded = "false"
+ui_font = "Helvetica Neue"
+ui_mono = "Monaspace Neon"
+l_radius = "4"
+l_row = "sign"
+l_texture = "none"
+l_line = "none"
+l_glow = "false"
+l_border = "0"
+l_opacity = "0.98"
+gap_bottom = "8"
+anim = "0.21"
+l_tile = "circle"
+l_head = "bullet"
+l_frame = "station"
+l_place = "banner"
+l_prompt = "Where to?"
+l_width = "1180"
+fzf_border = "horizontal"
+fzf_pointer = "→"
+fzf_prompt = "→"
+clock_date = "%a %b %-d"
+clock_time = "%-I:%M %p"
+sound = "Submarine"
+l_scene = "skyline"
+wallpaper = "art"
+term_titlebar = "native"
+term_quick_position = "bottom"
+term_quick_anim = "0.12"
+prompt_format = "$directory$git_branch$git_status$character"
+prompt_right_format = "$cmd_duration"
+prompt_newline = "false"
+prompt_depth = "3"
+note_font = "Helvetica Neue"
+note_width = "800px"
+note_line_height = "1.6"
+note_radius = "0px"
+note_heading_weight = "700"
+note_nav_size = "13px"
+btop_proc_tree = "false"
+btop_proc_left = "true"
+btop_proc_graphs = "true"
+btop_mem_graphs = "true"
+fzf_layout = "reverse-list"
+fzf_height = "60%"
+editor_relative_numbers = "false"
+editor_cursorline = "true"
+editor_scrolloff = "6"
+editor_wrap = "false"
+ff_logo_position = "left"
+l_layout = "transit"
+l_row_height = "42"
+cursor_line_height = "24"
+cursor_minimap = "false"
+cursor_activity = "top"
+cursor_tabs = "fit"
+cursor_indent = "16"
+
+cursor_sidebar = "left"
+
+cursor_show_tabs = "multiple"
+
+cursor_breadcrumbs = "true"
+
+cursor_sticky = "false"
+
+cursor_numbers = "on"
+
+cursor_wrap = "off"
+
+cursor_whitespace = "selection"
+
+cursor_minimap_side = "left"
+
+note_heading_align = "left"
+
+note_rule_style = "solid"
+
+note_rule_width = "4px"
+
+note_tracking = "-0.02em"
+
+note_heading_case = "none"
+
+note_quote_width = "5px"
+
+note_quote_style = "solid"
+
+note_quote_font_style = "normal"
+
+note_callout_border = "0px"
+
+editor_numbers = "true"
+
+editor_signcolumn = "yes"
+
+editor_foldcolumn = "0"
+
+editor_statusline = "2"
+
+editor_colorcolumn = "100"
+
+cursor_highlight = "line"
+
+term_split_opacity = "0.75"
+
+window_mode = "scrolling"
+
+border_inactive = "0x00000000"
+search_symbol = ""

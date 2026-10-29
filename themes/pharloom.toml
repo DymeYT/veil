@@ -1,0 +1,185 @@
+# Hollow Knight: Silksong — ink-violet dark, bone text, Hornet crimson, rose silk, gilded chip.
+name = "Pharloom"
+macos_accent = 0
+[colors]
+bg = "10121b"
+bg_dark = "0b0d14"
+bg_float = "191923"
+surface = "211d2a"
+ws_active = "35191f"
+border = "37303f"
+selection = "3d2630"
+line = "4f4354"
+comment = "8e838d"
+dim = "9d90a2"
+fg = "ede7cf"
+white = "fffaf2"
+cyan = "d1666f"
+magenta = "c27f78"
+yellow = "ceaa73"
+red = "f07a55"
+green = "a3bd7f"
+blue = "8fa6d1"
+bright_red = "f7a084"
+bright_green = "c2d6a3"
+bright_yellow = "f0dba6"
+bright_blue = "b7c7e6"
+bright_magenta = "efb3c3"
+bright_cyan = "e7777f"
+
+[strings]
+tagline = "silk and song"
+chip_icon = ""
+chip_label = "PHARLOOM"
+title = "PHARLOOM"
+search_chip = ""
+ws = "WEB FORGE CHOIR MEDIA REST"
+logo = """P H A R L O O M
+───────────────
+silk and song"""
+
+# Shape, type and layout (see ECOSYSTEMS.md). Values may name colors as %role%.
+[style]
+search_symbol = "hornet-needle"
+bar_radius = "3"
+bar_alpha = "f2"
+font_tag = "Cormorant Garamond:Bold:13.5"
+font_label = "Cormorant Garamond:Bold:15.0"
+font_small = "Cormorant Garamond:Bold:12.5"
+font_chip = "Cormorant Garamond:Bold:14.5"
+chip_style = "outline"
+chip_radius = "2"
+ws_style = "underline"
+tags = "CPU MEM NET VOL PWR"
+value_case = "title"
+app_glyph = "❧"
+border_width = "1.0"
+gap_top = "18"
+gap_outer = "16"
+gap_inner = "14"
+term_font = "Monaspace Xenon"
+term_size = "14"
+term_cell = "14%"
+term_opacity = "0.96"
+term_pad_x = "22"
+term_pad_y = "16"
+term_cursor = "bar"
+prompt_char = "›"
+ff_sep = "  ·  "
+ff_logo_color = "cyan"
+ff_k1 = "Realm"
+ff_k2 = "Vessel"
+ff_k3 = "Kernel"
+ff_k4 = "Hours"
+ff_k5 = "Silk"
+ff_k6 = "Spool"
+ui_font = "Cormorant Garamond"
+ui_mono = "Monaspace Xenon"
+l_radius = "6"
+l_row = "thread"
+l_texture = "threads"
+l_line = "double"
+l_glow = "false"
+gap_bottom = "16"
+anim = "0.35"
+l_tile = "circle"
+l_head = "ornament"
+l_frame = "inset"
+l_prompt = "Follow a thread…"
+l_width = "820"
+fzf_pointer = "›"
+fzf_prompt = "»"
+fzf_sep = "·"
+btop_boxes = "cpu mem proc"
+clock_date = "%A"
+clock_time = "%-I:%M %p"
+sound = "Glass"
+l_scene = "cathedral"
+wallpaper = "art"
+term_titlebar = "transparent"
+term_quick_position = "center"
+term_quick_anim = "0.24"
+prompt_format = "$directory$git_branch$line_break$character"
+prompt_right_format = "$git_status$cmd_duration"
+prompt_newline = "true"
+prompt_depth = "2"
+note_font = "Cormorant Garamond"
+note_width = "680px"
+note_line_height = "1.8"
+note_radius = "3px"
+note_heading_weight = "500"
+note_nav_size = "14px"
+btop_proc_tree = "false"
+btop_proc_left = "false"
+btop_proc_graphs = "false"
+btop_mem_graphs = "true"
+fzf_layout = "reverse"
+fzf_height = "70%"
+editor_relative_numbers = "false"
+editor_cursorline = "true"
+editor_scrolloff = "10"
+editor_wrap = "false"
+ff_logo_position = "top"
+l_layout = "archive"
+l_row_height = "46"
+cursor_line_height = "26"
+cursor_minimap = "false"
+cursor_activity = "default"
+cursor_tabs = "fit"
+cursor_indent = "20"
+
+cursor_sidebar = "left"
+
+cursor_show_tabs = "single"
+
+cursor_breadcrumbs = "true"
+
+cursor_sticky = "false"
+
+cursor_numbers = "off"
+
+cursor_wrap = "off"
+
+cursor_whitespace = "none"
+
+cursor_minimap_side = "right"
+
+note_heading_align = "center"
+
+note_rule_style = "double"
+
+note_rule_width = "3px"
+
+note_tracking = "0.04em"
+
+note_heading_case = "none"
+
+note_quote_width = "1px"
+
+note_quote_style = "double"
+
+note_quote_font_style = "italic"
+
+note_callout_border = "1px"
+
+editor_numbers = "false"
+
+editor_signcolumn = "auto"
+
+editor_foldcolumn = "0"
+
+editor_statusline = "2"
+
+editor_colorcolumn = ""
+
+cursor_highlight = "line"
+
+term_split_opacity = "0.75"
+
+window_mode = "traditional"
+
+border_style = "round"
+
+border_active = "0xe6%cyan%"
+
+border_inactive = "0x00000000"

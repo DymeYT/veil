@@ -1,0 +1,187 @@
+# Factorio — warm steel greys, UI orange, terminal colors are the science packs, utility-yellow chip.
+name = "Foundry"
+macos_accent = 1
+[colors]
+bg = "1b1a18"
+bg_dark = "131211"
+bg_float = "22211e"
+surface = "2b2926"
+ws_active = "3d2d17"
+border = "3b3833"
+selection = "4a3f2c"
+line = "524c43"
+comment = "969084"
+dim = "a69f92"
+fg = "e9e3d6"
+white = "ffffff"
+cyan = "ff9f1c"
+magenta = "b775db"
+yellow = "f5c33b"
+red = "ea6651"
+green = "6fbf4a"
+blue = "4f95e6"
+bright_red = "f08470"
+bright_green = "97d67a"
+bright_yellow = "f9d872"
+bright_blue = "7fb2ee"
+bright_magenta = "cb97e6"
+bright_cyan = "ffbb5c"
+
+[strings]
+tagline = "THE FACTORY MUST GROW"
+chip_icon = "⚙"
+chip_label = "FOUNDRY"
+title = "FOUNDRY"
+search_chip = "⚙"
+ws = "RADAR BUILD COMMS MEDIA IDLE"
+logo = """F O U N D R Y
+━━━━━━━━━━━━━
+NAUVIS · SECTOR 1"""
+
+# Shape, type and layout (see ECOSYSTEMS.md). Values may name colors as %role%.
+[style]
+search_symbol = "factorio-gear"
+bar_radius = "2"
+bar_border = "2"
+bar_alpha = "fa"
+font_tag = "Titillium Web:Bold:11.0"
+font_label = "Titillium Web:SemiBold:12.5"
+font_small = "Titillium Web:Bold:10.0"
+font_chip = "Titillium Web:Bold:12.0"
+chip_radius = "2"
+ws_style = "slot"
+ws_radius = "2"
+app_glyph = "▸"
+border_style = "round"
+border_width = "1.0"
+border_active = "0xe6%cyan%"
+gap_top = "6"
+gap_outer = "6"
+gap_inner = "6"
+term_font = "Monaspace Krypton"
+term_size = "13"
+term_cell = "6%"
+term_opacity = "1.0"
+term_blur = "0"
+term_pad_x = "12"
+term_pad_y = "10"
+prompt_char = "▶"
+ff_sep = "  ▸  "
+ff_logo_color = "cyan"
+ff_k1 = "PLANET"
+ff_k2 = "ENTITY"
+ff_k3 = "KERNEL"
+ff_k4 = "PLAYTIME"
+ff_k5 = "RAM"
+ff_k6 = "ACCUMULATOR"
+btop_graph = "block"
+btop_rounded = "false"
+ui_font = "Titillium Web"
+ui_mono = "Monaspace Krypton"
+l_radius = "3"
+l_row = "slot"
+l_texture = "blueprint"
+l_line = "none"
+l_glow = "false"
+l_border = "2"
+l_opacity = "0.97"
+bar_position = "bottom"
+bar_compose = "center"
+gap_bottom = "50"
+anim = "0.2"
+l_tile = "square"
+l_head = "strip"
+l_frame = "bevel"
+l_place = "bottom"
+l_prompt = "Search the factory…"
+l_width = "900"
+fzf_border = "sharp"
+fzf_pointer = "▶"
+fzf_prompt = "⚙"
+fzf_sep = "━"
+sound = "Tink"
+l_scene = "factory"
+wallpaper = "art"
+term_titlebar = "tabs"
+term_quick_position = "bottom"
+term_quick_anim = "0.08"
+prompt_format = "$directory$git_branch$git_status$cmd_duration$character"
+prompt_right_format = ""
+prompt_newline = "false"
+prompt_depth = "5"
+note_font = "Titillium Web"
+note_width = "900px"
+note_line_height = "1.45"
+note_radius = "0px"
+note_heading_weight = "700"
+note_nav_size = "12px"
+btop_proc_tree = "true"
+btop_proc_left = "true"
+btop_proc_graphs = "true"
+btop_mem_graphs = "true"
+fzf_layout = "default"
+fzf_height = "80%"
+editor_relative_numbers = "true"
+editor_cursorline = "true"
+editor_scrolloff = "3"
+editor_wrap = "false"
+ff_logo_position = "left"
+l_layout = "console"
+l_row_height = "56"
+cursor_line_height = "22"
+cursor_minimap = "true"
+cursor_activity = "top"
+cursor_tabs = "shrink"
+cursor_indent = "12"
+
+cursor_sidebar = "left"
+
+cursor_show_tabs = "multiple"
+
+cursor_breadcrumbs = "true"
+
+cursor_sticky = "true"
+
+cursor_numbers = "relative"
+
+cursor_wrap = "off"
+
+cursor_whitespace = "all"
+
+cursor_minimap_side = "right"
+
+note_heading_align = "left"
+
+note_rule_style = "solid"
+
+note_rule_width = "3px"
+
+note_tracking = "0.04em"
+
+note_heading_case = "uppercase"
+
+note_quote_width = "4px"
+
+note_quote_style = "solid"
+
+note_quote_font_style = "normal"
+
+note_callout_border = "2px"
+
+editor_numbers = "true"
+
+editor_signcolumn = "yes:2"
+
+editor_foldcolumn = "1"
+
+editor_statusline = "3"
+
+editor_colorcolumn = "120"
+
+cursor_highlight = "line"
+
+term_split_opacity = "0.85"
+
+window_mode = "bsp"
+
+border_inactive = "0x00000000"

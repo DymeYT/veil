@@ -1,0 +1,5 @@
+#!/bin/bash
+# Explicitly reset properties owned by this theme system; preserve user app filters.
+# hidpi=off: a 1pt solid line looks the same and the daemon uses about half the memory (168MB to 90MB).
+# round follows native window geometry; inactive frames and background fill are transparent.
+exec /opt/homebrew/bin/borders style=@@border_style@@ width=@@border_width@@ hidpi=off order=below background_color=0x00000000 active_color='@@border_active@@' inactive_color=@@border_inactive@@

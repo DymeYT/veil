@@ -1,0 +1,348 @@
+#!/usr/bin/env python3
+"""veil-theme: render the Veil templates in a palette and deploy them.
+
+Templates are written in the night-city palette; a theme maps each palette role to a new hex.
+Usage: veil-theme list | status | diff THEME | apply THEME | restore
+"""
+import difflib, json, os, plistlib, re, shutil, subprocess, sys, tempfile, time, tomllib
+from pathlib import Path
+
+HOME = Path.home()
+ROOT = Path(os.environ.get("VEIL_ROOT", HOME / ".config/veil"))
+TPL, THEMES, BACKUPS, GEN = ROOT / "templates", ROOT / "themes", ROOT / "backups", ROOT / "generated"
+CFG = HOME / ".config"
+BASE = "night-city"
+
+
+def load_theme(name):
+    # Resolve the on-disk spelling even on case-insensitive macOS filesystems.
+    name = next((p.stem for p in THEMES.glob("*.toml") if p.stem.lower() == name.lower()), name)
+    # Keep historical IDs working; accept the environment display name or its slug too.
+    if not (THEMES / f"{name}.toml").exists():
+        slug = lambda value: re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
+        name = next((p.stem for p in THEMES.glob("*.toml")
+                     if slug(tomllib.loads(p.read_text())["name"]) == slug(name)), name)
+    path = THEMES / f"{name}.toml"
+    if not path.exists():
+        sys.exit(f"unknown theme '{name}' (try: veil-theme list)")
+    data = tomllib.loads(path.read_text())
+    data["id"] = name
+    for role, hex_ in data["colors"].items():
+        if not re.fullmatch(r"[0-9a-fA-F]{6}", hex_):
+            sys.exit(f"{path.name}: {role} = {hex_!r} is not a 6-digit hex")
+    for key, value in {**data.get("strings", {}), **data.get("style", {})}.items():
+        if "'" in str(value):  # strings land inside single-quoted shell words
+            sys.exit(f"{path.name}: strings.{key} must not contain an apostrophe")
+    return data
+
+
+def strings_for(theme):
+    """Values for @@key@@ placeholders: the theme's [strings] and [style] over the base theme's.
+    Style values may name palette roles as %role% (e.g. "gradient(top_left=0xff%cyan%,...)")."""
+    base = load_theme(BASE)
+    out = {**base.get("strings", {}), **base.get("style", {}), **theme.get("strings", {}), **theme.get("style", {})}
+    out = {k: str(v) for k, v in out.items()}
+    colors = theme["colors"]
+    out = {k: re.sub(r"%(\w+)%", lambda m: colors[m.group(1)].lower(), v) for k, v in out.items()}
+    out["ws_toml"] = json.dumps(out["ws"].split())
+    out["theme_id"] = theme.get("id", BASE)
+    out["home"] = str(HOME)  # absolute paths for configs that do not expand ~ (Rift's exec and run_on_start)
+    out["editor_cursor_style"] = {"bar": "line", "underline": "underline"}.get(out["term_cursor"], "block")
+    # Rift window animation follows System Settings > Accessibility > Reduce Motion (read when a theme is applied)
+    rm = subprocess.run(["defaults", "read", "com.apple.universalaccess", "reduceMotion"], capture_output=True, text=True).stdout.strip()
+    out["rift_animate"] = "false" if rm == "1" else "true"
+    return out
+
+
+def fill(text, strings, tpl):
+    """Replace @@key@@ placeholders; JSON-escape inside JSON templates."""
+    esc = (lambda v: json.dumps(v)[1:-1]) if tpl.endswith((".json", ".jsonc")) else str
+    text = re.sub(r"@@(\w+)@@", lambda m: esc(strings[m.group(1)]), text)
+    return text
+
+
+def recolor(text, mapping):
+    """Swap base hexes for theme hexes in any of the forms the configs use: #rrggbb, 0xAArrggbb, bare rrggbb."""
+    if not mapping:
+        return text
+    pat = re.compile(r"(?i)(#|0x[0-9a-f]{2}|(?<![0-9a-z_]))(" + "|".join(mapping) + r")(?![0-9a-f])")
+    return pat.sub(lambda m: m.group(1) + mapping[m.group(2).lower()], text)
+
+
+def obsidian_vaults():
+    reg = HOME / "Library/Application Support/obsidian/obsidian.json"
+    try:
+        vaults = json.loads(reg.read_text()).get("vaults", {}).values()
+    except (OSError, ValueError):
+        return []
+    return [Path(v["path"]) / ".obsidian" for v in vaults if (Path(v["path"]) / ".obsidian").is_dir()]
+
+
+def targets():
+    """(template, live path, kind, reload) — kind picks validation/merging; reload is a command or a note."""
+    sb = CFG / "sketchybar"
+    t = [
+        ("config.ghostty", HOME / "Library/Application Support/com.mitchellh.ghostty/config.ghostty", "text",
+         ["osascript", "-e", 'if application "Ghostty" is running then tell application "Ghostty" to perform action "reload_config" on focused terminal of selected tab of front window']),
+        ("sketchybar/sketchybarrc", sb / "sketchybarrc", "sh", ["sketchybar", "--reload"]),
+        ("sketchybar/plugins/veil.sh", sb / "plugins/veil.sh", "sh", None),
+        ("sketchybar/plugins/subscribe-rift.sh", sb / "plugins/subscribe-rift.sh", "sh", None),
+        ("sketchybar/plugins/workspace-event.sh", sb / "plugins/workspace-event.sh", "sh", None),
+        ("sketchybar/plugins/mode-event.sh", sb / "plugins/mode-event.sh", "sh", None),
+        ("bordersrc", CFG / "borders/bordersrc", "sh",
+         # message the running daemon; never let a reload become a second, short-lived daemon
+         ["bash", "-c", f"pgrep -xq borders && exec bash {CFG / 'borders/bordersrc'} || exec /opt/homebrew/bin/brew services restart borders"]),
+        ("rift.toml", CFG / "rift/config.toml", "toml", None),  # rift hot-reloads
+        ("starship.toml", CFG / "starship.toml", "toml", None),
+        ("btop.theme", CFG / "btop/themes/veil.theme", "text", None),
+        ("btop.conf", CFG / "btop/btop.conf", "keys", None),  # btop rewrites the rest of this file on every exit
+        ("cava.config", CFG / "cava/config", "text", None),
+        ("fastfetch.jsonc", CFG / "fastfetch/config.jsonc", "text", None),
+        ("nvim.lua", CFG / "nvim/lua/plugins/veil.lua", "text", None),
+        ("shell.zsh", GEN / "shell.zsh", "sh", None),
+        ("launcher.json", GEN / "launcher.json", "text", None),  # Veil Search rereads it each time it opens
+    ]
+    cursor = HOME / "Library/Application Support/Cursor/User/settings.json"
+    if cursor.parent.is_dir():
+        t.append(("cursor.json", cursor, "cursor", None))  # Cursor watches settings.json
+    for vault in obsidian_vaults():
+        t.append(("obsidian.css", vault / "snippets/veil.css", "text", None))
+        t.append((None, vault / "appearance.json", "obsidian", None))
+    return t
+
+
+def render(tpl, live, kind, theme, mapping):
+    """Return the new file text, or raise ValueError if it doesn't validate."""
+    current = live.read_text() if live.exists() else None
+    if kind == "obsidian":
+        conf = json.loads(current or "{}")
+        snippets = conf.setdefault("enabledCssSnippets", [])
+        snippets[:] = [s for s in snippets if s != "night-city"]  # pre-rename snippet name
+        if "veil" not in snippets:
+            snippets.append("veil")
+        return json.dumps(conf, indent=2) + "\n"
+    text = fill(recolor((TPL / tpl).read_text(), mapping), strings_for(theme), tpl)
+    if kind == "keys":
+        return set_keys(current or "", text)
+    if kind == "cursor":
+        conf = json.loads(current or "{}")  # raises on JSONC comments: we refuse rather than clobber
+        incoming = json.loads(text)
+        conf.setdefault("workbench.colorCustomizations", {}).update(incoming.pop("workbench.colorCustomizations"))
+        conf.update(incoming)
+        return json.dumps(conf, indent=4) + "\n"
+    if kind == "toml":
+        tomllib.loads(text)
+    if kind == "sh":
+        r = subprocess.run(["bash", "-n"], input=text, capture_output=True, text=True)
+        if r.returncode:
+            raise ValueError(r.stderr.strip())
+    return text
+
+
+def set_keys(current, text):
+    """Set each `key = value` line of text in an ini-style file, keeping every other line the app wrote."""
+    out = current
+    for line in text.splitlines():
+        key = line.split("=", 1)[0].strip()
+        if not key:
+            continue
+        pat = re.compile(rf"(?m)^{re.escape(key)}\s*=.*$")
+        if pat.search(out):
+            out = pat.sub(lambda _: line, out, count=1)
+        else:
+            out = (out.rstrip("\n") + "\n" if out.strip() else "") + line + "\n"
+    return out
+
+
+def plan(name):
+    theme, base = load_theme(name), load_theme(BASE)
+    mapping = {base["colors"][k].lower(): v.lower() for k, v in theme["colors"].items() if base["colors"][k].lower() != v.lower()}
+    changes = []
+    for tpl, live, kind, reload in targets():
+        try:
+            new = render(tpl, live, kind, theme, mapping)
+        except (ValueError, OSError) as e:
+            sys.exit(f"refusing to apply: {live} would be invalid ({e}); nothing was changed")
+        old = live.read_text() if live.exists() else None
+        if new != old:
+            mode = live.stat().st_mode if live.exists() else (TPL / tpl).stat().st_mode if tpl else 0o644
+            changes.append((live, old, new, mode, reload))
+    return theme, changes
+
+
+def write_atomic(path, text, mode):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
+    with os.fdopen(fd, "w") as f:
+        f.write(text)
+    os.chmod(tmp, mode & 0o777)
+    os.replace(tmp, path)
+
+
+def restore(backup):
+    manifest = json.loads((backup / "manifest.json").read_text())
+    for entry in manifest["files"]:
+        path = Path(entry["path"])
+        if entry["backup"]:
+            shutil.copy2(backup / entry["backup"], path)
+        else:
+            path.unlink(missing_ok=True)
+    (ROOT / "current").write_text(manifest["previous"])
+    return manifest["previous"]
+
+
+def set_wallpaper(theme):
+    """The theme's real art becomes the desktop picture on every screen."""
+    art = ROOT / "art" / f"{theme['id']}.jpg"
+    if not art.exists():
+        return
+    # Veil Search sets it per screen through NSWorkspace; System Events covers the case where it isn't running
+    js = ("ObjC.import('Foundation'); $.NSDistributedNotificationCenter.defaultCenter"
+          f".postNotificationNameObjectUserInfoDeliverImmediately('app.veil.search.desktop', {json.dumps(str(art))}, $(), true)")
+    subprocess.run(["osascript", "-l", "JavaScript", "-e", js], capture_output=True)
+    if subprocess.run(["pgrep", "-xq", "veil-search"]).returncode != 0:
+        subprocess.run(["osascript", "-e", f'tell application "System Events" to tell every desktop to set picture to {json.dumps(str(art))}'],
+                       capture_output=True)
+
+
+def system_accents(theme):
+    """macOS accent (theme.macos_accent: -1 graphite, 0 red, 1 orange, 2 yellow, 3 green, 4 blue, 5 purple, 6 pink),
+    text highlight and alert sound."""
+    rgb = [int(theme["colors"]["cyan"][i:i + 2], 16) / 255 for i in (0, 2, 4)]
+    accent = int(theme.get("macos_accent", 4))
+    subprocess.run(["defaults", "write", "-g", "AppleAccentColor", "-int", str(accent)], capture_output=True)
+    # text selection follows the theme: its primary color lifted toward white (macOS wants "r g b Name")
+    hl = " ".join(f"{c * 0.6 + 0.4:.6f}" for c in rgb)
+    subprocess.run(["defaults", "write", "-g", "AppleHighlightColor", f"{hl} Other"], capture_output=True)
+    # alert sound, played once so the switch is audible
+    sound = f"/System/Library/Sounds/{strings_for(theme).get('sound', 'Funk')}.aiff"
+    if os.path.exists(sound):
+        subprocess.run(["defaults", "write", "-g", "com.apple.sound.beep.sound", sound], capture_output=True)
+        subprocess.Popen(["afplay", sound], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    js = """ObjC.import('Foundation');
+// running apps only redraw their accent on these (System Settings sends the same set)
+['AppleColorPreferencesChangedNotification', 'AppleAquaColorVariantChanged', 'AppleInterfaceThemeChangedNotification', 'NSSystemColorsDidChangeNotification']
+  .forEach(n => $.NSDistributedNotificationCenter.defaultCenter.postNotificationNameObjectUserInfoDeliverImmediately(n, $(), $(), true));"""
+    subprocess.run(["osascript", "-l", "JavaScript", "-e", js], capture_output=True)
+    set_wallpaper(theme)
+    # Veil Search shows the theme's boot splash (it rereads generated/launcher.json)
+    subprocess.run(["osascript", "-l", "JavaScript", "-e", "ObjC.import('Foundation'); $.NSDistributedNotificationCenter.defaultCenter"
+                    ".postNotificationNameObjectUserInfoDeliverImmediately('app.veil.search.splash', $(), $(), true)"], capture_output=True)
+
+
+
+def reload_configs(commands, theme_id):
+    """Record command outcomes separately from file deployment; never imply live verification."""
+    outcomes = []
+    for live, command in commands:
+        if not isinstance(command, list):
+            continue
+        try:
+            result = subprocess.run(command, capture_output=True, text=True, timeout=8)
+            outcome = {"target": str(live), "command": command, "returncode": result.returncode,
+                       "stdout": (result.stdout or "")[-2000:], "stderr": (result.stderr or "")[-2000:]}
+        except (OSError, subprocess.TimeoutExpired) as error:
+            outcome = {"target": str(live), "command": command, "returncode": None, "error": str(error)}
+        outcomes.append(outcome)
+        if outcome.get("returncode") != 0:
+            print(f"  reload not confirmed: {live} (see generated/reload-status.json)")
+    write_atomic(GEN / "reload-status.json", json.dumps({"theme": theme_id, "time": time.time(),
+                 "scope": "command outcomes only; no visual or service-state certification", "outcomes": outcomes}, indent=2) + "\n", 0o600)
+    return outcomes
+
+
+def apply(name):
+    theme, changes = plan(name)
+    name = theme.get("id", name)
+    if not changes:
+        print(f"{theme['name']} is already applied")
+        (ROOT / "current").write_text(name)
+        if not os.environ.get("VEIL_NO_RELOAD"):
+            reload_configs([(live, reload) for _, live, _, reload in targets()], name)
+            system_accents(theme)
+        return
+    cursor_baseline = BACKUPS / "original" / "cursor.settings.json"
+    original_cursor = next((old for live, old, *_ in changes if live.name == "settings.json" and "Cursor/User" in str(live)), None)
+    if original_cursor is not None:
+        if not cursor_baseline.exists():
+            write_atomic(cursor_baseline, original_cursor, 0o600)
+        # When extending an existing installation, capture newly owned settings before
+        # overwriting them. The older baseline predates these controls.
+        ownership = BACKUPS / "original" / "cursor-layout-v2.json"
+        if not ownership.exists():
+            new_keys = ("workbench.sideBar.location", "workbench.editor.showTabs", "breadcrumbs.enabled",
+                        "editor.stickyScroll.enabled", "editor.lineNumbers", "editor.wordWrap",
+                        "editor.renderWhitespace", "editor.minimap.side")
+            baseline, current = json.loads(cursor_baseline.read_text()), json.loads(original_cursor)
+            for key in new_keys:
+                if key in current:
+                    baseline[key] = current[key]
+            write_atomic(cursor_baseline, json.dumps(baseline, indent=2) + "\n", 0o600)
+            write_atomic(ownership, json.dumps(list(new_keys)) + "\n", 0o600)
+    backup = BACKUPS / f"{time.strftime('%Y%m%d-%H%M%S')}-{time.time_ns() % 10**9:09d}"
+    backup.mkdir(parents=True)
+    files = []
+    for i, (live, old, *_ ) in enumerate(changes):
+        if old is not None:
+            shutil.copy2(live, backup / f"{i}-{live.name}")
+        files.append({"path": str(live), "backup": f"{i}-{live.name}" if old is not None else None})
+    previous = (ROOT / "current").read_text().strip() if (ROOT / "current").exists() else BASE
+    (backup / "manifest.json").write_text(json.dumps({"previous": previous, "files": files}, indent=2))
+    try:
+        for live, _, new, mode, _ in changes:
+            write_atomic(live, new, mode)
+    except OSError as e:
+        restore(backup)
+        shutil.rmtree(backup)
+        sys.exit(f"write failed ({e}); rolled back")
+    (ROOT / "current").write_text(name)
+    print(f"applied {theme['name']}: {len(changes)} file(s) changed, backup {backup.name}")
+    notes = set()
+    for live, *_, reload in changes:
+        if isinstance(reload, str):
+            notes.add(reload)
+    if not os.environ.get("VEIL_NO_RELOAD"):
+        reload_configs([(live, reload) for live, *_, reload in changes], name)
+        system_accents(theme)
+    for note in sorted(notes) + ["New shells pick up fzf colors; btop, cava and Neovim on next launch"]:
+        print("  manual:", note)
+
+
+def main(argv):
+    cmd, arg = (argv + [None, None])[:2]
+    if cmd == "list":
+        cur = (ROOT / "current").read_text().strip() if (ROOT / "current").exists() else BASE
+        for p in sorted(THEMES.glob("*.toml")):
+            print(("* " if p.stem == cur else "  ") + load_theme(p.stem)["name"])
+    elif cmd == "status":
+        cur = (ROOT / "current").read_text().strip() if (ROOT / "current").exists() else BASE
+        _, changes = plan(cur)
+        print(f"current: {load_theme(cur)['name']}")
+        for live, *_ in changes:
+            print(f"  drifted from template: {live}")
+        if not changes:
+            print("  all files match the templates")
+    elif cmd == "diff" and arg:
+        _, changes = plan(arg)
+        for live, old, new, *_ in changes:
+            sys.stdout.writelines(difflib.unified_diff((old or "").splitlines(True), new.splitlines(True), f"{live} (now)", f"{live} ({arg})"))
+        print(f"{len(changes)} file(s) would change")
+    elif cmd == "apply" and arg:
+        apply(arg)
+    elif cmd == "restore":
+        backups = sorted(p for p in BACKUPS.iterdir() if (p / "manifest.json").exists()) if BACKUPS.exists() else []
+        if not backups:
+            sys.exit("no backups to restore")
+        prev = restore(backups[-1])
+        shutil.rmtree(backups[-1])
+        print(f"restored {backups[-1].name} (theme: {prev}); reload apps as after apply")
+        if not os.environ.get("VEIL_NO_RELOAD"):
+            system_accents(load_theme(prev))
+            subprocess.run(["sketchybar", "--reload"], capture_output=True)
+            subprocess.run(["bash", "-c", f"pgrep -xq borders && exec bash {CFG / 'borders/bordersrc'} || exec /opt/homebrew/bin/brew services restart borders"], capture_output=True)
+    else:
+        print(__doc__.strip())
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])
