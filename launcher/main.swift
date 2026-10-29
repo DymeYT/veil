@@ -472,8 +472,11 @@ final class Model: NSObject, ObservableObject {
             }.sorted { $0.score > $1.score }.prefix(limit).map { $0 }
         }
         out += ranked(apps, limit: 6)
+        // a pane whose name matches the query once punctuation is ignored ("wifi" → Wi-Fi) beats same-named files
+        let alnum = { (x: String) in x.lowercased().filter { $0.isLetter || $0.isNumber } }
         out += ranked(settingsPanes.map { Item(kind: .setting, title: $0.0, subtitle: "System Settings", symbol: $0.2,
-                                               action: .open(safeURL("x-apple.systempreferences:\($0.1)"))) }, limit: 4)
+                                               action: .open(safeURL("x-apple.systempreferences:\($0.1)")),
+                                               score: alnum($0.0) == alnum(q) ? 250 : 0) }, limit: 4)
         let commands = ncCache
         out += ranked(commands, limit: commands.count)  // include every installed environment
         out += ranked(systemActionItems() + moreSystemItems(q).filter { $0.score < 2000 }, limit: 3)
@@ -581,9 +584,9 @@ final class Model: NSObject, ObservableObject {
             let isDir = (r.value(forAttribute: kMDItemContentType as String) as? String) == "public.folder"
             let it = Item(kind: .file, title: name, subtitle: ((path as NSString).deletingLastPathComponent as NSString).abbreviatingWithTildeInPath,
                           // a file whose name only starts with the query ranks below apps, settings and answers;
-                          // only an exact name (with or without extension) can be the top hit
+                          // an exact name leads the files, but the top hit stays with apps, settings and answers
                           symbol: isDir ? "folder" : "doc", path: path, action: .open(URL(fileURLWithPath: path)),
-                          score: (lname == q || (lname as NSString).deletingPathExtension == q) ? 870 : group == 0 ? 700 : group == 1 ? 600 : 100)
+                          score: (lname == q || (lname as NSString).deletingPathExtension == q) ? 790 : group == 0 ? 700 : group == 1 ? 600 : 100)
             found.append((it, group, used))
         }
         mq.enableUpdates()
@@ -615,6 +618,17 @@ final class Model: NSObject, ObservableObject {
 
     var userMoved = false  // keep the selection on a row only after the user picked it
     func move(_ d: Int) { if !items.isEmpty { selected = (selected + d + items.count) % items.count; userMoved = true } }
+
+    /// Columns in the result grid (Foundry's console and Cinder's ember board are two-up); 1 for lists.
+    var gridColumns: Int { ["console", "embers"].contains(palette.s("layout", "")) ? 2 : 1 }
+
+    /// Grid moves: up/down by a row, left/right by a column, stopping at the edges instead of wrapping.
+    func moveGrid(dx: Int, dy: Int) {
+        guard !items.isEmpty else { return }
+        let c = gridColumns, col = selected % c
+        let next = dx != 0 ? (col + dx >= 0 && col + dx < c ? selected + dx : selected) : selected + dy * c
+        selected = max(0, min(items.count - 1, next)); userMoved = true
+    }
 
     func activate(_ i: Int? = nil, reveal: Bool = false, paste: Bool = false) {
         guard items.indices.contains(i ?? selected) else { return }
@@ -797,7 +811,7 @@ struct SymbolTile: View {
         let fill = lit ? p["cyan"] : p["surface"], ink = lit ? p["bg_dark"] : p["cyan"], edge = lit ? Color.clear : p["border"]
         switch p.s("tile", "rounded") {
         case "circle":
-            glyph.foregroundStyle(ink).frame(width: size, height: size).background(Circle().fill(fill)).overlay(Circle().stroke(edge, lineWidth: 1))
+            glyph.foregroundStyle(ink).frame(width: size, height: size).background(Circle().fill(fill))
         case "diamond":
             glyph.font(.system(size: size * 0.36, weight: .semibold)).foregroundStyle(ink).frame(width: size, height: size)
                 .background(Rectangle().fill(fill).frame(width: size * 0.7, height: size * 0.7).rotationEffect(.degrees(45)))
@@ -806,7 +820,6 @@ struct SymbolTile: View {
             glyph.foregroundStyle(ink).frame(width: size, height: size).background(Rectangle().fill(fill))
                 .overlay(alignment: .topLeading) { Rectangle().fill(.white.opacity(0.14)).frame(height: 1.5) }
                 .overlay(alignment: .bottomTrailing) { Rectangle().fill(.black.opacity(0.45)).frame(width: size, height: 2) }
-                .overlay(Rectangle().stroke(edge, lineWidth: 1))
         case "card":
             glyph.font(.system(size: size * 0.38, weight: .semibold)).foregroundStyle(lit ? p["bg_dark"] : p["yellow"])
                 .frame(width: size * 0.76, height: size)
@@ -817,7 +830,6 @@ struct SymbolTile: View {
         default:
             glyph.foregroundStyle(ink).frame(width: size, height: size)
                 .background(RoundedRectangle(cornerRadius: size * 0.24, style: .continuous).fill(fill))
-                .overlay(RoundedRectangle(cornerRadius: size * 0.24, style: .continuous).stroke(edge, lineWidth: 1))
         }
     }
 }
@@ -956,8 +968,7 @@ struct Detail: View {
                 .padding(.top, 4)
             Text(p.cased(kindLabel)).font(mono(10, "Bold")).tracking(1.4).foregroundStyle(p["cyan"])
                 .padding(.horizontal, 6).padding(.vertical, 2)
-                .background(RoundedRectangle(cornerRadius: p.num("chip_radius", 4)).fill(p["cyan"].opacity(0.10)))
-                .overlay(RoundedRectangle(cornerRadius: p.num("chip_radius", 4)).stroke(p["cyan"].opacity(0.35), lineWidth: 1))
+                .background(RoundedRectangle(cornerRadius: p.num("chip_radius", 4)).fill(p["cyan"].opacity(0.14)))
                 .padding(.top, 8)
             Rectangle().fill(p["border"]).frame(height: 1).padding(.vertical, 14)
             content
@@ -1024,7 +1035,6 @@ struct Detail: View {
             Text(String(item.extra.dropFirst(6))).font(.system(size: 72))
         } else if item.extra.hasPrefix("color:"), let c = hexColor(String(item.extra.dropFirst(6))) {
             RoundedRectangle(cornerRadius: 14, style: .continuous).fill(c).frame(width: 120, height: 92)
-                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(p["border"], lineWidth: 1))
         } else if let t = thumb {
             Image(nsImage: t).resizable().aspectRatio(contentMode: .fit).frame(maxWidth: 220, maxHeight: 120)
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -1045,7 +1055,6 @@ struct Detail: View {
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
                 ForEach(Array(sw.enumerated()), id: \.offset) { _, c in
                     RoundedRectangle(cornerRadius: 6, style: .continuous).fill(c).frame(height: 26)
-                        .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(p["border"], lineWidth: 1))
                 }
             }
             .padding(.bottom, 14)
@@ -1454,7 +1463,8 @@ struct LauncherView: View {
                 if grid {
                     LazyVGrid(columns: [GridItem(.flexible(), spacing: 6), GridItem(.flexible(), spacing: 6)], spacing: 6) {
                         ForEach(Array(m.items.enumerated()), id: \.element.id) { i, item in
-                            result(item, index: i, p: p).background(p["surface"]).overlay(Rectangle().stroke(p["border"], lineWidth: 1))
+                            result(item, index: i, p: p)
+                                .background(RoundedRectangle(cornerRadius: max(p.num("chip_radius", 4), 3), style: .continuous).fill(p["surface"].opacity(0.7)))
                         }
                     }.padding(6)
                 } else {
@@ -1472,6 +1482,8 @@ struct LauncherView: View {
                     }.padding(.horizontal, 8).padding(.bottom, 40)  // the last row can always scroll clear of the fade
                 }
             }
+            // the selection glides between rows instead of jumping
+            .animation(reduceMotion ? nil : .spring(response: 0.26, dampingFraction: 0.86), value: m.selected)
             // fade the clipped bottom edge so a cut-off section header never reads as an empty group
             .mask(VStack(spacing: 0) { Color.black; LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: 36) })
             .onChange(of: m.selected) { _, selected in
@@ -1498,6 +1510,7 @@ struct LauncherView: View {
         .overlay(alignment: .bottom) { if layout == "transit" || layout == "ink" { p["border"].frame(height: 1) } }
         .contentShape(Rectangle()).id(item.id)
         .onDrag { item.path.flatMap { NSItemProvider(contentsOf: URL(fileURLWithPath: $0)) } ?? NSItemProvider(object: item.title as NSString) }
+        .pressable()
         .onTapGesture { m.activate(index) }
         .onHover { if $0 && NSEvent.mouseLocation != m.openMouse { m.selected = index; m.userMoved = true } }
         .accessibilityElement(children: .combine)
@@ -1578,6 +1591,7 @@ struct ActionPanel: View {
                 .background(RoundedRectangle(cornerRadius: max(p.num("chip_radius", 5), 2), style: .continuous)
                     .fill(i == m.actionIndex ? p["cyan"] : .clear))
                 .contentShape(Rectangle())
+                .pressable()
                 .onTapGesture { m.runAction(i) }
                 .onHover { if $0 { m.actionIndex = i } }
             }
@@ -1635,6 +1649,8 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] e in
             guard let self, e.window === self.panel else { return e }
             let cmd = e.modifierFlags.contains(.command), ctrl = e.modifierFlags.contains(.control)
+            // a second ⌘Space closes the launcher even when the search field has the keyboard
+            if cmd, Int(e.keyCode) == kVK_Space { self.hide(); return nil }
             // ⌘K action panel takes the keyboard while open
             if self.model.actionsOpen {
                 let n = self.model.currentActions.count
@@ -1665,16 +1681,21 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
                    tv.selectedRange().location == (self.model.query as NSString).length {
                     self.model.query += rest; return nil
                 }
+                if self.model.gridColumns > 1 { self.model.moveGrid(dx: 1, dy: 0); return nil }
                 return e
+            case kVK_LeftArrow where !cmd && self.model.gridColumns > 1:
+                self.model.moveGrid(dx: -1, dy: 0); return nil
             case kVK_ANSI_L where cmd: self.showLargeType(); return nil
             case kVK_ANSI_K where cmd: self.model.actionIndex = 0; self.model.actionsOpen = !self.model.currentActions.isEmpty; return nil
             // ⌘⌫ deletes the query text like every macOS field; Move to Trash stays in the ⌘K actions
             case kVK_Delete where cmd: if !self.model.query.isEmpty { return e }; self.model.trashSelected(); return nil
             case kVK_DownArrow:
                 if self.model.historyIndex >= 0 { _ = self.model.recallHistory(-1); return nil }
+                if self.model.gridColumns > 1 { self.model.moveGrid(dx: 0, dy: 1); return nil }
                 self.model.move(1); return nil
             case kVK_UpArrow:
                 if (self.model.query.isEmpty || self.model.historyIndex >= 0), self.model.recallHistory(1) { return nil }
+                if self.model.gridColumns > 1 { self.model.moveGrid(dx: 0, dy: -1); return nil }
                 self.model.move(-1); return nil
             case kVK_Tab:
                 // Tab enters a folder while browsing; otherwise it moves the selection
@@ -2028,6 +2049,18 @@ if let i = CommandLine.arguments.firstIndex(of: "--render-splash"), CommandLine.
     }
     exit(0)
 }
+// veil-search --render-osd THEME.json OUT.png: draw the theme's volume overlay offscreen (for design review)
+if let i = CommandLine.arguments.firstIndex(of: "--render-osd"), CommandLine.arguments.count > i + 2 {
+    let a = CommandLine.arguments
+    let m = OSDModel(); m.kind = .volume; m.level = 0.55; m.title = "Volume"; m.visible = true
+    MainActor.assumeIsolated {
+        let r = ImageRenderer(content: OSDView(m: m, p: Palette.load(a[i + 1])).frame(width: 300, height: 64).background(Color(white: 0.25)))
+        r.scale = 2
+        guard let img = r.nsImage, let tiff = img.tiffRepresentation, let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) else { exit(1) }
+        try? png.write(to: URL(fileURLWithPath: a[i + 2]))
+    }
+    exit(0)
+}
 let app = NSApplication.shared
 let delegate = App()
 app.delegate = delegate
@@ -2061,3 +2094,20 @@ final class NotchBand {
 }
 
 
+
+
+/// Every clickable surface presses in briefly (spring back on release); Reduce Motion keeps it still.
+struct Pressable: ViewModifier {
+    @State private var down = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(down && !reduceMotion ? 0.975 : 1)
+            .brightness(down ? 0.06 : 0)
+            .animation(reduceMotion ? nil : .spring(response: 0.22, dampingFraction: 0.7), value: down)
+            .simultaneousGesture(DragGesture(minimumDistance: 0)
+                .onChanged { _ in if !down { down = true } }
+                .onEnded { _ in down = false })
+    }
+}
+extension View { func pressable() -> some View { modifier(Pressable()) } }

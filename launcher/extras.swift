@@ -176,7 +176,7 @@ func definitionAnswer(_ q: String) -> Item? {
     guard let def = DCSCopyTextDefinition(nil, w as CFString, CFRange(location: 0, length: (w as NSString).length))?.takeRetainedValue() as String? else { return nil }
     let clean = def.replacingOccurrences(of: "\n", with: " ").trimmingCharacters(in: .whitespaces)
     let enc = w.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? w
-    return Item(kind: .web, title: w, subtitle: String(clean.prefix(160)), symbol: "character.book.closed",
+    return Item(kind: .answer, title: w, subtitle: String(clean.prefix(160)), symbol: "character.book.closed",
                 action: .open(dictURL(w)), score: 300, extra: clean)
 }
 
