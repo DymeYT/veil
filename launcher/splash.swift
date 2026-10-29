@@ -203,7 +203,6 @@ enum SceneArt {
         case "cathedral": cathedral(&ctx, size, t, p)
         case "cavern": cavern(&ctx, size, t, p)
         case "factory": factory(&ctx, size, t, p)
-        case "cabin": cabin(&ctx, size, t, p)
         case "skyline": skyline(&ctx, size, t, p)
         case "dusk": dusk(&ctx, size, t, p)
         case "forest": forest(&ctx, size, t, p)
@@ -550,84 +549,6 @@ enum SceneArt {
                 ctx.fill(Path(CGRect(x: px + 6, y: by - 14, width: 8, height: 5)), with: .color(c.opacity(0.7)))
                 px += CGFloat(r.range(70, 150))
             }
-        }
-    }
-
-    // MARK: Inscryption: candlelit table, flickering candle, three cards
-    static func cabin(_ ctx: inout GraphicsContext, _ s: CGSize, _ t: Double, _ p: Palette) {
-        fill(&ctx, s, [.black, p["bg_dark"], p["bg"], p["surface"]], [0, 0.3, 0.62, 1])
-        // something watches from the dark
-        let blink = abs(sin(t * 2.2)) > 0.08 ? 1.0 : 0.0
-        for dx in [-46.0, 46.0] {
-            let e = CGPoint(x: s.width / 2 + CGFloat(dx), y: s.height * 0.1)
-            glow(&ctx, e, 40, p["cyan"], 0.25 * blink)
-            ctx.fill(Path(ellipseIn: CGRect(x: e.x - 9, y: e.y - 4 * blink, width: 18, height: 8 * blink)), with: .color(p["yellow"].opacity(0.85)))
-        }
-        // table: plank edge and grain
-        let table = s.height * 0.6
-        ctx.fill(Path(CGRect(x: 0, y: table, width: s.width, height: s.height - table)), with: .color(p["surface"]))
-        ctx.fill(Path(CGRect(x: 0, y: table, width: s.width, height: 3)), with: .color(p["comment"].opacity(0.4)))
-        var r = RNG(s: 41)
-        var y = table + 70
-        while y < s.height {
-            ctx.fill(Path(CGRect(x: 0, y: y, width: s.width, height: 2)), with: .color(.black.opacity(0.4)))
-            y += 86
-        }
-        for _ in 0..<80 {
-            ctx.fill(Path(CGRect(x: CGFloat(r.range(0, Double(s.width))), y: table + CGFloat(r.range(6, Double(s.height - table))), width: CGFloat(r.range(80, 420)), height: 1)),
-                     with: .color(p["comment"].opacity(r.range(0.06, 0.16))))
-        }
-        // two candles (lives), on brass dishes, wax running
-        let flick = 0.9 + 0.1 * sin(t * 38) * sin(t * 17)
-        for (i, cx) in [s.width * 0.17, s.width * 0.27].enumerated() {
-            let hgt: CGFloat = i == 0 ? 230 : 160, base = table + 34
-            let top = base - hgt
-            glow(&ctx, CGPoint(x: cx, y: top - 60), 760, p["cyan"], 0.16 * flick)
-            ctx.fill(Path(ellipseIn: CGRect(x: cx - 70, y: base - 12, width: 140, height: 30)), with: .color(p["yellow"].opacity(0.55)))
-            ctx.fill(Path(ellipseIn: CGRect(x: cx - 58, y: base - 10, width: 116, height: 20)), with: .color(p["comment"].opacity(0.7)))
-            ctx.fill(Path(roundedRect: CGRect(x: cx - 24, y: top, width: 48, height: hgt), cornerRadius: 4), with: .color(p["fg"]))
-            ctx.fill(Path(CGRect(x: cx + 8, y: top, width: 12, height: hgt)), with: .color(.black.opacity(0.10)))
-            for (dx, len) in [(-16.0, 46.0), (6.0, 80.0), (14.0, 30.0)] {
-                ctx.fill(Path(roundedRect: CGRect(x: cx + CGFloat(dx), y: top - 2, width: 9, height: CGFloat(len)), cornerRadius: 4.5), with: .color(p["white"]))
-            }
-            ctx.fill(Path(ellipseIn: CGRect(x: cx - 24, y: top - 6, width: 48, height: 12)), with: .color(p["white"]))
-            ctx.stroke(Path { $0.move(to: CGPoint(x: cx, y: top - 2)); $0.addLine(to: CGPoint(x: cx, y: top - 18)) }, with: .color(.black), lineWidth: 2)
-            let fy = top - 18, fh = (i == 0 ? 56 : 48) * flick
-            var flame = Path()
-            flame.move(to: CGPoint(x: cx, y: fy - fh))
-            flame.addQuadCurve(to: CGPoint(x: cx, y: fy + 4), control: CGPoint(x: cx + 22, y: fy - fh * 0.2))
-            flame.addQuadCurve(to: CGPoint(x: cx, y: fy - fh), control: CGPoint(x: cx - 22, y: fy - fh * 0.2))
-            glow(&ctx, CGPoint(x: cx, y: fy - fh / 2), 80, p["yellow"], 0.75)
-            ctx.fill(flame, with: .color(p["cyan"]))
-            ctx.fill(Path(ellipseIn: CGRect(x: cx - 6, y: fy - 22, width: 12, height: 20)), with: .color(p["white"]))
-        }
-        // three cards, fanned on the table
-        let sigils = ["", "", ""]
-        for (i, ang) in [-9.0, 0.0, 9.0].enumerated() {
-            let cx = s.width * 0.58 + CGFloat(i - 1) * 230, cy = table + 230 + (i == 1 ? -24 : 0)
-            var c = ctx
-            c.translateBy(x: cx, y: cy)
-            c.rotate(by: .degrees(ang))
-            let card = CGRect(x: -95, y: -140, width: 190, height: 280)
-            c.addFilter(.shadow(color: .black.opacity(0.7), radius: 20, y: 12))
-            c.fill(Path(roundedRect: card, cornerRadius: 10), with: .color(p["yellow"]))
-            var d = ctx
-            d.translateBy(x: cx, y: cy); d.rotate(by: .degrees(ang))
-            d.stroke(Path(roundedRect: card.insetBy(dx: 8, dy: 8), cornerRadius: 6), with: .color(p["bg_dark"].opacity(0.7)), lineWidth: 1.5)
-            d.fill(Path(CGRect(x: -70, y: -110, width: 140, height: 120)), with: .color(p["bg_dark"].opacity(0.88)))
-            d.draw(d.resolve(Text(sigils[i]).font(.system(size: 54)).foregroundColor(p["yellow"])), at: CGPoint(x: 0, y: -50))
-            for k in 0..<(i + 1) {
-                d.draw(d.resolve(Text("♦").font(.system(size: 18)).foregroundColor(p["magenta"])), at: CGPoint(x: 70 - CGFloat(k) * 20, y: -122))
-            }
-            d.fill(Path(CGRect(x: -70, y: 30, width: 140, height: 2)), with: .color(p["bg_dark"].opacity(0.5)))
-            d.fill(Path(CGRect(x: -70, y: 50, width: 100, height: 2)), with: .color(p["bg_dark"].opacity(0.35)))
-            d.draw(d.resolve(Text(["1", "2", "3"][i]).font(code(16, "Bold")).foregroundColor(p["bg_dark"])), at: CGPoint(x: -70, y: 112))
-        }
-        // dust in the candlelight
-        var m = RNG(s: 77)
-        for _ in 0..<70 {
-            let x = s.width * 0.22 + CGFloat(m.range(-420, 520)), yy = CGFloat(m.range(0.15, 0.58)) * s.height + CGFloat(sin(t * 3 + m.range(0, 6)) * 6)
-            ctx.fill(Path(ellipseIn: CGRect(x: x, y: yy, width: 2, height: 2)), with: .color(p["cyan"].opacity(m.range(0.1, 0.4))))
         }
     }
 

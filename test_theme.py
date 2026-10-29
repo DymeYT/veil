@@ -88,7 +88,7 @@ for pair in pairs:
 assert nct.load_theme("Eclipse")["id"] == "eclipse"
 
 # New names work in commands while historical saved IDs remain valid.
-for label, identity in {"Guidance": "elden-ring", "Cinder": "dark-souls-3", "Ashina": "sekiro", "The Cabin": "inscryption", "Foundry": "factorio"}.items():
+for label, identity in {"Guidance": "elden-ring", "Cinder": "dark-souls-3", "Ashina": "sekiro", "Foundry": "factorio"}.items():
     assert nct.load_theme(label)["id"] == identity
     assert nct.load_theme(label.lower().replace(" ", "-"))["id"] == identity
 for path in (ROOT / "themes").glob("*.toml"):

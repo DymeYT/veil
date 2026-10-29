@@ -8,7 +8,7 @@ Built on [Rift](https://github.com/acsandmann/rift) (tiling, patched for Hyprlan
 resizing), [SketchyBar](https://github.com/FelixKratz/SketchyBar), [JankyBorders](https://github.com/FelixKratz/JankyBorders)
 and **Veil Search**, a native ⌘Space launcher that replaces Spotlight.
 
-Themes: Night City, Arasaka, Pharloom, Hallownest, Foundry, The Cabin, New York, Paradis, Eclipse, Guidance, Cinder, Ashina.
+Themes: Night City, Arasaka, Pharloom, Hallownest, Foundry, New York, Paradis, Eclipse, Guidance, Cinder, Ashina.
 
 ## Install
 
@@ -56,7 +56,7 @@ each file, backs up whatever changes into `backups/`, and writes the new files a
 - Each theme is a full design language: bar information hierarchy, workspace grammar, window spacing,
   terminal frame and font, prompt layout, monitor density, launcher composition, and editor/notes layouts
   all change alongside the palette. See `themes/ECOSYSTEMS.md`; `[style]` in each TOML drives the templates.
-- Themes: Night City, Arasaka, Pharloom, Hallownest, Foundry, The Cabin, New York, Paradis (Attack on Titan), Eclipse (Berserk), Guidance, Cinder, and Ashina.
+- Themes: Night City, Arasaka, Pharloom, Hallownest, Foundry, New York, Paradis (Attack on Titan), Eclipse (Berserk), Guidance, Cinder, and Ashina.
   Applying one also sets the macOS accent color and the theme's wallpaper (`art/<theme>.jpg`).
 - After changing the tool: `python3 test_theme.py`.
 

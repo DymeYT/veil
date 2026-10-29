@@ -3,18 +3,18 @@
 Each theme is a design language, not a palette. `[style]` in a theme file drives shape, type and layout in every
 surface; `[strings]` drives text; `[colors]` drives color. Style values may name palette roles as `%role%`.
 
-| | Night City | Arasaka | Pharloom | Hallownest | Foundry | The Cabin | New York | Paradis | Eclipse | Guidance | Cinder | Ashina |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| Idea | neon city HUD | red corporate operations center | silk cathedral archive | quiet, pale kingdom | factory control room | cabin ledger | MTA wayfinding | field desk | inked black-and-bone study | guidance and field atlas | fading-fire archive | shinobi field kit |
-| Bar grammar | two islands | compact red islands | gold hairline | text with no chrome | square instrument plates | moss-black paper | full-width signage | bottom desk islands | split, sharp islands | gold-trimmed islands | bare type and diamonds | full-width tactical strip |
-| Workspace language | NET/CODE pills | OPS/EXEC/RND/INTEL/VAULT | WEB/FORGE/CHOIR | ◆ ◈ ◇ | RADAR/BUILD/COMMS | MAP/DECK/TALK | WEB/WORK/TALK | WALL/TROST/SCOUT/GATE | ● ◉ ○, active Roman name | GRACE/LIMGRAVE/LIURNIA/ALTUS/ASH | SHRINE/WALLS/CATHEDRAL/IRITHYLL/DREG | ASHINA/HIRATA/CASTLE/DEPTHS/FOUNTAIN |
-| Window system | cyan-to-magenta rounded border | close red corporate border | crimson/gold needle | pale, wide breathing gaps | dense orange square grid | parchment square frame | taxi-yellow square | cloak-green rounded frame | bone square frame | warm gold rounded frame | ash and ember square frame | slate and rust square frame |
-| Terminal | JetBrains Mono, hidden titlebar | compact corporate Mono | Monaspace Xenon | IBM Plex Mono | Monaspace Krypton | Courier Prime | Monaspace Neon | Monaspace Radon | IBM Plex Mono | Monaspace Xenon | Victor Mono | Monaspace Argon |
-| Shell prompt | two-line city HUD | short command rail | right-side branch/status | centered mark | dense single-line console | typewritten marker | route arrow with right-side status | three-part field prompt | cross-like ink mark | guidance glyph | ashen sigil | shinobi bracket |
-| Monitor / search | round braille, CPU graph | concise service summary | restrained graphs, tall cards | quiet tree, airy panes | block graphs, process tree, full instrument bar | ledger-like tree | compact, route-first bar | equipment labels | essential top bar; more data in panel | realm guidance | ember register | posture and selection index |
-| Launcher layout | split list/detail | security rail + network directory + action inspector | catalogue + selected archive | full-width airy list | two-column console grid | selected card + results ledger | destination/action route list | field-index rail + results | numbered index + ink rule | grace rail + sites + preview | ember header + two-column register | dojo list + selection gauge + preview |
-| Notes / editor | narrow neon notes, minimap | corporate sans notes, dense editor | Cormorant page, needle cursor | Garamond reading page, underline cursor | compact industrial notes, minimap | Courier Prime ledger | Helvetica wayfinding | Nunito field journal | Crimson Pro reading page | EB Garamond field notes | Crimson Pro archive | Helvetica field manual |
-| Terminal tools | fzf reverse, tall | compact fzf, tight process view | centered fzf, roomy process tree | short fzf, long process names | short fzf, dense process tree | bottom fzf, tall | tall fzf, compact list | bottom fzf, roomy | reverse fzf, compact | graceful reverse index | ashen reverse register | default tactical list |
+| | Night City | Arasaka | Pharloom | Hallownest | Foundry | New York | Paradis | Eclipse | Guidance | Cinder | Ashina |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| Idea | neon city HUD | red corporate operations center | silk cathedral archive | quiet, pale kingdom | factory control room | MTA wayfinding | field desk | inked black-and-bone study | guidance and field atlas | fading-fire archive | shinobi field kit |
+| Bar grammar | two islands | compact red islands | gold hairline | text with no chrome | square instrument plates | full-width signage | bottom desk islands | split, sharp islands | gold-trimmed islands | bare type and diamonds | full-width tactical strip |
+| Workspace language | NET/CODE pills | OPS/EXEC/RND/INTEL/VAULT | WEB/FORGE/CHOIR | ◆ ◈ ◇ | RADAR/BUILD/COMMS | WEB/WORK/TALK | WALL/TROST/SCOUT/GATE | ● ◉ ○, active Roman name | GRACE/LIMGRAVE/LIURNIA/ALTUS/ASH | SHRINE/WALLS/CATHEDRAL/IRITHYLL/DREG | ASHINA/HIRATA/CASTLE/DEPTHS/FOUNTAIN |
+| Window system | cyan-to-magenta rounded border | close red corporate border | crimson/gold needle | pale, wide breathing gaps | dense orange square grid | taxi-yellow square | cloak-green rounded frame | bone square frame | warm gold rounded frame | ash and ember square frame | slate and rust square frame |
+| Terminal | JetBrains Mono, hidden titlebar | compact corporate Mono | Monaspace Xenon | IBM Plex Mono | Monaspace Krypton | Monaspace Neon | Monaspace Radon | IBM Plex Mono | Monaspace Xenon | Victor Mono | Monaspace Argon |
+| Shell prompt | two-line city HUD | short command rail | right-side branch/status | centered mark | dense single-line console | route arrow with right-side status | three-part field prompt | cross-like ink mark | guidance glyph | ashen sigil | shinobi bracket |
+| Monitor / search | round braille, CPU graph | concise service summary | restrained graphs, tall cards | quiet tree, airy panes | block graphs, process tree, full instrument bar | compact, route-first bar | equipment labels | essential top bar; more data in panel | realm guidance | ember register | posture and selection index |
+| Launcher layout | split list/detail | security rail + network directory + action inspector | catalogue + selected archive | full-width airy list | two-column console grid | destination/action route list | field-index rail + results | numbered index + ink rule | grace rail + sites + preview | ember header + two-column register | dojo list + selection gauge + preview |
+| Notes / editor | narrow neon notes, minimap | corporate sans notes, dense editor | Cormorant page, needle cursor | Garamond reading page, underline cursor | compact industrial notes, minimap | Helvetica wayfinding | Nunito field journal | Crimson Pro reading page | EB Garamond field notes | Crimson Pro archive | Helvetica field manual |
+| Terminal tools | fzf reverse, tall | compact fzf, tight process view | centered fzf, roomy process tree | short fzf, long process names | short fzf, dense process tree | tall fzf, compact list | bottom fzf, roomy | reverse fzf, compact | graceful reverse index | ashen reverse register | default tactical list |
 
 Each column maps to actual settings in `[style]`, and those values feed the shared templates for Rift, SketchyBar, Ghostty, Starship, btop, fastfetch, fzf, Neovim, Obsidian, Cursor and Veil Search. The launcher layouts are different compositions, not just different skins. The bar changes which system readings stay visible and which move into its control panel. These apps expose their own styling APIs; macOS system panels and app content that offer no theme API keep their native layout.
 
@@ -41,7 +41,6 @@ continue to work for saved launcher actions and backups.
 | Pharloom | traditional rows/columns | single tab, breadcrumb catalogue, quiet gutters | centered serif archive, double rules |
 | Hallownest | traditional rows/columns | right navigation, single tab, wrapping, no numbers | centered open reading page, no heading rule |
 | Foundry | binary split grid | multiple tabs, sticky context, all whitespace | industrial headings, thick rules |
-| The Cabin | traditional rows/columns | single tab, wrapping, absolute lines | typewritten ledger, dashed rules/quotes |
 | New York | horizontal scrolling strip | breadcrumb routes, absolute lines | sans wayfinding, heavy heading rule |
 | Paradis | traditional rows/columns | sticky context, wrapping, absolute lines | field journal, uppercase section labels |
 | Eclipse | traditional rows/columns | single tab, no line highlight, absolute lines | ink register, double heading rule |
@@ -95,7 +94,6 @@ is how it is organised. `python3 tools/compare_themes.py` counts them as the `pa
 | Pharloom | rule, status top, keys trailing, windows first | os uptime memory; swatch diamond; type mark | thread |
 | Hallownest | space, status top, keys trailing, windows first | uptime memory battery; swatch none; type mark | quiet |
 | Foundry | text, status bottom, keys column, system first | cpu gpu memory disk battery uptime; swatch square; picture mark | production |
-| The Cabin | rule, status top, keys column, system first | host os uptime memory battery; swatch none; picture mark | ledger |
 | New York | text, status top, keys trailing, windows first | os host uptime battery; swatch circle; picture mark | route |
 | Paradis | rule, status top, keys trailing, windows first | os kernel uptime memory battery; swatch none; picture mark | field |
 | Eclipse | space, status bottom, keys trailing, windows first | kernel uptime; swatch none; type mark | ink |

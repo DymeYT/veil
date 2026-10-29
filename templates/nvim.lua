@@ -60,7 +60,7 @@ return {
       t.normal.a.bg = "#00e5ff"; t.normal.b.fg = "#00e5ff"
       opts.options = opts.options or {}; opts.options.theme = t
       local none = { left = "", right = "" }
-      local clock = function() return os.date("%H:%M") end
+      local clock = function() return (os.date("%I:%M %p"):gsub("^0", "")) end  -- 12-hour
       local bracket = function(s) return s ~= "" and "[" .. s .. "]" or s end
       local initial = function(s) return s:sub(1, 1) end
       local kanji = { NORMAL = "常", INSERT = "入", VISUAL = "視", ["V-LINE"] = "行", ["V-BLOCK"] = "矩",
@@ -79,15 +79,12 @@ return {
           lualine_a = { { "mode", fmt = bracket } }, lualine_b = { { "branch", fmt = bracket }, "diff" },
           lualine_c = { { "filename", path = 1 } }, lualine_x = { "diagnostics", "filetype" },
           lualine_y = { { "progress", fmt = bracket } }, lualine_z = { { "location", fmt = bracket } } } },
-        ledger = { icons = false, sections = {  -- The Cabin: a handwritten page count, lower case, no icons
-          lualine_a = { { "mode", fmt = string.lower } }, lualine_b = {}, lualine_c = { { "filename", fmt = string.lower } },
-          lualine_x = {}, lualine_y = {}, lualine_z = { function() return "page " .. vim.fn.line(".") .. " of " .. vim.fn.line("$") end } } },
         route = { comp = { left = "─●─", right = "─●─" }, sections = {  -- New York: the file as a line of stops
           lualine_a = { { "mode", fmt = initial } }, lualine_b = {}, lualine_c = { "branch", "filename", "diagnostics" },
           lualine_x = {}, lualine_y = { "progress" }, lualine_z = { "location" } } },
         field = { sections = {  -- Paradis: field report with 24-hour military time
           lualine_a = { { "mode", fmt = string.upper } }, lualine_b = { "filename" }, lualine_c = { "diagnostics" },
-          lualine_x = { "filetype" }, lualine_y = {}, lualine_z = { function() return os.date("%H%M") end } } },
+          lualine_x = { "filetype" }, lualine_y = {}, lualine_z = { function() return (os.date("%I:%M %p"):gsub("^0", "")) end } } },
         ink = { sections = {  -- Eclipse: mode and position only (the statusline is usually hidden)
           lualine_a = { "mode" }, lualine_b = {}, lualine_c = {}, lualine_x = {}, lualine_y = {}, lualine_z = { "location" } } },
         atlas = { comp = { left = "—", right = "—" }, sections = {  -- Guidance: a map legend, title-case mode

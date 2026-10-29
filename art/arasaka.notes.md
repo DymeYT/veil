@@ -1,37 +1,11 @@
-# arasaka wallpaper ("Arasaka"): City Center corporate interchange at night
+# Arasaka wallpaper (Cyberpunk 2077)
 
-- **File:** `~/.config/night-city/art/arasaka.jpg` (3456x2234, JPEG `-q:v 2`)
-- **Source:** Cyberpunk 2077 official screenshot (Night City Wire, Episode 3, #002, published on cyberpunk.net), as hosted on the Cyberpunk Wiki
-  - file page: https://cyberpunk.fandom.com/wiki/File:Night_City_Wire_Ep3_Official_Screenshot_002_CP2077.jpg
-  - original 3840x2160, fetched via the wiki API (`format=original`). The wiki file page credits the source as cyberpunk.net, author CD PROJEKT RED.
-- **Credit/owner:** © CD PROJEKT S.A. (Cyberpunk 2077, CD PROJEKT RED). Personal desktop use only.
-- **Real game imagery, not AI.** Official in-engine screenshot. Lanczos scale to cover (+3.4%), centred crop to 16:10. No repainting.
-- Previous wallpaper (Arasaka logo facade): `candidates/arasaka/previous-2026-10-28.jpg`.
-- Candidates in `candidates/arasaka/cinematic/`: Ep3 #002 (chosen), Ep3 #013 (Watson skyline at blue dusk; it has billboards), and the E3 2019 Night City skyline (big brand signage, rejected).
-- Rejected after viewing: the official CDPR district wallpapers have huge district titles and the CP2077 logo. The Arasaka Tower wiki images are the logo lobby, letterboxed ArtStation sheets with captions, or a soldier render. Nothing official shows Arasaka Tower at night without people or a logo. This is the closest corporate-district shot.
-
-## Why this one
-- No people in focus; the only "actors" are moving cars on the freeway. There is no logo as a subject. Building signage is tiny, and the frame is not built around any brand.
-- It is cinematic: a high aerial view down onto the City Center roundabout and freeway, with monolithic corporate towers on either side and a fog-lit canyon between the skyscrapers. Gold lane lines and cyan plaza lights give the cyberpunk palette without neon clutter.
-- Caveat: the Arasaka Tower itself is not clearly identifiable in this frame. It is the corporate district, not the tower.
-
-## Palette (12)
-| # | Hex | Role |
-|---|-----|------|
-| 1 | `#141111` | Base background (asphalt, tower shadow) |
-| 2 | `#1b1a1b` | Panel background |
-| 3 | `#242627` | Raised surface / status strip |
-| 4 | `#323839` | Borders, hover |
-| 5 | `#404848` | Separators |
-| 6 | `#466371` | Cool steel blue (fog canyon). Secondary accent |
-| 7 | `#5b7986` | Muted text |
-| 8 | `#5e5d50` | Olive-grey concrete. Inactive |
-| 9 | `#877556` | Bronze facade. Warm muted accent |
-| 10 | `#969887` | Secondary text |
-| 11 | `#cec59d` | Sodium-lamp amber. **Primary accent** |
-| 12 | `#f5f4ce` | Headlight white. Highlight, sparing |
-Neon accent sampled by eye: plaza cyan ~`#3cc8f0`. Pair it with the amber.
-
-## Visual weight and top edge
-- The upper 35% is dark tower masses at left and right with a bright foggy vertical gap at top centre. The lower 60% holds the roundabout and freeway, with bright lane lines running diagonally to the lower right. The densest light is the freeway at the bottom right.
-- **Top 70px:** average `#3e4a50` (luma ~71). By thirds: `#474038` / `#4d6672` (the bright fog gap) / `#242d35`. A semi-opaque dark bar is advisable, mainly over the centre.
+- **Image:** Corpo Plaza, City Center, at dusk, seen from the plaza level looking up. Arasaka Tower stands just right of centre: a black monolith with the lit Arasaka logo near its crown. Around it are glass corporate towers with lit windows and a skybridge. Palm silhouettes and plaza lights run across the foreground, and on the lower left there is a neon billboard ("FUTURE IS N...") with a small "WITCH..." sign. The sky is blue-grey with a warm break in the clouds. No other company's logo is visible.
+- **Source:** official CD PROJEKT RED concept art, "Cyberpunk 2077 | arasaka" by Michał Lisowski (Senior Concept Artist), on ArtStation: https://lisu.artstation.com/projects/5X4P5w . The image file is `michal-lisowski-168-codex-arasaka6k.jpg`. I fetched the CDN's 4k copy (3840x1365) from https://cdnb.artstation.com/p/assets/images/images/033/006/405/4k/michal-lisowski-168-codex-arasaka6k.jpg . ArtStation's project JSON returned 403 to scripts, so I fetched only the public CDN image. A copy is kept at `candidates/arasaka/concept/michal-lisowski-168-codex-arasaka6k_4k.jpg`.
+- **Credit:** Michał Lisowski / CD PROJEKT RED. Cyberpunk 2077 © CD PROJEKT S.A. This is a hand-painted 2020 production concept, not AI. Personal desktop use only.
+- **Crop/scale:** a 2011x1300 crop at x=780, y=0 out of the 3840x1365 frame. It drops the 65px credit bar at the bottom (the Cyberpunk logo, the artist's name and the CDPR logo) and places the tower slightly right of centre, so the frame reads as the plaza rather than a portrait of the tower. Lanczos upscale 1.72x to 3456x2234, JPEG `-q:v 2`. No repainting or generative fill. The chromatic-aberration fringes are in the original painting.
+- **Checked by eye:** whole frame, tower crown (the logo is crisp), bottom band and all four corners. No HUD, cursor, watermark or caption.
+- **Edges (mean luma, 0-255):** top 70px = 107 (dark tower on the left, open sky in the middle and on the right). Bottom 70px = 14 (palm silhouettes and dark plaza). Whole frame = 31.
+- **Caveats:** this is concept art, not an in-game capture, and it is dusk rather than full night. The palette is teal, blue and black with small neon accents. There is no strong red, though the dark tones suit the theme.
+- **Other candidates kept:** `candidates/arasaka/concept/` holds Krzysztof Kornatka's official in-engine Corpo Plaza night shots `4k_krzysztof-kornatka-002/003.jpg` (https://www.artstation.com/artwork/qJeykz). Shot 003 shows the plaza ring and holo koi in front of Arasaka Tower, but the tower's logo is out of frame. Shot 002 is dominated by Militech.
+- **Previous:** `candidates/arasaka/militech-2026-10-29.*` (StaleZero Media bird's-eye capture of Petrochem and Militech, without Arasaka Tower).

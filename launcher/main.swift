@@ -1326,7 +1326,7 @@ struct LauncherView: View {
         .scaleEffect(m.shown || reduceMotion ? 1 : 0.97, anchor: p.s("place", "top") == "bottom" ? .bottom : .top)
         .opacity(m.shown ? 1 : 0)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: m.shown)
-        .padding(40)
+        .padding(.horizontal, 40).padding(.top, 40).padding(.bottom, p.s("place", "top") == "bottom" ? 84 : 40)
         .frame(maxHeight: .infinity, alignment: p.s("place", "top") == "bottom" ? .bottom : .top)
         .onAppear { if !m.renderingFixture { focused = true } }
     }
@@ -1360,11 +1360,6 @@ struct LauncherView: View {
                 resultList(p)
                 preview(p, compact: true)
             }
-        case "ledger":
-            HStack(spacing: 0) {
-                preview(p, card: true)
-                VStack(spacing: 0) { sectionTitle("RESULTS", p); resultList(p) }
-            }
         case "airy":
             VStack(spacing: 0) { resultList(p).padding(.horizontal, 24); preview(p, compact: true) }
         case "archive":
@@ -1379,7 +1374,7 @@ struct LauncherView: View {
                     Rectangle().fill(p["cyan"]).frame(width: 28, height: 2)
                     Text("\(m.items.count)\nRESULTS").font(code(10, "Bold")).foregroundStyle(p["dim"])
                     Spacer()
-                    Text("⌘ SPACE").font(code(10)).foregroundStyle(p["comment"])
+                    Text("\(Image(systemName: "command")) SPACE").font(code(10)).foregroundStyle(p["comment"])
                 }.padding(18).frame(width: 124).background(p["bg_dark"].opacity(0.5))
                 VStack(spacing: 0) { resultList(p); preview(p, compact: true) }
             }
@@ -1787,6 +1782,9 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         band.reload(Palette.load())
         ClipHistory.shared.start()
+        OSD.shared.palette = { [weak self] in self?.model.palette ?? Palette.load() }
+        MediaKeys.shared.start()
+        StateWatch.shared.start()
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
                                                          object: nil, queue: .main) { [weak self] _ in self?.syncWindowMotion() }
         syncWindowMotion()
@@ -2061,3 +2059,5 @@ final class NotchBand {
         window = w
     }
 }
+
+

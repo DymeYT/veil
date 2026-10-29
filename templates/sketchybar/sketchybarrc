@@ -33,7 +33,6 @@ case "$THEME" in
   pharloom) PANEL='DESK'; WINDOW_GROUP='ARRANGEMENT'; SYSTEM_GROUP='UTILITIES'; CPU_POS=popup.city; NET_POS=popup.city; SHOW_APP=off; SHOW_GRAPH=off ;;
   hallownest) PANEL='DESK'; WINDOW_GROUP='WINDOWS'; SYSTEM_GROUP='UTILITIES'; CPU_POS=popup.city; NET_POS=popup.city; VOL_POS=popup.city; SHOW_APP=off; SHOW_GRAPH=off ;;
   factorio) PANEL='CONTROL ROOM'; WINDOW_GROUP='WINDOW LAYOUT'; SYSTEM_GROUP='OPERATIONS'; QUICK=tools; KEYS_LABEL='KEYBINDS' ;;
-  inscryption) PANEL='desk notes'; WINDOW_GROUP='arrange'; SYSTEM_GROUP='tools'; THEME_GROUP='appearance'; CPU_POS=popup.city; NET_POS=popup.city; SHOW_APP=off; SHOW_GRAPH=off; KEYS_LABEL='keys' ;;
   nyc) PANEL='Service information'; WINDOW_GROUP='Window service'; SYSTEM_GROUP='Utilities'; THEME_GROUP='Appearance'; CPU_POS=popup.city; SHOW_GRAPH=off; KEYS_LABEL='Help' ;;
   paradis) PANEL='FIELD DESK'; WINDOW_GROUP='WORKSPACE'; SYSTEM_GROUP='EQUIPMENT'; CPU_POS=popup.city; SHOW_GRAPH=off; QUICK=terminal ;;
   eclipse) PANEL='Desk'; WINDOW_GROUP='Windows'; SYSTEM_GROUP='Utilities'; THEME_GROUP='Appearance'; CPU_POS=popup.city; NET_POS=popup.city; VOL_POS=popup.city; SHOW_APP=off; SHOW_GRAPH=off ;;
@@ -63,13 +62,13 @@ case "$CHIP" in
   outline) chip="icon.color=0xfffcee09 label.color=0xfffcee09 background.drawing=on background.color=0x00000000 background.border_color=0xfffcee09 background.border_width=1" ;;
   text) chip="icon.color=0xfffcee09 label.color=0xfffcee09 background.drawing=off" ;;
 esac
-sketchybar --add item city left --set city icon='@@chip_icon@@' label='@@chip_label@@' icon.font="$F_CHIP" label.font="$F_CHIP" $chip script="$P" $POPUP --subscribe city mouse.clicked mouse.exited.global
+sketchybar --add item city left --set city icon='@@chip_icon@@' label='@@chip_label@@ ⌄' icon.font="$F_CHIP" label.font="$F_CHIP" $chip script="$P" $POPUP --subscribe city mouse.clicked mouse.exited.global
 WSPOS=left; [ "$COMPOSE" = center ] && WSPOS=center
 for i in 0 1 2 3 4; do
   sketchybar --add item ws.$i $WSPOS --set ws.$i icon.font="$F_CHIP" icon.color=0xff76849c label.color=0xff76849c click_script="$B/rift-cli execute workspace switch $i"
 done
 case "$WS" in
-  diamond) sketchybar --set '/ws\..*/' icon.font="Helvetica Neue:Regular:15.0" label.drawing=off icon.padding_left=5 icon.padding_right=5 ;;
+  diamond) sketchybar --set '/ws\..*/' icon.font="Helvetica Neue:Regular:15.0" label.font="$F_SMALL" label.drawing=on icon.padding_left=5 icon.padding_right=1 label.padding_left=0 label.padding_right=6 ;;
   dot) sketchybar --set '/ws\..*/' icon.font="$F_LABEL" icon.padding_left=5 icon.padding_right=3 label.padding_left=2 ;;
   bullet) sketchybar --set '/ws\..*/' icon.width=20 icon.align=center icon.padding_left=6 icon.padding_right=0 icon.background.height=20 icon.background.corner_radius=10 icon.background.drawing=on ;;
   bracket) sketchybar --set '/ws\..*/' icon.drawing=off label.padding_left=6 label.padding_right=6 ;;
@@ -203,9 +202,6 @@ case "$THEME" in
   factorio)
     sketchybar --set city popup.height=28 popup.background.border_width=2
     sketchybar --set '/menu\..*/' background.corner_radius=1
-    ;;
-  inscryption)
-    sketchybar --set city popup.height=29 popup.background.border_width=2
     ;;
   hallownest|eclipse)
     sketchybar --set city popup.height=30 popup.background.shadow.drawing=off

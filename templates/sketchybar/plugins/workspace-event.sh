@@ -41,7 +41,7 @@ while IFS=$'\t' read -r i active count; do
         esac
       fi ;;
     underline)  # roman numeral + name, a thread under the active one
-      num="${roman[$i]}"; [ "$THEME" = pharloom ] && num=''   # Pharloom: names only, a silk thread under the active one
+      num="${roman[$i]}"; case "$THEME" in pharloom|dark-souls-3) num='' ;; esac   # names only, a thread under the active one
       base=(icon="$num" label="$n" background.height=2 background.y_offset=-11 background.corner_radius=1 background.color=0xff00e5ff)
       case $state in
         active) args+=(--set "$s" "${base[@]}" background.drawing=on icon.color=0xfffcee09 label.color=0xffffffff) ;;
@@ -55,11 +55,11 @@ while IFS=$'\t' read -r i active count; do
         busy) args+=(--set "$s" "${base[@]}" background.drawing=off label.color=0xffd9f4ff) ;;
         empty) args+=(--set "$s" "${base[@]}" background.drawing=off label.color=0xff76849c) ;;
       esac ;;
-    diamond)  # glyph only
+    diamond)  # glyph with a small numeral, so ⌥N is findable without counting
       case $state in
-        active) args+=(--set "$s" icon=◆ icon.color=0xff00e5ff background.drawing=off) ;;
-        busy) args+=(--set "$s" icon=◈ icon.color=0xffd9f4ff background.drawing=off) ;;
-        empty) args+=(--set "$s" icon=◇ icon.color=0xff76849c background.drawing=off) ;;
+        active) args+=(--set "$s" icon=◆ icon.color=0xff00e5ff label="$((i+1))" label.color=0xffd9f4ff background.drawing=off) ;;
+        busy) args+=(--set "$s" icon=◈ icon.color=0xffd9f4ff label="$((i+1))" label.color=0xff8794ad background.drawing=off) ;;
+        empty) args+=(--set "$s" icon=◇ icon.color=0xff76849c label="$((i+1))" label.color=0xff76849c background.drawing=off) ;;
       esac ;;
     bracket)  # typewriter: plain type, the active one struck in ink on a plate
       w=(label.width=$(( (${#n} + 2) * 8 )) label.align=center background.corner_radius=0 background.border_width=0)
