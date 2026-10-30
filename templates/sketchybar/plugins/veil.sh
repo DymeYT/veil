@@ -75,9 +75,10 @@ case "$NAME" in
    vol=$(osascript -e 'if output muted of (get volume settings) then return "MUTE"' -e 'return (output volume of (get volume settings) as text) & "%"' 2>/dev/null)
    if route -n get default >/dev/null 2>&1; then net=ONLINE; else net=OFFLINE; fi
    t=''; [[ "${temp:-0}" -gt 0 ]] && t="  ·  TEMP ${temp}°"
-   status="CPU ${cpu:-?}%  ·  MEM ${mem:-?}G$t"
-   status2="VOL ${vol:-?}  ·  $net  ·  QUIET $quiet$extra"
-   sketchybar --set menu.status label="$(echo "$status" | cased)" --set menu.status2 label="$(echo "$status2" | cased)" --set city popup.drawing=toggle
+   # one line: the readings always, states only when they are the exception
+   state=''; [ "$net" = OFFLINE ] && state="  ·  OFFLINE"; [ "$quiet" = ON ] && state="$state  ·  QUIET"
+   status="CPU ${cpu:-?}%  ·  MEM ${mem:-?}G$t  ·  VOL ${vol:-?}$state$extra"
+   sketchybar --set menu.status label="$(echo "$status" | cased)" --set city popup.drawing=toggle
   else
    sketchybar --set city popup.drawing=off
   fi ;;

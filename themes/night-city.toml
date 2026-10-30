@@ -44,6 +44,7 @@ logo = """  ╱╱  NIGHT CITY
 l_symbol_size = "30"   # search-field mark height in points
 l_corner = "chamfer"   # launcher outline: round | chamfer (cut corners)
 l_button = "outline"    # primary action: fill | outline (a lit slab outshouted the results)
+editor_pill = "fill"     # nvim mode pill: fill | tint
 l_scrim = "false"   # dim the screen behind the launcher
 panel_headers = "text"  # control panel structure (sketchybarrc): text | rule | space
 panel_status = "top"

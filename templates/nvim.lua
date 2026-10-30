@@ -58,6 +58,8 @@ return {
     opts = function(_, opts)
       local t = vim.deepcopy(require("lualine.themes.tokyonight"))
       t.normal.a.bg = "#00e5ff"; t.normal.b.fg = "#00e5ff"
+      -- style editor_pill: fill (accent slab) | tint (accent text on a dark accent wash, for restrained themes)
+      if "@@editor_pill@@" == "tint" then t.normal.a = { bg = "#182e3d", fg = "#00e5ff", gui = "bold" }; t.normal.z = t.normal.a end
       opts.options = opts.options or {}; opts.options.theme = t
       local none = { left = "", right = "" }
       local clock = function() return (os.date("%I:%M %p"):gsub("^0", "")) end  -- 12-hour

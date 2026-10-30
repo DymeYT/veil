@@ -153,9 +153,9 @@ P_FIRST='@@panel_first@@'      # windows | system: which group leads
 header() {
   case "$P_HEADERS" in
     space) sketchybar --add item "menu.h.$1" popup.city --set "menu.h.$1" icon.drawing=off label.drawing=off ;;
-    rule) sketchybar --add item "menu.h.$1" popup.city --set "menu.h.$1" icon="$2" icon.color=0xff76849c icon.font="$F_SMALL" \
+    rule) sketchybar --add item "menu.h.$1" popup.city --set "menu.h.$1" icon="$2" icon.color=0xff8794ad icon.font="$F_SMALL" \
             label='────────────' label.color=0xff26324a ;;
-    *) sketchybar --add item "menu.h.$1" popup.city --set "menu.h.$1" icon="$2" icon.color=0xff76849c icon.font="$F_SMALL" label.drawing=off ;;
+    *) sketchybar --add item "menu.h.$1" popup.city --set "menu.h.$1" icon="$2" icon.color=0xff8794ad icon.font="$F_SMALL" label.drawing=off ;;
   esac
 }
 row() {  # ID LABEL COMMAND [real shortcut, or a mark] [color]
@@ -172,9 +172,7 @@ row() {  # ID LABEL COMMAND [real shortcut, or a mark] [color]
   fi
 }
 status_line() {
-  # two short rows (readings, then state) instead of one run-on line that also set the panel's width
-  sketchybar --add item menu.status popup.city --set menu.status icon='STATUS' icon.color=0xff76849c icon.font="$F_SMALL" icon.width=64 label='…' label.color=0xff8794ad
-  sketchybar --add item menu.status2 popup.city --set menu.status2 icon='' icon.width=64 icon.font="$F_SMALL" label='…' label.color=0xff8794ad
+  sketchybar --add item menu.status popup.city --set menu.status icon='STATUS' icon.color=0xff76849c icon.font="$F_SMALL" label='…' label.color=0xff8794ad
 }
 sketchybar --add item menu.title popup.city --set menu.title icon='@@title@@' icon.font="$F_CHIP" icon.color=0xfffcee09 label="$PANEL" label.color=0xff76849c
 [ "$P_STATUS" = bottom ] || status_line
@@ -209,8 +207,10 @@ row quit 'Quit window manager…' "osascript -e 'display dialog \"Quit the windo
 [ "$P_STATUS" = bottom ] && status_line
 # Each menu keeps the same usable actions but borrows its surface grammar from its environment.
 case "$THEME" in
-  night-city)  # sharp corners and roomier rows, matching the chamfered launcher
-    sketchybar --set city popup.height=30 popup.background.corner_radius=2
+  night-city)  # sharp corners and roomier rows, matching the chamfered launcher; a neon edge like the focus glow
+    sketchybar --set city popup.height=30 popup.background.corner_radius=2 popup.background.border_color=0x5900e5ff
+    # readings: labels recede, values carry the brightness
+    for i in cpu memory temp battery; do sketchybar --set $i icon.color=0x9900e5ff 2>/dev/null; done
     ;;
   factorio)
     sketchybar --set city popup.height=28 popup.background.border_width=2

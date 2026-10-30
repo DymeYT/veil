@@ -842,7 +842,7 @@ struct GroupHeader: View {
     let kind: Kind
     let p: Palette
     var body: some View {
-        let t = Text(text).font(mono(11, "Bold")).tracking(1.6)
+        let t = Text(text).font(mono(12, "Bold")).tracking(1.6)
         switch p.s("head", "plain") {
         case "rule":
             HStack(spacing: 8) {
@@ -899,7 +899,7 @@ struct Row: View {
                     .foregroundStyle(lit ? p["bg_dark"] : selected ? (["soft", "bracket"].contains(style) ? p["cyan"] : p["white"]) : p["fg"])
                     .lineLimit(1).truncationMode(.middle)
                 if !item.subtitle.isEmpty {
-                    Text(item.subtitle).font(code(11)).foregroundStyle(lit ? p["bg_dark"].opacity(0.8) : selected ? p["fg"].opacity(0.82) : p["comment"])
+                    Text(item.subtitle).font(code(12)).foregroundStyle(lit ? p["bg_dark"].opacity(0.8) : selected ? p["fg"].opacity(0.82) : p["comment"])
                         .lineLimit(1).truncationMode(item.path == nil ? .tail : .head)
                 }
             }
@@ -1120,8 +1120,8 @@ struct Detail: View {
 
     func fact(_ label: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(p.cased(label)).font(mono(11, "Bold")).tracking(1.4).foregroundStyle(p["comment"])
-            Text(value).font(code(11, "Medium")).foregroundStyle(p["fg"]).lineLimit(3).truncationMode(.middle)
+            Text(p.cased(label)).font(mono(11.5, "Bold")).tracking(1.4).foregroundStyle(p["dim"])
+            Text(value).font(code(12.5, "Medium")).foregroundStyle(p["fg"]).lineLimit(3).truncationMode(.middle)
         }
         .padding(.bottom, 10)
     }
@@ -1299,9 +1299,8 @@ struct LauncherView: View {
                 if p.s("frame", "none") == "station" { p["white"].opacity(0.85).frame(height: 2) } else { divider(p) }
                 results(p).frame(height: 412)
                 HStack(spacing: 16) {
-                    // narrow launchers (Hallownest) drop the less used hints instead of clipping them
+                    // four hints at most (the rest live in ⌘K); narrow launchers drop to two
                     ViewThatFits(in: .horizontal) {
-                        HStack(spacing: 16) { hint("↵", "open"); hint("⌘↵", "show in Finder"); hint("⌘K", "actions"); hint("⌥↵", "paste"); hint("⌘C", "copy"); hint("⌘Y", "quick look"); hint("esc", "close") }
                         HStack(spacing: 16) { hint("↵", "open"); hint("⌘K", "actions"); hint("⌘C", "copy"); hint("esc", "close") }
                         HStack(spacing: 16) { hint("↵", "open"); hint("⌘K", "actions") }
                     }

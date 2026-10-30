@@ -110,14 +110,14 @@ struct OSDView: View {
             HStack(spacing: 8) {
                 Spacer(minLength: 0)
                 Image(systemName: symbol).font(.system(size: 13, weight: .semibold)).foregroundStyle(accent)
-                Text(label).font(ui(13, .semibold)).tracking(theme == "eclipse" || theme == "dark-souls-3" ? 0 : 1.4)
+                Text(label).font(ui(14, .semibold)).tracking(theme == "eclipse" || theme == "dark-souls-3" ? 0 : 1.4)
                     .foregroundStyle(Color.white.opacity(0.92)).lineLimit(1)
             }
             .padding(.trailing, 14)
             Spacer().frame(width: notchWidth)
             // right wing: the reading
             HStack(spacing: 10) {
-                if let l = m.level { meter(l).frame(width: 96, height: 6) }
+                if let l = m.level { meter(l).frame(width: 106, height: 8) }
                 Text(m.level == nil ? m.detail : percent).font(ui(13, .bold).monospacedDigit())
                     .foregroundStyle(Color.white.opacity(0.92)).lineLimit(1)
                 Spacer(minLength: 0)
@@ -139,7 +139,7 @@ struct OSDView: View {
             HStack(spacing: 2) {
                 ForEach(0..<10, id: \.self) { i in
                     let lit = Double(i) < (l * 10).rounded()
-                    RoundedRectangle(cornerRadius: 1.5).fill(lit ? accent : Color.white.opacity(0.15)).frame(width: 7.6)
+                    RoundedRectangle(cornerRadius: 1.5).fill(lit ? accent : Color.white.opacity(0.22)).frame(width: 8.8)
                         .shadow(color: lit ? accent.opacity(0.7) : .clear, radius: 2)
                 }
             }.frame(maxWidth: .infinity, alignment: .leading)
