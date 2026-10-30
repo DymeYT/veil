@@ -117,9 +117,10 @@ struct OSDView: View {
             Spacer().frame(width: notchWidth)
             // right wing: the reading
             HStack(spacing: 10) {
-                if let l = m.level { meter(l).frame(width: 106, height: 8) }
+                if let l = m.level { meter(l).frame(width: 96, height: 8) }
+                // the reading never truncates: the meter gives way, not the number
                 Text(m.level == nil ? m.detail : percent).font(ui(13, .bold).monospacedDigit())
-                    .foregroundStyle(Color.white.opacity(0.92)).lineLimit(1)
+                    .foregroundStyle(Color.white.opacity(0.92)).lineLimit(1).fixedSize()
                 Spacer(minLength: 0)
             }
             .padding(.leading, 14)
