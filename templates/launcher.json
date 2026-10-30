@@ -52,5 +52,6 @@
  "bar_position": "@@bar_position@@",
  "radius_window": "@@l_radius@@",
  "scrim": "@@l_scrim@@",
- "corner": "@@l_corner@@"
+ "corner": "@@l_corner@@",
+ "symbol_size": "@@l_symbol_size@@"
 }

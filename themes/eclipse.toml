@@ -14,7 +14,7 @@ comment = "828183"
 dim = "9a978f"
 fg = "e8e3d8"
 white = "ffffff"
-cyan = "d25d57"
+cyan = "e05252"
 magenta = "8e8a83"
 yellow = "e8e3d8"
 red = "e0654f"
@@ -40,6 +40,7 @@ STRUGGLE"""
 
 # Shape, type and layout (see ECOSYSTEMS.md). Values may name colors as %role%.
 [style]
+l_symbol_size = "40"   # search-field mark height in points
 l_scrim = "true"
 panel_headers = "rule"  # control panel structure (sketchybarrc): text | rule | space
 panel_status = "top"
@@ -47,7 +48,7 @@ panel_keys = "trailing"
 panel_first = "windows"
 search_symbol = "brand-of-sacrifice"
 bar_layout = "strip"
-bar_position = "bottom"
+bar_position = "top"
 bar_compose = "split"
 bar_radius = "0"
 bar_border = "1"
@@ -68,9 +69,9 @@ border_style = "round"
 border_width = "3.0"
 border_active = "0xffb02a2e"   # deep crimson focus edge (not a text colour, so free of the contrast rule)
 border_inactive = "0x24e6e0d6"   # a faint bone hairline so unfocused windows hold their shape on black
-gap_top = "6"
+gap_top = "10"
 gap_outer = "14"
-gap_bottom = "50"
+gap_bottom = "14"
 gap_inner = "14"
 anim = "0.32"
 term_font = "IBM Plex Mono"

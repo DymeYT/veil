@@ -484,7 +484,9 @@ final class Model: NSObject, ObservableObject {
         out += ranked(scriptItems(q), limit: 3)
         out += ranked(obsidianItems(q).filter { $0.score < 2000 }, limit: 2)
         out += obsidianItems(q).filter { $0.score >= 2000 }
-        out += ranked(shortcuts, limit: 4)
+        // Shortcuts only when a word of the name starts with the query ("sa" → "Save…", not "Source Adder")
+        let ql = q.lowercased()
+        out += ranked(shortcuts.filter { $0.title.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }).contains { $0.hasPrefix(ql) } }, limit: 4)
         out += ranked(openWindows, limit: 4)
         out += ranked(projects, limit: 4)
         out += ranked(bookmarks, limit: 4)
@@ -1527,8 +1529,9 @@ struct LauncherView: View {
         if SourceSymbol.load(p.s("symbol", "")) != nil {
             let mark = SourceSymbol(name: p.s("symbol", ""))
             // fit the mark in a 30pt square-ish slot at its own proportions
+            let sz = p.num("symbol_size", 30)  // per theme: Eclipse shows the Brand larger
             mark.fill(p["cyan"], style: FillStyle(eoFill: true))
-                .frame(width: min(42, 30 * mark.aspect), height: min(30, 42 / mark.aspect)).frame(minWidth: 34).frame(height: 36)
+                .frame(width: min(sz * 1.4, sz * mark.aspect), height: min(sz, sz * 1.4 / mark.aspect)).frame(minWidth: sz + 4).frame(height: sz + 6)
                 .accessibilityLabel("Search")
         } else {
         switch p.s("chip_style", "filled") {

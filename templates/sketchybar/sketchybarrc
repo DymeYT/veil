@@ -25,6 +25,8 @@ CPU_POS=right; NET_POS=right; VOL_POS=right; SHOW_APP=on; SHOW_GRAPH=on
 PANEL='CONTROL PANEL'; WINDOW_GROUP='WINDOWS'; SYSTEM_GROUP='SYSTEM'; THEME_GROUP='APPEARANCE'
 KEYS_LABEL=''; QUICK='none'
 case "$THEME" in
+  # Night City keeps the bar to time and power; system readings live in the control panel's status line
+  night-city) CPU_POS=popup.city; NET_POS=popup.city; VOL_POS=popup.city; SHOW_GRAPH=off ;;
   arasaka) PANEL='OPERATIONS'; WINDOW_GROUP='WORKSTATION'; SYSTEM_GROUP='SYSTEM SERVICES'; SHOW_GRAPH=off; QUICK=search ;;
   # Guidance reads like a map legend: named sites, no numbered slots, machine readings kept in the field guide
   elden-ring) PANEL='FIELD GUIDE'; WINDOW_GROUP='SITES OF GRACE'; SYSTEM_GROUP='TRAVERSAL'; QUICK=search; CPU_POS=popup.city; SHOW_GRAPH=off ;;
@@ -199,6 +201,9 @@ row quit 'Quit window manager…' "osascript -e 'display dialog \"Quit the windo
 [ "$P_STATUS" = bottom ] && status_line
 # Each menu keeps the same usable actions but borrows its surface grammar from its environment.
 case "$THEME" in
+  night-city)  # sharp corners and roomier rows, matching the chamfered launcher
+    sketchybar --set city popup.height=30 popup.background.corner_radius=2
+    ;;
   factorio)
     sketchybar --set city popup.height=28 popup.background.border_width=2
     sketchybar --set '/menu\..*/' background.corner_radius=1

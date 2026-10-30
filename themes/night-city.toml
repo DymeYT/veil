@@ -41,6 +41,7 @@ logo = """  ╱╱  NIGHT CITY
 
 # Shape, type and layout (see ECOSYSTEMS.md). Values may name colors as %role%.
 [style]
+l_symbol_size = "30"   # search-field mark height in points
 l_corner = "chamfer"   # launcher outline: round | chamfer (cut corners)
 l_scrim = "false"   # dim the screen behind the launcher
 panel_headers = "text"  # control panel structure (sketchybarrc): text | rule | space
@@ -68,8 +69,8 @@ value_case = "upper"
 app_glyph = "/"
 border_style = "round"
 border_width = "2.0"
-border_active = "0xe6%cyan%"
-border_inactive = "0x00000000"
+border_active = "glow(0xff%cyan%)"   # neon: the focus edge glows
+border_inactive = "0x2200e5ff"   # a faint cyan hairline on unfocused windows
 gap_top = "15"
 gap_outer = "12"
 gap_inner = "12"
@@ -129,7 +130,7 @@ wallpaper = "art"
 term_titlebar = "hidden"
 term_quick_position = "top"
 term_quick_anim = "0.15"
-prompt_format = "[╭─](bright-black)$directory$git_branch$git_status$cmd_duration$line_break[╰─](bright-black)$character"
+prompt_format = "$directory$git_branch$git_status$cmd_duration$line_break$character"
 prompt_right_format = ""
 prompt_newline = "true"
 prompt_depth = "3"
