@@ -145,7 +145,9 @@ func windowItems() -> [Item] {
         for w in (ws["windows"] as? [[String: Any]]) ?? [] {
             guard let id = w["id"] as? [String: Any], let idData = try? JSONSerialization.data(withJSONObject: id),
                   let idJSON = String(data: idData, encoding: .utf8) else { continue }
-            let app = w["app_name"] as? String ?? "", title = w["title"] as? String ?? ""
+            let app = w["app_name"] as? String ?? ""
+            // terminals prefix titles with activity spinners (◑ ✳ ⠂); the row's icon already says what it is
+            let title = String((w["title"] as? String ?? "").drop { !$0.isLetter && !$0.isNumber && !"~/.([".contains($0) })
             let bundle = (w["bundle_id"] as? String).flatMap { NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0)?.path }
             out.append(Item(kind: .action, title: title.isEmpty ? app : title, subtitle: "\(app) · \(wsName)", symbol: "macwindow",
                             path: bundle, action: .run([home + "/.local/bin/rift-cli", "execute", "window", "focus", "--window-id", idJSON]),

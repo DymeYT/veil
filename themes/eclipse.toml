@@ -42,7 +42,7 @@ STRUGGLE"""
 [style]
 l_symbol_size = "40"   # search-field mark height in points
 l_scrim = "true"
-panel_headers = "rule"  # control panel structure (sketchybarrc): text | rule | space
+panel_headers = "text"  # control panel structure (sketchybarrc): text | rule | space
 panel_status = "top"
 panel_keys = "trailing"
 panel_first = "windows"

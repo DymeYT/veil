@@ -82,11 +82,11 @@ while IFS=$'\t' read -r i active count; do
         busy) args+=(--set "$s" icon="$b" label="$n" icon.background.color=0x99$c icon.color=$ink label.color=0xff8794ad background.drawing=off) ;;
         empty) args+=(--set "$s" icon="$b" label="$n" icon.background.color=0x55$c icon.color=$ink label.color=0xff8794ad background.drawing=off) ;;
       esac ;;
-    dot)  # ● ◉ ○ + name
+    dot)  # one ● glyph at one weight; state is carried by colour alone (mixed ◉/○ glyphs render at uneven sizes)
       case $state in
         active) args+=(--set "$s" icon=● icon.color=0xff00e5ff label="$n" label.drawing=on label.color=0xffffffff background.drawing=off) ;;
-        busy) args+=(--set "$s" icon=◉ icon.color=0xff8794ad label="$n" label.drawing=on label.color=0xffd9f4ff background.drawing=off) ;;
-        empty) args+=(--set "$s" icon=○ icon.color=0xff76849c label="$n" label.drawing=on label.color=0xff8794ad background.drawing=off) ;;
+        busy) args+=(--set "$s" icon=● icon.color=0xb38794ad label="$n" label.drawing=on label.color=0xffd9f4ff background.drawing=off) ;;
+        empty) args+=(--set "$s" icon=● icon.color=0x4076849c label="$n" label.drawing=on label.color=0xff8794ad background.drawing=off) ;;
       esac ;;
   esac
 done < <("$HOME/.local/bin/rift-cli" query workspaces 2>/dev/null | /usr/bin/jq -r '.[] | [.index, .is_active, .window_count] | @tsv')

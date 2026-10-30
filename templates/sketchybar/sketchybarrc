@@ -145,7 +145,7 @@ for i in "${!keys[@]}"; do sketchybar --add item keys.$i popup.keys --set keys.$
 # their shortcuts are the same everywhere, so muscle memory carries across themes.
 P_HEADERS='@@panel_headers@@'  # text: group names | rule: name and a hairline | space: an empty row between groups
 P_STATUS='@@panel_status@@'    # top | bottom (bottom bars keep the readings next to the bar)
-P_KEYS='@@panel_keys@@'        # column: shortcuts in a left column | trailing: after the action, no column
+P_KEYS='@@panel_keys@@'        # column: shortcuts in a left column | trailing: an aligned column after the action
 P_FIRST='@@panel_first@@'      # windows | system: which group leads
 
 # Control rows identify the action or its real shortcut; decorative row numbers are gone.
@@ -159,9 +159,11 @@ header() {
 }
 row() {  # ID LABEL COMMAND [real shortcut, or a mark; rows without one show a quiet dash] [color]
   if [ "$P_KEYS" = trailing ]; then
-    label="$2"; case "$4" in *⌘*|*⌥*|*⌃*|*⇧*) label="$2   $4" ;; esac  # marks are column furniture; only shortcuts follow
-    sketchybar --add item "menu.$1" popup.city --set "menu.$1" icon.drawing=off label="$label" label.padding_left=14 \
-      ${5:+label.color=$5} click_script="sketchybar --set city popup.drawing=off; $3"
+    # the action is a fixed-width first column so real shortcuts line up after it; marks are column furniture, so they're dropped
+    keys=''; case "$4" in *⌘*|*⌥*|*⌃*|*⇧*) keys="$4" ;; esac
+    sketchybar --add item "menu.$1" popup.city --set "menu.$1" icon="$2" icon.font="$F_LABEL" icon.width=236 icon.align=left \
+      icon.padding_left=14 icon.color="${5:-0xffd9f4ff}" label="$keys" label.font="$F_SMALL" label.color=0xff8794ad \
+      click_script="sketchybar --set city popup.drawing=off; $3"
   else
     sketchybar --add item "menu.$1" popup.city --set "menu.$1" icon="${4:-}" icon.font="$F_SMALL" icon.width=76 icon.align=left \
       icon.color="${5:-0xff8794ad}" label="$2" click_script="sketchybar --set city popup.drawing=off; $3"
@@ -210,8 +212,13 @@ case "$THEME" in
     sketchybar --set city popup.height=28 popup.background.border_width=2
     sketchybar --set '/menu\..*/' background.corner_radius=1
     ;;
-  hallownest|eclipse)
+  hallownest)
     sketchybar --set city popup.height=30 popup.background.shadow.drawing=off
+    sketchybar --set music label.max_chars=16
+    ;;
+  eclipse)  # a lifted sheet of paper: hairline edge and a soft drop, so the ink menu separates from ink windows
+    sketchybar --set city popup.height=30 popup.background.corner_radius=4 popup.background.shadow.color=0xd0070a12 popup.background.shadow.distance=10
+    sketchybar --set city background.border_color=0x66fcee09  # the wordmark's outline recedes; the dots carry the state
     sketchybar --set music label.max_chars=16
     ;;
   pharloom) sketchybar --set city popup.height=30 popup.background.border_width=1 ;;

@@ -842,7 +842,7 @@ struct GroupHeader: View {
     let kind: Kind
     let p: Palette
     var body: some View {
-        let t = Text(text).font(mono(10, "Bold")).tracking(1.6)
+        let t = Text(text).font(mono(11, "Bold")).tracking(1.6)
         switch p.s("head", "plain") {
         case "rule":
             HStack(spacing: 8) {
@@ -853,7 +853,7 @@ struct GroupHeader: View {
         case "bullet":
             let lines = ["yellow", "red", "green", "blue", "magenta", "cyan", "dim"]
             HStack(spacing: 7) {
-                Text(String(text.prefix(1))).font(mono(10, "Bold")).foregroundStyle(p["bg_dark"])
+                Text(String(text.prefix(1))).font(mono(11, "Bold")).foregroundStyle(p["bg_dark"])
                     .frame(width: 17, height: 17).background(Circle().fill(p[lines[kind.rawValue % lines.count]]))
                 t.foregroundStyle(p["fg"])
             }.padding(.leading, 12)
@@ -951,7 +951,7 @@ struct Detail: View {
                 hero.frame(width: 64, height: 64).clipped().accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 5) {
                     Text(item.title).font(mono(15, "Bold")).foregroundStyle(p["fg"]).lineLimit(1).truncationMode(.middle)
-                    Text(p.cased(kindLabel)).font(mono(10, "Bold")).foregroundStyle(p["cyan"])
+                    Text(p.cased(kindLabel)).font(mono(11, "Bold")).foregroundStyle(p["cyan"])
                     Text(item.subtitle).font(code(10.5)).foregroundStyle(p["dim"]).lineLimit(1).truncationMode(item.path == nil ? .tail : .head)
                 }
                 Spacer(minLength: 0)
@@ -968,7 +968,7 @@ struct Detail: View {
             hero.frame(maxWidth: .infinity).frame(height: 132)
             Text(item.title).font(mono(16, "Bold")).foregroundStyle(p["white"]).lineLimit(2).truncationMode(.middle)
                 .padding(.top, 4)
-            Text(p.cased(kindLabel)).font(mono(10, "Bold")).tracking(1.4).foregroundStyle(p["cyan"])
+            Text(p.cased(kindLabel)).font(mono(11, "Bold")).tracking(1.4).foregroundStyle(p["cyan"])
                 .padding(.horizontal, 6).padding(.vertical, 2)
                 .background(RoundedRectangle(cornerRadius: p.num("chip_radius", 4)).fill(p["cyan"].opacity(0.14)))
                 .padding(.top, 8)
@@ -1061,7 +1061,7 @@ struct Detail: View {
             }
             .padding(.bottom, 14)
             HStack {
-                Text(p.cased("STATUS")).font(mono(10, "Bold")).tracking(1.4).foregroundStyle(p["comment"])
+                Text(p.cased("STATUS")).font(mono(11, "Bold")).tracking(1.4).foregroundStyle(p["comment"])
                 Spacer()
                 Text(item.subtitle).font(mono(11, "Bold")).foregroundStyle(item.subtitle == "Current theme" ? p["green"] : p["fg"])
             }
@@ -1086,7 +1086,7 @@ struct Detail: View {
         } else if let path = item.path {
             if let text = textPreview(path) {
                 // Spotlight-style content preview for text and code
-                ScrollView { Text(text).font(code(10)).foregroundStyle(p["fg"].opacity(0.85)).lineSpacing(2)
+                ScrollView { Text(text).font(code(11)).foregroundStyle(p["fg"].opacity(0.85)).lineSpacing(2)
                     .frame(maxWidth: .infinity, alignment: .leading).textSelection(.enabled) }
                     .frame(maxHeight: 150).padding(8)
                     .background(RoundedRectangle(cornerRadius: 6).fill(p["bg_dark"].opacity(0.6)))
@@ -1116,7 +1116,7 @@ struct Detail: View {
 
     func fact(_ label: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(p.cased(label)).font(mono(10, "Bold")).tracking(1.4).foregroundStyle(p["comment"])
+            Text(p.cased(label)).font(mono(11, "Bold")).tracking(1.4).foregroundStyle(p["comment"])
             Text(value).font(code(11, "Medium")).foregroundStyle(p["fg"]).lineLimit(3).truncationMode(.middle)
         }
         .padding(.bottom, 10)
@@ -1280,10 +1280,10 @@ struct LauncherView: View {
                     ProgressView().controlSize(.small).tint(p["cyan"])
                 } else if m.query.isEmpty && p.s("frame", "none") == "hud" {
                     // HUD readout while idle
-                    Text("SYS ONLINE  //  \(Date().formatted(date: .omitted, time: .shortened))").font(code(10, "Bold")).tracking(1.4)
+                    Text("SYS ONLINE  //  \(Date().formatted(date: .omitted, time: .shortened))").font(code(11, "Bold")).tracking(1.4)
                         .foregroundStyle(p["cyan"].opacity(0.8))
                 } else if !m.query.isEmpty {
-                    Text(p.cased("\(m.items.count) result\(m.items.count == 1 ? "" : "s")")).font(mono(10, "Bold")).tracking(1.2).foregroundStyle(p["comment"])
+                    Text(p.cased("\(m.items.count) result\(m.items.count == 1 ? "" : "s")")).font(mono(11, "Bold")).tracking(1.2).foregroundStyle(p["comment"])
                         .padding(.horizontal, 8).padding(.vertical, 4)
                         .background(RoundedRectangle(cornerRadius: p.num("chip_radius", 5)).stroke(p["border"], lineWidth: 1))
                 }
@@ -1369,7 +1369,7 @@ struct LauncherView: View {
         case "transit":
             VStack(spacing: 0) {
                 HStack { Text("DESTINATION"); Spacer(); Text("ACTION") }
-                    .font(mono(10, "Bold")).foregroundStyle(p["fg"]).padding(.horizontal, 18).frame(height: 28)
+                    .font(mono(11, "Bold")).foregroundStyle(p["fg"]).padding(.horizontal, 18).frame(height: 28)
                 resultList(p)
                 preview(p, compact: true)
             }
@@ -1385,9 +1385,9 @@ struct LauncherView: View {
                 VStack(alignment: .leading, spacing: 18) {
                     Text("FIELD\nINDEX").font(mono(19, "Bold")).foregroundStyle(p["fg"])
                     Rectangle().fill(p["cyan"]).frame(width: 28, height: 2)
-                    Text("\(m.items.count)\nRESULTS").font(code(10, "Bold")).foregroundStyle(p["dim"])
+                    Text("\(m.items.count)\nRESULTS").font(code(11, "Bold")).foregroundStyle(p["dim"])
                     Spacer()
-                    Text("\(Image(systemName: "command")) SPACE").font(code(10)).foregroundStyle(p["comment"])
+                    Text("\(Image(systemName: "command")) SPACE").font(code(11)).foregroundStyle(p["comment"])
                 }.padding(18).frame(width: 124).background(p["bg_dark"].opacity(0.5))
                 VStack(spacing: 0) { resultList(p); preview(p, compact: true) }
             }
@@ -1400,12 +1400,12 @@ struct LauncherView: View {
         case "grace":
             HStack(spacing: 0) {
                 VStack(alignment: .leading, spacing: 14) {
-                    Text("GRACE").font(code(10, "Bold")).tracking(2).foregroundStyle(p["yellow"])
+                    Text("GRACE").font(code(11, "Bold")).tracking(2).foregroundStyle(p["yellow"])
                     Rectangle().fill(p["yellow"].opacity(0.75)).frame(width: 30, height: 1)
                     Text(String(format: "%02d", m.items.count)).font(mono(28, "Regular")).foregroundStyle(p["fg"])
-                    Text("GUIDANCE").font(code(10, "Bold")).tracking(1).foregroundStyle(p["comment"])
+                    Text("GUIDANCE").font(code(11, "Bold")).tracking(1).foregroundStyle(p["comment"])
                     Spacer()
-                    Text("↵  OPEN").font(code(10, "Bold")).foregroundStyle(p["dim"])
+                    Text("↵  OPEN").font(code(11, "Bold")).foregroundStyle(p["dim"])
                 }
                 .padding(16).frame(width: 106).background(p["bg_dark"].opacity(0.72))
                 Rectangle().fill(p["yellow"].opacity(0.3)).frame(width: 1)
@@ -1417,7 +1417,7 @@ struct LauncherView: View {
                 HStack(spacing: 0) {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("BOREAL VALLEY").font(mono(11, "Bold")).tracking(2).foregroundStyle(p["yellow"])
-                        Text("\(m.items.count) traces in the archive").font(mono(10)).foregroundStyle(p["comment"])
+                        Text("\(m.items.count) traces in the archive").font(mono(11)).foregroundStyle(p["comment"])
                     }.padding(.leading, 18)
                     Spacer(minLength: 8)
                     preview(p, compact: true).frame(width: 330)
@@ -1429,13 +1429,13 @@ struct LauncherView: View {
             HStack(spacing: 0) {
                 VStack(spacing: 0) { sectionTitle("DOJO INDEX", p); resultList(p) }
                 VStack(spacing: 12) {
-                    Text("INDEX").font(code(10, "Bold")).tracking(1).foregroundStyle(p["comment"])
+                    Text("INDEX").font(code(11, "Bold")).tracking(1).foregroundStyle(p["comment"])
                     ForEach(0..<5, id: \.self) { i in
                         Capsule().fill(i == min(m.selected, 4) ? p["red"] : p["line"])
                             .frame(width: 4, height: i == min(m.selected, 4) ? 42 : 22)
                     }
                     Text(String(format: "%02d", min(m.selected + 1, m.items.count)))
-                        .font(code(10, "Bold")).foregroundStyle(p["dim"])
+                        .font(code(11, "Bold")).foregroundStyle(p["dim"])
                 }
                 .frame(width: 42).background(p["bg_dark"].opacity(0.64))
                 Rectangle().fill(p["red"].opacity(0.35)).frame(width: 1)
@@ -1447,7 +1447,7 @@ struct LauncherView: View {
     }
 
     func sectionTitle(_ text: String, _ p: Palette) -> some View {
-        Text(text).font(mono(10, "Bold")).tracking(2).foregroundStyle(p["dim"])
+        Text(text).font(mono(11, "Bold")).tracking(2).foregroundStyle(p["dim"])
             .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 16).frame(height: 30)
     }
 
@@ -1472,7 +1472,7 @@ struct LauncherView: View {
                         }
                     }.padding(6)
                 } else {
-                    LazyVStack(alignment: .leading, spacing: layout == "airy" ? 3 : 1) {
+                    VStack(alignment: .leading, spacing: layout == "airy" ? 3 : 1) {  // eager: ~25 rows at most, and lazy rows at the clipped edge rendered blank
                         ForEach(Array(m.items.enumerated()), id: \.element.id) { i, item in
                             // a header and its first row are one unit, so a clipped list never ends on a bare header
                             VStack(alignment: .leading, spacing: 0) {
@@ -1508,7 +1508,7 @@ struct LauncherView: View {
             Row(item: item, selected: index == m.selected, p: p, ns: ns)
             if layout == "transit" {
                 Text(item.kind == .app ? "APP" : item.kind == .file ? "FILE" : "→")
-                    .font(mono(10, "Bold")).foregroundStyle(p["dim"]).padding(.trailing, 16)
+                    .font(mono(11, "Bold")).foregroundStyle(p["dim"]).padding(.trailing, 16)
             }
         }
         .overlay(alignment: .bottom) { if layout == "transit" || layout == "ink" { p["border"].frame(height: 1) } }
@@ -1580,7 +1580,7 @@ struct ActionPanel: View {
     var body: some View {
         let acts = m.currentActions
         VStack(alignment: .leading, spacing: 0) {
-            Text(p.cased("actions")).font(mono(10, "Bold")).tracking(1.6).foregroundStyle(p["comment"])
+            Text(p.cased("actions")).font(mono(11, "Bold")).tracking(1.6).foregroundStyle(p["comment"])
                 .padding(.horizontal, 12).padding(.top, 10).padding(.bottom, 6)
             ForEach(Array(acts.enumerated()), id: \.element.id) { i, a in
                 HStack(spacing: 10) {
