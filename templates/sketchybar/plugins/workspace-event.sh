@@ -86,7 +86,7 @@ while IFS=$'\t' read -r i active count; do
       case $state in
         active) args+=(--set "$s" icon=● icon.color=0xff00e5ff label="$n" label.drawing=on label.color=0xffffffff background.drawing=off) ;;
         busy) args+=(--set "$s" icon=● icon.color=0xb38794ad label="$n" label.drawing=on label.color=0xffd9f4ff background.drawing=off) ;;
-        empty) args+=(--set "$s" icon=● icon.color=0x4076849c label="$n" label.drawing=on label.color=0x99d9f4ff background.drawing=off) ;;
+        empty) args+=(--set "$s" icon=● icon.color=0x4076849c label="$n" label.drawing=on label.color=0xccd9f4ff background.drawing=off) ;;
       esac ;;
   esac
 done < <("$HOME/.local/bin/rift-cli" query workspaces 2>/dev/null | /usr/bin/jq -r '.[] | [.index, .is_active, .window_count] | @tsv')

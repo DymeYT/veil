@@ -43,7 +43,7 @@ logo = """  ╱╱  NIGHT CITY
 [style]
 l_symbol_size = "30"   # search-field mark height in points
 l_corner = "chamfer"   # launcher outline: round | chamfer (cut corners)
-l_button = "fill"       # primary action: fill | outline
+l_button = "outline"    # primary action: fill | outline (a lit slab outshouted the results)
 l_scrim = "false"   # dim the screen behind the launcher
 panel_headers = "text"  # control panel structure (sketchybarrc): text | rule | space
 panel_status = "top"
@@ -69,7 +69,7 @@ tag_mode = "text"
 value_case = "upper"
 app_glyph = "/"
 border_style = "round"
-border_width = "1.0"
+border_width = "2.0"
 border_active = "glow(0xff%cyan%)"   # neon: the focus edge glows
 border_inactive = "0x2200e5ff"   # a faint cyan hairline on unfocused windows
 gap_top = "15"

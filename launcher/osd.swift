@@ -106,21 +106,23 @@ struct OSDView: View {
         let shape = UnevenRoundedRectangle(bottomLeadingRadius: 16, bottomTrailingRadius: 16, style: .continuous)
         HStack(spacing: 0) {
             // left wing: what changed
+            // both wings hug the notch, so label and reading read as one cluster around it
             HStack(spacing: 8) {
+                Spacer(minLength: 0)
                 Image(systemName: symbol).font(.system(size: 13, weight: .semibold)).foregroundStyle(accent)
                 Text(label).font(ui(13, .semibold)).tracking(theme == "eclipse" || theme == "dark-souls-3" ? 0 : 1.4)
                     .foregroundStyle(Color.white.opacity(0.92)).lineLimit(1)
-                Spacer(minLength: 0)
             }
-            .padding(.leading, 18)
+            .padding(.trailing, 14)
             Spacer().frame(width: notchWidth)
             // right wing: the reading
             HStack(spacing: 10) {
-                if let l = m.level { meter(l).frame(height: 6) } else { Spacer(minLength: 0) }
+                if let l = m.level { meter(l).frame(width: 96, height: 6) }
                 Text(m.level == nil ? m.detail : percent).font(ui(13, .bold).monospacedDigit())
                     .foregroundStyle(Color.white.opacity(0.92)).lineLimit(1)
+                Spacer(minLength: 0)
             }
-            .padding(.trailing, 18)
+            .padding(.leading, 14)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(shape.fill(Color.black))
@@ -135,20 +137,20 @@ struct OSDView: View {
         case "night-city":
             // whole-point cells so every segment renders the same width; lit cells bleed a little neon
             HStack(spacing: 2) {
-                ForEach(0..<14, id: \.self) { i in
-                    let lit = Double(i) < (l * 14).rounded()
-                    Rectangle().fill(lit ? accent : Color.white.opacity(0.14)).frame(width: 6)
+                ForEach(0..<10, id: \.self) { i in
+                    let lit = Double(i) < (l * 10).rounded()
+                    RoundedRectangle(cornerRadius: 1.5).fill(lit ? accent : Color.white.opacity(0.15)).frame(width: 7.6)
                         .shadow(color: lit ? accent.opacity(0.7) : .clear, radius: 2)
                 }
-            }.frame(maxWidth: .infinity, alignment: .trailing)
+            }.frame(maxWidth: .infinity, alignment: .leading)
         case "eclipse":
             GeometryReader { g in
-                // an ink stroke on a visible rule, ending in a small upright cap like a brush lift
+                // a crimson stroke on a visible track, with a bone thumb where it ends
                 ZStack(alignment: .leading) {
-                    Rectangle().fill(Color.white.opacity(0.28)).frame(height: 1)
-                    Rectangle().fill(accent).frame(width: max(3, g.size.width * l), height: 3)
-                    Rectangle().fill(Color.white.opacity(0.9)).frame(width: 2, height: 10)
-                        .offset(x: max(0, g.size.width * l - 2))
+                    Capsule().fill(Color.white.opacity(0.25)).frame(height: 3)
+                    Capsule().fill(accent).frame(width: max(3, g.size.width * l), height: 3)
+                    Circle().fill(Color.white).frame(width: 7, height: 7)
+                        .offset(x: max(0, g.size.width * l - 3.5))
                 }.frame(maxHeight: .infinity)
             }
         case "dark-souls-3":

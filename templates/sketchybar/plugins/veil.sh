@@ -48,7 +48,16 @@ case "$NAME" in
  app) [[ "$SENDER" == front_app_switched && "$INFO" != "Veil Search" ]] && sketchybar --set "$NAME" label="$INFO" ;;  # the launcher is an overlay, not the app you are in
  cpu)
   read -r cpu mem temp < <("$HOME/.local/bin/veil-metrics" "$HOME/Library/Caches/veil-cpu")
-  [[ -n "$cpu" ]] && sketchybar --set cpu label="${cpu}%" --set memory label="${mem}G" --push cpu.graph "$(printf '%d.%02d' $((cpu / 100)) $((cpu % 100)))"
+  if [[ -n "$cpu" ]]; then
+   v=$(printf '%d.%02d' $((cpu / 100)) $((cpu % 100))); H="$HOME/Library/Caches/veil-cpu-hist"
+   # a reloaded bar starts with an empty graph: refill it once from the saved history (the rc writes a new epoch per load)
+   if [[ "$(cat "$H.seeded" 2>/dev/null)" != "$(cat "$HOME/Library/Caches/veil-bar-epoch" 2>/dev/null)" ]]; then
+    [[ -s "$H" ]] && sketchybar --push cpu.graph $(tr '\n' ' ' < "$H")
+    cp "$HOME/Library/Caches/veil-bar-epoch" "$H.seeded" 2>/dev/null
+   fi
+   { cat "$H" 2>/dev/null; echo "$v"; } | tail -n 34 > "$H.tmp" && mv -f "$H.tmp" "$H"
+   sketchybar --set cpu label="${cpu}%" --set memory label="${mem}G" --push cpu.graph "$v"
+  fi
   # colour only when it needs attention: the die runs hot past ~85°C under sustained load
   if [[ "${temp:-0}" -gt 0 ]]; then
    tc=0xffd9f4ff; [[ "$temp" -ge 85 ]] && tc=0xffff5370
@@ -66,8 +75,9 @@ case "$NAME" in
    vol=$(osascript -e 'if output muted of (get volume settings) then return "MUTE"' -e 'return (output volume of (get volume settings) as text) & "%"' 2>/dev/null)
    if route -n get default >/dev/null 2>&1; then net=ONLINE; else net=OFFLINE; fi
    t=''; [[ "${temp:-0}" -gt 0 ]] && t="  ·  TEMP ${temp}°"
-   status="CPU ${cpu:-?}%  ·  MEM ${mem:-?}G$t  ·  VOL ${vol:-?}  ·  $net  ·  QUIET $quiet$extra"
-   sketchybar --set menu.status label="$(echo "$status" | cased)" --set city popup.drawing=toggle
+   status="CPU ${cpu:-?}%  ·  MEM ${mem:-?}G$t"
+   status2="VOL ${vol:-?}  ·  $net  ·  QUIET $quiet$extra"
+   sketchybar --set menu.status label="$(echo "$status" | cased)" --set menu.status2 label="$(echo "$status2" | cased)" --set city popup.drawing=toggle
   else
    sketchybar --set city popup.drawing=off
   fi ;;

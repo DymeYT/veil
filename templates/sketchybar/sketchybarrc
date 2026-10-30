@@ -41,6 +41,7 @@ case "$THEME" in
 esac
 
 CPU_FREQ=10; [ -f "$HOME/.config/veil/generated/quiet" ] && CPU_FREQ=30  # `veil quiet` survives reloads
+date +%s.%N > "$HOME/Library/Caches/veil-bar-epoch"  # the cpu plugin refills its sparkline once per load
 
 # Top bars line up with the notch (38pt safe area on this MacBook): edge bars match its height exactly,
 # floating islands sit centered on it, so the notch never hangs below or floats above the bar.
@@ -171,7 +172,9 @@ row() {  # ID LABEL COMMAND [real shortcut, or a mark] [color]
   fi
 }
 status_line() {
-  sketchybar --add item menu.status popup.city --set menu.status icon='STATUS' icon.color=0xff76849c icon.font="$F_SMALL" label='…' label.color=0xff8794ad
+  # two short rows (readings, then state) instead of one run-on line that also set the panel's width
+  sketchybar --add item menu.status popup.city --set menu.status icon='STATUS' icon.color=0xff76849c icon.font="$F_SMALL" icon.width=64 label='…' label.color=0xff8794ad
+  sketchybar --add item menu.status2 popup.city --set menu.status2 icon='' icon.width=64 icon.font="$F_SMALL" label='…' label.color=0xff8794ad
 }
 sketchybar --add item menu.title popup.city --set menu.title icon='@@title@@' icon.font="$F_CHIP" icon.color=0xfffcee09 label="$PANEL" label.color=0xff76849c
 [ "$P_STATUS" = bottom ] || status_line
@@ -218,7 +221,7 @@ case "$THEME" in
     sketchybar --set music label.max_chars=16
     ;;
   eclipse)  # a lifted sheet of paper: hairline edge and a soft drop, so the ink menu separates from ink windows
-    sketchybar --set city popup.height=30 popup.background.corner_radius=4 popup.background.shadow.color=0xd0070a12 popup.background.shadow.distance=10
+    sketchybar --set city popup.height=30 popup.background.corner_radius=10 popup.background.shadow.color=0xd0070a12 popup.background.shadow.distance=10
     sketchybar --set city popup.y_offset=10 background.border_color=0x66fcee09  # the wordmark's outline recedes; the dots carry the state
     sketchybar --set music label.max_chars=16
     ;;

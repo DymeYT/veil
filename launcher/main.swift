@@ -1569,10 +1569,10 @@ struct LauncherView: View {
 
     func hint(_ key: String, _ label: String) -> some View {
         HStack(spacing: 5) {
-            Text(key).font(mono(11, "Bold")).foregroundStyle(m.palette["dim"])
+            Text(key).font(mono(12, "Bold")).foregroundStyle(m.palette["dim"])
                 .padding(.horizontal, 5).padding(.vertical, 1.5)
                 .background(RoundedRectangle(cornerRadius: 4).stroke(m.palette["border"], lineWidth: 1))
-            Text(label).font(mono(11, "Regular")).foregroundStyle(m.palette["comment"])  // 11 pt floor: ~9.3 pt physical at More Space
+            Text(label).font(mono(12, "Regular")).foregroundStyle(m.palette["dim"])  // 12 pt: the footer read as fine print at 11
         }.lineLimit(1).fixedSize()
     }
 }
@@ -2158,7 +2158,7 @@ struct PanelShape: Shape {
     var radius: CGFloat
     func path(in r: CGRect) -> Path {
         guard chamfer else { return RoundedRectangle(cornerRadius: radius, style: .continuous).path(in: r) }
-        let c = max(radius, 10)  // the cut on the top-left and bottom-right corners; the other two stay square
+        let c = max(radius, 16)  // the cut on the top-left and bottom-right corners; deep enough that both read as deliberate
         var p = Path()
         p.move(to: CGPoint(x: r.minX + c, y: r.minY))
         p.addLine(to: CGPoint(x: r.maxX, y: r.minY))
