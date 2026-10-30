@@ -1815,6 +1815,8 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         OSD.shared.palette = { [weak self] in self?.model.palette ?? Palette.load() }
         MediaKeys.shared.start()
         StateWatch.shared.start()
+        FocusPulse.shared.palette = { [weak self] in self?.model.palette ?? Palette.load() }
+        FocusPulse.shared.start()
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
                                                          object: nil, queue: .main) { [weak self] _ in self?.syncWindowMotion() }
         syncWindowMotion()
