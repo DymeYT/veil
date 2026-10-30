@@ -118,7 +118,7 @@ struct OSDView: View {
             HStack(spacing: 10) {
                 if let l = m.level { meter(l).frame(height: 6) } else { Spacer(minLength: 0) }
                 Text(m.level == nil ? m.detail : percent).font(ui(13, .bold).monospacedDigit())
-                    .foregroundStyle(theme == "night-city" ? p["yellow"] : Color.white.opacity(0.92)).lineLimit(1)
+                    .foregroundStyle(Color.white.opacity(0.92)).lineLimit(1)
             }
             .padding(.trailing, 18)
         }
@@ -133,14 +133,22 @@ struct OSDView: View {
     @ViewBuilder func meter(_ l: Double) -> some View {
         switch theme {
         case "night-city":
+            // whole-point cells so every segment renders the same width; lit cells bleed a little neon
             HStack(spacing: 2) {
-                ForEach(0..<16, id: \.self) { i in Rectangle().fill(Double(i) < l * 16 ? accent : Color.white.opacity(0.14)) }
-            }
+                ForEach(0..<20, id: \.self) { i in
+                    let lit = Double(i) < (l * 20).rounded()
+                    Rectangle().fill(lit ? accent : Color.white.opacity(0.14)).frame(width: 4)
+                        .shadow(color: lit ? accent.opacity(0.7) : .clear, radius: 2)
+                }
+            }.frame(maxWidth: .infinity, alignment: .trailing)
         case "eclipse":
             GeometryReader { g in
+                // an ink stroke on a visible rule, ending in a small upright cap like a brush lift
                 ZStack(alignment: .leading) {
-                    Rectangle().fill(Color.white.opacity(0.12)).frame(height: 1)
-                    Rectangle().fill(accent).frame(width: max(2, g.size.width * l), height: 2)
+                    Rectangle().fill(Color.white.opacity(0.28)).frame(height: 1)
+                    Rectangle().fill(accent).frame(width: max(3, g.size.width * l), height: 3)
+                    Rectangle().fill(Color.white.opacity(0.9)).frame(width: 2, height: 10)
+                        .offset(x: max(0, g.size.width * l - 2))
                 }.frame(maxHeight: .infinity)
             }
         case "dark-souls-3":

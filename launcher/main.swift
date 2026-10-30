@@ -1332,7 +1332,7 @@ struct LauncherView: View {
         }
         .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: m.toast)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: m.actionsOpen)
-        .shadow(color: p["cyan"].opacity(p.flag("glow") ? 0.14 : 0), radius: 32, y: 6)
+        .shadow(color: p["cyan"].opacity(p.flag("glow") ? 0.16 : 0), radius: 16, y: 4)  // tight neon, so it never smears the text behind
         .shadow(color: .black.opacity(0.55), radius: 24, y: 14)
         .scaleEffect(m.shown || reduceMotion ? 1 : 0.97, anchor: p.s("place", "top") == "bottom" ? .bottom : .top)
         .opacity(m.shown ? 1 : 0)
@@ -1483,13 +1483,13 @@ struct LauncherView: View {
                                 result(item, index: i, p: p)
                             }
                         }
-                    }.padding(.horizontal, 8).padding(.bottom, 40)  // the last row can always scroll clear of the fade
+                    }.padding(.horizontal, 8).padding(.bottom, 60)  // the last row can always scroll clear of the fade
                 }
             }
             // the selection glides between rows instead of jumping
             .animation(reduceMotion ? nil : .spring(response: 0.26, dampingFraction: 0.86), value: m.selected)
             // fade the clipped bottom edge so a cut-off section header never reads as an empty group
-            .mask(VStack(spacing: 0) { Color.black; LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: 36) })
+            .mask(VStack(spacing: 0) { Color.black; LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom).frame(height: 56) })
             .onChange(of: m.selected) { _, selected in
                 if m.items.indices.contains(selected) { proxy.scrollTo(m.items[selected].id) }
             }

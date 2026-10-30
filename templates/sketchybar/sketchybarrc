@@ -157,16 +157,17 @@ header() {
     *) sketchybar --add item "menu.h.$1" popup.city --set "menu.h.$1" icon="$2" icon.color=0xff76849c icon.font="$F_SMALL" label.drawing=off ;;
   esac
 }
-row() {  # ID LABEL COMMAND [real shortcut, or a mark; rows without one show a quiet dash] [color]
+row() {  # ID LABEL COMMAND [real shortcut, or a mark] [color]
+  # only real shortcuts fill the key column; decorative marks made it read as a mixed icon set
+  keys=''; case "$4" in *⌘*|*⌥*|*⌃*|*⇧*) keys="$4" ;; esac
   if [ "$P_KEYS" = trailing ]; then
-    # the action is a fixed-width first column so real shortcuts line up after it; marks are column furniture, so they're dropped
-    keys=''; case "$4" in *⌘*|*⌥*|*⌃*|*⇧*) keys="$4" ;; esac
+    # the action is a fixed-width first column so real shortcuts line up after it
     sketchybar --add item "menu.$1" popup.city --set "menu.$1" icon="$2" icon.font="$F_LABEL" icon.width=236 icon.align=left \
       icon.padding_left=14 icon.color="${5:-0xffd9f4ff}" label="$keys" label.font="$F_SMALL" label.color=0xff8794ad \
       click_script="sketchybar --set city popup.drawing=off; $3"
   else
-    sketchybar --add item "menu.$1" popup.city --set "menu.$1" icon="${4:-}" icon.font="$F_SMALL" icon.width=76 icon.align=left \
-      icon.color="${5:-0xff8794ad}" label="$2" click_script="sketchybar --set city popup.drawing=off; $3"
+    sketchybar --add item "menu.$1" popup.city --set "menu.$1" icon="$keys" icon.font="$F_SMALL" icon.width=76 icon.align=left \
+      icon.color=0xff8794ad label="$2" ${5:+label.color=$5} click_script="sketchybar --set city popup.drawing=off; $3"
   fi
 }
 status_line() {
