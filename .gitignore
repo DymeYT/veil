@@ -3,6 +3,7 @@ generated/
 current
 backups/
 bin/veil-metrics
+bin/veil-wallpaper
 __pycache__/
 .DS_Store
 

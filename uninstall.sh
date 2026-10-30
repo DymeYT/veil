@@ -16,6 +16,8 @@ g="$HOME/Library/Application Support/com.mitchellh.ghostty/config.ghostty"
 cp "$g" "$g.veil.bak" 2>/dev/null   # keep edits made after install
 [ -f "$O/ghostty.config.ghostty" ] && cp "$O/ghostty.config.ghostty" "$g"
 [ -f "$O/cava.config" ] && cp "$O/cava.config" "$HOME/.config/cava/config"
+[ -f "$O/wallpaper.json" ] && [ -x "$NC/bin/veil-wallpaper" ] \
+  && "$NC/bin/veil-baseline" restore-wallpaper --wallpaper-helper "$NC/bin/veil-wallpaper"
 if [ -f "$O/appearance.json" ]; then
   defaults write -g AppleAccentColor -int "$(jq -r .AppleAccentColor "$O/appearance.json")"
   defaults write -g AppleHighlightColor "$(jq -r .AppleHighlightColor "$O/appearance.json")"

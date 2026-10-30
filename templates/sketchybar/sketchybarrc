@@ -132,7 +132,7 @@ fi
 sketchybar --add item keys.title popup.keys --set keys.title icon='KEYS' icon.font="$F_SMALL" icon.color=0xfffcee09 label='SHORTCUTS' label.color=0xff76849c
 # workspace names with their numbers, so styles that show no numeral (diamond, rule, bracket) still map to ⌥N
 WSN=(@@ws@@); ws_line=''; for i in "${!WSN[@]}"; do ws_line="$ws_line${ws_line:+  }$((i + 1)) ${WSN[$i]}"; done
-keys=('⌘ Space|Launcher' 'Left chip|Control panel (click)' "⌥ 1-5|Go to  $ws_line" '⇧⌥ 1-5|Move window to workspace' '⌥ H J K L|Focus left/down/up/right' '⇧⌥ H J K L|Move window' '⌥ F|Fullscreen in gaps' '⌥ V|Float / tile window' '⌥ Z|Pause / resume tiling' '⌥ ⏎|New terminal' '⌥ Tab|Last workspace' '⌥ R|Resize tiles (arrows; esc leaves)' '⌃⌥ 1-4|Tiled / scrolling / split / master layout' '⇧⌥ R|Reload Rift config')
+keys=('⌘ Space|Launcher' 'Left chip|Control panel (click)' "⌥ 1-5|Go to  $ws_line" '⇧⌥ 1-5|Move window to workspace' '⌥ ← ↓ ↑ →|Focus left/down/up/right' '⇧⌥ ← ↓ ↑ →|Move window' '⌥ F|Fullscreen in gaps' '⌥ V|Float / tile window' '⌥ Z|Pause / resume tiling' '⌥ ⏎|New terminal' '⌥ Tab|Last workspace' '⌥ R|Resize tiles (arrows; esc leaves)' '⌃⌥ 1-4|Tiled / scrolling / split / master layout' '⇧⌥ R|Reload Rift config')
 for i in "${!keys[@]}"; do sketchybar --add item keys.$i popup.keys --set keys.$i icon="${keys[$i]%%|*}" icon.font="$F_LABEL" icon.width=96 icon.align=center icon.padding_left=10 icon.padding_right=10 \
   icon.background.drawing=on icon.background.color=0xff151b2d icon.background.border_color=0xff334563 icon.background.border_width=1 \
   icon.background.corner_radius=$CHIP_RADIUS icon.background.height=20 icon.color=0xffd9f4ff label="${keys[$i]#*|}" click_script='sketchybar --set keys popup.drawing=off'; done

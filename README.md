@@ -63,6 +63,11 @@ each file, backs up whatever changes into `backups/`, and writes the new files a
 Themed: Veil Search, Ghostty, SketchyBar, borders, Rift, Starship, fzf, bat, eza (terminal colors), btop, cava, fastfetch, Neovim, Cursor, Obsidian, and the macOS accent color. Twelve distinct launcher compositions include the three-part Arasaka security directory, Guidance's Grace index, Cinder's ember board, and Ashina's selection posture rail. The bar keeps different system readings visible for each theme and moves quieter readings into its control panel.
 Not themeable: Safari (follows dark mode and accent), system dialogs, the login screen.
 
+Rift's shortcuts use ⌥ with H J K L, F, V, Z, R, Tab, Return and 1–5 (⇧ to move windows). While Rift runs, those take
+priority over the same ⌥ shortcuts in other apps, for example ⌥F (forward one word) in a shell; ⌥ with the arrow keys
+is left to apps for word-by-word editing. Rift matches physical keys, so on non-US layouts some ⌥ characters
+(such as @ on German ⌥L) are taken too; edit `templates/rift.toml` to change them.
+
 ## Veil Search (⌘Space launcher)
 
 Native app in `launcher/` (main.swift, splash.swift, extras.swift, sources.swift). Opens as just the search field; work

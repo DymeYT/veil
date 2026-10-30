@@ -295,6 +295,8 @@ def apply(name):
     name = theme.get("id", name)
     if not changes:
         print(f"{theme['name']} is already applied")
+        if not os.environ.get("VEIL_NO_RELOAD"):
+            set_wallpaper({**theme, "id": name})  # cheap, and repairs a desktop picture that didn't take (e.g. on another Space)
         (ROOT / "current").write_text(name)
         if not os.environ.get("VEIL_NO_RELOAD"):
             reload_configs([(live, reload) for _, live, _, reload in targets()], name)

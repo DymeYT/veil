@@ -1345,17 +1345,19 @@ struct LauncherView: View {
     @ViewBuilder func results(_ p: Palette) -> some View {
         switch layout {
         case "ops":
-            HStack(spacing: 0) {
-                // the corporation's Japanese name, set vertically like a lobby directory
-                VStack(spacing: 6) {
-                    ForEach(["荒", "坂"], id: \.self) { Text($0).font(.system(size: 17, weight: .semibold)).foregroundStyle(p["cyan"]) }
-                    Rectangle().fill(p["cyan"]).frame(width: 14, height: 2).padding(.top, 8)
+            // Arasaka: a wide executive command band — directory header, one full-width column, details in a strip below
+            VStack(spacing: 0) {
+                HStack(spacing: 12) {
+                    Text("荒坂").font(.system(size: 15, weight: .semibold)).foregroundStyle(p["cyan"])
+                    Rectangle().fill(p["cyan"]).frame(width: 18, height: 2)
+                    Text("NETWORK DIRECTORY").font(mono(11, "Bold")).tracking(2.4).foregroundStyle(p["fg"])
                     Spacer()
                 }
-                .padding(.top, 22).frame(width: 48).background(p["bg_dark"].opacity(0.7))
-                Rectangle().fill(p["border"]).frame(width: 1)
-                VStack(spacing: 0) { sectionTitle("NETWORK DIRECTORY", p); resultList(p) }
-                preview(p)
+                .padding(.horizontal, 20).frame(height: 34).background(p["bg_dark"].opacity(0.7))
+                p["cyan"].opacity(0.6).frame(height: 1)
+                resultList(p).padding(.horizontal, 10)
+                p["border"].frame(height: 1)
+                preview(p, compact: true)
             }
         case "console":
             HStack(spacing: 8) {

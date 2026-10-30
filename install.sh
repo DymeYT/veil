@@ -41,16 +41,13 @@ if [ ! -x "$HOME/.local/bin/rift" ] || [ -n "${VEIL_REBUILD_RIFT:-}" ]; then
   for b in rift rift-cli; do cp "$src/target/release/$b" "$HOME/.local/bin/.$b.new" && mv -f "$HOME/.local/bin/.$b.new" "$HOME/.local/bin/$b"; done
 fi
 cc -O2 -o "$NC/bin/veil-metrics" "$NC/bin/metrics.c"
-# keep the user's pre-Veil settings so uninstall.sh can put them back (first install only)
+# record the user's pre-Veil settings and wallpaper before anything changes them, so uninstall.sh can put them back
+# (on an existing install the recorder marks missing originals as unavailable instead of saving themed values)
+swiftc -O -o "$NC/bin/veil-wallpaper" "$NC/tools/veil-wallpaper.swift"
+"$NC/bin/veil-baseline" capture --fresh-install --wallpaper-helper "$NC/bin/veil-wallpaper"
 O="$NC/backups/original"
-if [ ! -d "$O" ]; then
-  mkdir -p "$O"
-  cp "$HOME/Library/Application Support/com.mitchellh.ghostty/config.ghostty" "$O/ghostty.config.ghostty" 2>/dev/null || true
-  cp "$HOME/.config/cava/config" "$O/cava.config" 2>/dev/null || true
-  printf '{"AppleAccentColor": %s, "AppleHighlightColor": "%s"}\n' "$(defaults read -g AppleAccentColor 2>/dev/null || echo 4)" \
-    "$(defaults read -g AppleHighlightColor 2>/dev/null || echo '0.698039 0.843137 1.000000 Blue')" > "$O/appearance.json"
-  c="$HOME/Library/Application Support/Cursor/User/settings.json"; [ -f "$c" ] && cp "$c" "$O/cursor.settings.json"
-fi
+c="$HOME/Library/Application Support/Cursor/User/settings.json"
+[ -f "$c" ] && [ ! -f "$O/cursor.settings.json" ] && cp "$c" "$O/cursor.settings.json"
 for b in veil veil-theme veil-metrics; do ln -sf "$NC/bin/$b" "$HOME/.local/bin/$b"; done
 
 "$NC/bin/veil-theme" apply "$(cat "$NC/current" 2>/dev/null || echo night-city)"

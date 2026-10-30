@@ -18,7 +18,7 @@ struct Snapshot: Codable {
 }
 enum RecoveryError: Error, CustomStringConvertible {
     case invalid(String)
-    var description: String { if case .invalid(let s) = self { return s } }
+    var description: String { switch self { case .invalid(let s): return s } }
 }
 func screenUUID(_ screen: NSScreen) throws -> String {
     guard let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber,
