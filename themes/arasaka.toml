@@ -180,6 +180,7 @@ border_active = "0xe6%cyan%"
 
 border_inactive = "0x00000000"
 ws_style = "rule"
+ws_colors = "%red% %green% %blue% %yellow% %magenta%"
 chip_style = "outline"
 font_tag = "Avenir Next Condensed:Bold:11.5"
 font_label = "Avenir Next Condensed:Demi Bold:12.5"
