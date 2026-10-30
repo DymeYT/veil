@@ -11,7 +11,7 @@
     "separator": "@@ff_sep@@",
     "color": {
       "keys": "cyan",
-      "title": "yellow"
+      "title": "@@ff_title_color@@"
     }
   },
   "modules": @@ff_modules_json@@

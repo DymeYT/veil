@@ -11,7 +11,7 @@ style = "bold purple"
 [git_status]
 style = "bold purple"
 [character]
-success_symbol = "[@@prompt_char@@](bold yellow)"
+success_symbol = "[@@prompt_char@@](bold @@prompt_color@@)"
 error_symbol = "[@@prompt_char@@](bold red)"
 [cmd_duration]
 min_time = 2000

@@ -135,9 +135,9 @@ struct OSDView: View {
         case "night-city":
             // whole-point cells so every segment renders the same width; lit cells bleed a little neon
             HStack(spacing: 2) {
-                ForEach(0..<20, id: \.self) { i in
-                    let lit = Double(i) < (l * 20).rounded()
-                    Rectangle().fill(lit ? accent : Color.white.opacity(0.14)).frame(width: 4)
+                ForEach(0..<14, id: \.self) { i in
+                    let lit = Double(i) < (l * 14).rounded()
+                    Rectangle().fill(lit ? accent : Color.white.opacity(0.14)).frame(width: 6)
                         .shadow(color: lit ? accent.opacity(0.7) : .clear, radius: 2)
                 }
             }.frame(maxWidth: .infinity, alignment: .trailing)

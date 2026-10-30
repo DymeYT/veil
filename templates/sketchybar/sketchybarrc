@@ -71,7 +71,7 @@ for i in 0 1 2 3 4; do
 done
 case "$WS" in
   diamond) sketchybar --set '/ws\..*/' icon.font="Helvetica Neue:Regular:15.0" label.font="$F_SMALL" label.drawing=on icon.padding_left=5 icon.padding_right=1 label.padding_left=0 label.padding_right=6 ;;
-  dot) sketchybar --set '/ws\..*/' icon.font="$F_LABEL" icon.padding_left=5 icon.padding_right=3 label.padding_left=2 ;;
+  dot) sketchybar --set '/ws\..*/' icon.font="$F_LABEL" icon.padding_left=6 icon.padding_right=3 label.padding_left=2 label.padding_right=10 ;;
   bullet) sketchybar --set '/ws\..*/' icon.width=20 icon.align=center icon.padding_left=6 icon.padding_right=0 icon.background.height=20 icon.background.corner_radius=10 icon.background.drawing=on ;;
   bracket) sketchybar --set '/ws\..*/' icon.drawing=off label.padding_left=6 label.padding_right=6 ;;
   rule) sketchybar --set '/ws\..*/' icon.drawing=off label.padding_left=10 label.padding_right=10 ;;
@@ -162,7 +162,7 @@ row() {  # ID LABEL COMMAND [real shortcut, or a mark] [color]
   keys=''; case "$4" in *⌘*|*⌥*|*⌃*|*⇧*) keys="$4" ;; esac
   if [ "$P_KEYS" = trailing ]; then
     # the action is a fixed-width first column so real shortcuts line up after it
-    sketchybar --add item "menu.$1" popup.city --set "menu.$1" icon="$2" icon.font="$F_LABEL" icon.width=236 icon.align=left \
+    sketchybar --add item "menu.$1" popup.city --set "menu.$1" icon="$2" icon.font="$F_LABEL" icon.width=290 icon.align=left \
       icon.padding_left=14 icon.color="${5:-0xffd9f4ff}" label="$keys" label.font="$F_SMALL" label.color=0xff8794ad \
       click_script="sketchybar --set city popup.drawing=off; $3"
   else
@@ -219,7 +219,7 @@ case "$THEME" in
     ;;
   eclipse)  # a lifted sheet of paper: hairline edge and a soft drop, so the ink menu separates from ink windows
     sketchybar --set city popup.height=30 popup.background.corner_radius=4 popup.background.shadow.color=0xd0070a12 popup.background.shadow.distance=10
-    sketchybar --set city background.border_color=0x66fcee09  # the wordmark's outline recedes; the dots carry the state
+    sketchybar --set city popup.y_offset=10 background.border_color=0x66fcee09  # the wordmark's outline recedes; the dots carry the state
     sketchybar --set music label.max_chars=16
     ;;
   pharloom) sketchybar --set city popup.height=30 popup.background.border_width=1 ;;

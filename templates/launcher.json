@@ -53,5 +53,6 @@
  "radius_window": "@@l_radius@@",
  "scrim": "@@l_scrim@@",
  "corner": "@@l_corner@@",
+ "button": "@@l_button@@",
  "symbol_size": "@@l_symbol_size@@"
 }

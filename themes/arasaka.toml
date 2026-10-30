@@ -28,6 +28,8 @@ bright_magenta = "ffbe7a"
 bright_cyan = "ff7a8c"
 
 [strings]
+ff_title_color = "yellow"
+prompt_color = "yellow"
 tagline = "CORPORATE NETWORK"
 chip_icon = ""
 chip_label = "ARASAKA"

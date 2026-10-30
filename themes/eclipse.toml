@@ -42,6 +42,7 @@ STRUGGLE"""
 [style]
 l_symbol_size = "40"   # search-field mark height in points
 l_scrim = "true"
+l_button = "outline"   # a crimson outline, so the Brand stays the loudest mark
 panel_headers = "text"  # control panel structure (sketchybarrc): text | rule | space
 panel_status = "top"
 panel_keys = "trailing"
@@ -84,6 +85,8 @@ term_pad_y = "14"
 term_cursor = "block"
 term_blink = "false"
 prompt_char = "❯"
+ff_title_color = "yellow"
+prompt_color = "yellow"
 ff_sep = "  ·  "
 ff_logo_color = "red"
 ff_layout = "title separator host uptime memory battery"  # fastfetch readings, order and swatch (veil-theme fastfetch_modules)
@@ -99,7 +102,7 @@ btop_boxes = "cpu mem proc"
 ui_font = "Crimson Pro"
 ui_mono = "Crimson Pro"
 l_radius = "0"
-l_row = "bar"
+l_row = "plain"
 l_texture = "grain"
 l_line = "none"
 l_glow = "false"

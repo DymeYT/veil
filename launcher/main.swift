@@ -919,6 +919,7 @@ struct Row: View {
         switch style {
         case "slot": shape.fill(p["cyan"])
         case "soft": shape.fill(p["selection"].opacity(0.6))
+        case "plain": shape.fill(p["selection"].opacity(0.85))  // one treatment: the fill alone, no leading bar
         case "bracket": shape.fill(p["selection"].opacity(0.3))
         case "capsule": shape.fill(p["cyan"].opacity(0.14)).overlay(shape.stroke(p["cyan"].opacity(0.35), lineWidth: 1))
         case "thread":
@@ -987,9 +988,12 @@ struct Detail: View {
 
     var actionButton: some View {
         Button { m.activate() } label: {
-            Text("\(p.cased(verb))  ↵").font(mono(11, "Bold")).tracking(1.4).foregroundStyle(p["bg_dark"])
+            let shape = RoundedRectangle(cornerRadius: min(p.num("radius", 16) * 0.45, 8))
+            let outline = p.s("button", "fill") == "outline"
+            Text("\(p.cased(verb))  ↵").font(mono(11, "Bold")).tracking(1.4).foregroundStyle(outline ? p["cyan"] : p["bg_dark"])
                 .frame(maxWidth: .infinity).frame(height: 34)
-                .background(RoundedRectangle(cornerRadius: min(p.num("radius", 16) * 0.45, 8)).fill(p["cyan"]))
+                .background(shape.fill(outline ? p["cyan"].opacity(0.08) : p["cyan"]))
+                .overlay(shape.stroke(outline ? p["cyan"].opacity(0.8) : .clear, lineWidth: 1))
         }
         .buttonStyle(.plain).accessibilityLabel("\(verb.capitalized) \(item.title)")
     }
