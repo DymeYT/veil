@@ -47,8 +47,13 @@ case "$NAME" in
   fi ;;
  app) [[ "$SENDER" == front_app_switched && "$INFO" != "Veil Search" ]] && sketchybar --set "$NAME" label="$INFO" ;;  # the launcher is an overlay, not the app you are in
  cpu)
-  read -r cpu mem < <("$HOME/.local/bin/veil-metrics" "$HOME/Library/Caches/veil-cpu")
-  [[ -n "$cpu" ]] && sketchybar --set cpu label="${cpu}%" --set memory label="${mem}G" --push cpu.graph "$(printf '%d.%02d' $((cpu / 100)) $((cpu % 100)))" ;;
+  read -r cpu mem temp < <("$HOME/.local/bin/veil-metrics" "$HOME/Library/Caches/veil-cpu")
+  [[ -n "$cpu" ]] && sketchybar --set cpu label="${cpu}%" --set memory label="${mem}G" --push cpu.graph "$(printf '%d.%02d' $((cpu / 100)) $((cpu % 100)))"
+  # colour only when it needs attention: the die runs hot past ~85°C under sustained load
+  if [[ "${temp:-0}" -gt 0 ]]; then
+   tc=0xffd9f4ff; [[ "$temp" -ge 85 ]] && tc=0xffff5370
+   sketchybar --set temp label="${temp}°" label.color=$tc 2>/dev/null
+  fi ;;
  city)
   if [[ "$SENDER" == mouse.clicked ]]; then
    # one status line, read when the panel opens: no background polling for readings that are off the bar
@@ -57,10 +62,11 @@ case "$NAME" in
    extra=''; [ "$(defaults read com.apple.universalaccess reduceMotion 2>/dev/null)" = 1 ] && extra="$extra  ·  MOTION OFF BY SYSTEM"
    # ⌥Z pauses tiling on the focused display's space: say so, or the pause looks like a broken window manager
    rift-cli query displays 2>/dev/null | jq -e 'any(.[]; .is_active_context and (.is_active_space | not))' >/dev/null && extra="$extra  ·  TILING PAUSED"
-   read -r cpu mem < <("$HOME/.local/bin/veil-metrics" "$HOME/Library/Caches/veil-cpu")
+   read -r cpu mem temp < <("$HOME/.local/bin/veil-metrics" "$HOME/Library/Caches/veil-cpu")
    vol=$(osascript -e 'if output muted of (get volume settings) then return "MUTE"' -e 'return (output volume of (get volume settings) as text) & "%"' 2>/dev/null)
    if route -n get default >/dev/null 2>&1; then net=ONLINE; else net=OFFLINE; fi
-   status="CPU ${cpu:-?}%  ·  MEM ${mem:-?}G  ·  VOL ${vol:-?}  ·  $net  ·  QUIET $quiet$extra"
+   t=''; [[ "${temp:-0}" -gt 0 ]] && t="  ·  TEMP ${temp}°"
+   status="CPU ${cpu:-?}%  ·  MEM ${mem:-?}G$t  ·  VOL ${vol:-?}  ·  $net  ·  QUIET $quiet$extra"
    sketchybar --set menu.status label="$(echo "$status" | cased)" --set city popup.drawing=toggle
   else
    sketchybar --set city popup.drawing=off

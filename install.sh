@@ -40,7 +40,7 @@ if [ ! -x "$HOME/.local/bin/rift" ] || [ -n "${VEIL_REBUILD_RIFT:-}" ]; then
   # replace by rename: overwriting a running binary in place can get it killed by code signing
   for b in rift rift-cli; do cp "$src/target/release/$b" "$HOME/.local/bin/.$b.new" && mv -f "$HOME/.local/bin/.$b.new" "$HOME/.local/bin/$b"; done
 fi
-cc -O2 -o "$NC/bin/veil-metrics" "$NC/bin/metrics.c"
+cc -O2 -o "$NC/bin/veil-metrics" "$NC/bin/metrics.c" -framework IOKit -framework CoreFoundation
 # record the user's pre-Veil settings and wallpaper before anything changes them, so uninstall.sh can put them back
 # (on an existing install the recorder marks missing originals as unavailable instead of saving themed values)
 swiftc -O -o "$NC/bin/veil-wallpaper" "$NC/tools/veil-wallpaper.swift"

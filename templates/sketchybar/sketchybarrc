@@ -21,13 +21,13 @@ WS='@@ws_style@@'         # pill | underline | rule | diamond | slot | bracket |
 TAGS=(@@tags@@)           # cpu ram net vol pwr
 THEME='@@theme_id@@'
 # These are different information hierarchies, not different names for the same HUD.
-CPU_POS=right; NET_POS=right; VOL_POS=right; SHOW_APP=on; SHOW_GRAPH=on
+CPU_POS=right; NET_POS=right; VOL_POS=right; SHOW_APP=on; SHOW_GRAPH=on; SHOW_TEMP=off
 PANEL='CONTROL PANEL'; WINDOW_GROUP='WINDOWS'; SYSTEM_GROUP='SYSTEM'; THEME_GROUP='APPEARANCE'
 KEYS_LABEL=''; QUICK='none'
 case "$THEME" in
-  # Night City keeps the bar to time and power; system readings live in the control panel's status line
-  night-city) CPU_POS=popup.city; NET_POS=popup.city; VOL_POS=popup.city; SHOW_GRAPH=off ;;
-  arasaka) PANEL='OPERATIONS'; WINDOW_GROUP='WORKSTATION'; SYSTEM_GROUP='SYSTEM SERVICES'; SHOW_GRAPH=off; QUICK=search ;;
+  # the techy themes read like a HUD: load, memory and die temperature on the bar; network and volume stay in the panel
+  night-city) NET_POS=popup.city; VOL_POS=popup.city; SHOW_TEMP=on ;;
+  arasaka) PANEL='OPERATIONS'; WINDOW_GROUP='WORKSTATION'; SYSTEM_GROUP='SYSTEM SERVICES'; SHOW_GRAPH=off; SHOW_TEMP=on; QUICK=search ;;
   # Guidance reads like a map legend: named sites, no numbered slots, machine readings kept in the field guide
   elden-ring) PANEL='FIELD GUIDE'; WINDOW_GROUP='SITES OF GRACE'; SYSTEM_GROUP='TRAVERSAL'; QUICK=search; CPU_POS=popup.city; SHOW_GRAPH=off ;;
   dark-souls-3) PANEL='BONFIRE'; WINDOW_GROUP='EMBER REGISTER'; SYSTEM_GROUP='ASHEN TOOLS'; CPU_POS=popup.city; NET_POS=popup.city; SHOW_APP=off; SHOW_GRAPH=off ;;
@@ -95,6 +95,7 @@ sketchybar --add item clock right --set clock icon.font="$F_LABEL" icon.color=0x
 sketchybar --add item battery right --set battery icon="${TAGS[4]}" update_freq=120 script="$P" --subscribe battery power_source_change system_woke
 [ "$VOL_POS" = right ] && sketchybar --add item volume "$VOL_POS" --set volume icon="${TAGS[3]}" label='—' script="$P" --subscribe volume volume_change system_woke
 [ "$NET_POS" = right ] && sketchybar --add item net "$NET_POS" --set net icon="${TAGS[2]}" label='—' script="$P" --subscribe net wifi_change system_woke
+[ "$CPU_POS" = right ] && [ "$SHOW_TEMP" = on ] && sketchybar --add item temp right --set temp icon="${TAGS[5]:-TEMP}" label='—'
 [ "$CPU_POS" = right ] && sketchybar --add item memory "$CPU_POS" --set memory icon="${TAGS[1]}" label='—'
 # CPU sparkline sits right of the CPU value (fed by the cpu script, no extra polling)
 sketchybar --add graph cpu.graph right 34 --set cpu.graph graph.color=0xff00e5ff graph.fill_color=0x3300e5ff graph.line_width=1.2 \
@@ -117,6 +118,7 @@ else
 fi
 right_items=(keys music battery clock)
 [ "$CPU_POS" = right ] && right_items+=(cpu memory)
+[ "$SHOW_TEMP" = on ] && right_items+=(temp)
 [ "$SHOW_GRAPH" = on ] && right_items+=(cpu.graph)
 [ "$NET_POS" = right ] && right_items+=(net)
 [ "$VOL_POS" = right ] && right_items+=(volume)
