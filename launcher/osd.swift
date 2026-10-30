@@ -25,52 +25,60 @@ final class OSD {
     private var hide: DispatchWorkItem?
     var palette: () -> Palette = { Palette.load() }
 
+    /// The notch's horizontal extent on the built-in display (nil on displays without one).
+    static func notch(_ screen: NSScreen) -> (minX: CGFloat, maxX: CGFloat, height: CGFloat)? {
+        guard screen.safeAreaInsets.top > 0, let l = screen.auxiliaryTopLeftArea, let r = screen.auxiliaryTopRightArea else { return nil }
+        return (screen.frame.minX + l.maxX, screen.frame.minX + r.minX, screen.safeAreaInsets.top)
+    }
+
     func show(_ kind: OSDKind, level: Double?, title: String, detail: String = "") {
         let p = palette()
         guard let screen = NSScreen.screens.first(where: { $0.safeAreaInsets.top > 0 }) ?? NSScreen.main else { return }
-        let size = NSSize(width: 340, height: 76)
-        let barBelowNotch: CGFloat = p.s("bar_position", "top") == "top" ? 38 : 0
-        let top = screen.frame.maxY - max(screen.safeAreaInsets.top, 24) - barBelowNotch - 10
-        let frame = NSRect(x: screen.frame.midX - size.width / 2, y: top - size.height, width: size.width, height: size.height)
+        // The overlay grows out of the notch, into the black band every theme keeps around it: never over windows.
+        let wing: CGFloat = 150
+        let frame: NSRect
+        if let n = OSD.notch(screen) {
+            frame = NSRect(x: n.minX - wing, y: screen.frame.maxY - n.height, width: n.maxX - n.minX + wing * 2, height: n.height)
+        } else {
+            frame = NSRect(x: screen.frame.midX - 260, y: screen.frame.maxY - 44, width: 520, height: 34)
+        }
         if panel == nil || themeID != p.s("theme_id", "") {
             let w = panel ?? NSPanel(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
             w.isOpaque = false; w.backgroundColor = .clear; w.hasShadow = false; w.ignoresMouseEvents = true
-            w.level = .statusBar; w.isReleasedWhenClosed = false
+            w.level = .statusBar + 1; w.isReleasedWhenClosed = false
             w.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary]
-            w.contentView = NSHostingView(rootView: OSDView(m: model, p: p).frame(width: size.width, height: size.height))
             panel = w; themeID = p.s("theme_id", "")
         }
+        let notchWidth = OSD.notch(screen).map { $0.maxX - $0.minX } ?? 0
+        panel?.contentView = NSHostingView(rootView: OSDView(m: model, p: p, notchWidth: notchWidth).frame(width: frame.width, height: frame.height))
         panel?.setFrame(frame, display: false)
         let reduce = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         withAnimation(reduce ? nil : .easeOut(duration: 0.18)) {
             model.kind = kind; model.level = level; model.title = title; model.detail = detail
         }
         panel?.orderFrontRegardless()
-        withAnimation(reduce ? .easeOut(duration: 0.12) : .spring(response: 0.32, dampingFraction: 0.78)) { model.visible = true }
+        withAnimation(reduce ? .easeOut(duration: 0.12) : .spring(response: 0.38, dampingFraction: 0.8)) { model.visible = true }
         hide?.cancel()
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
-            withAnimation(.easeIn(duration: reduce ? 0.12 : 0.22)) { self.model.visible = false }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { if !self.model.visible { self.panel?.orderOut(nil) } }
+            withAnimation(.easeIn(duration: reduce ? 0.12 : 0.24)) { self.model.visible = false }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.32) { if !self.model.visible { self.panel?.orderOut(nil) } }
         }
         hide = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.4, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: work)
     }
 }
 
+/// A notch island: black like the notch, flush with the top edge, its wings carrying the reading in the theme's voice.
 struct OSDView: View {
     @ObservedObject var m: OSDModel
     let p: Palette
+    var notchWidth: CGFloat = 0
     var theme: String { p.s("theme_id", "") }
     func ui(_ size: CGFloat, _ weight: Font.Weight = .semibold) -> Font {
         let name = p.s("ui_font", "")
         return name.isEmpty ? .system(size: size, weight: weight) : .custom(name, size: size).weight(weight)
     }
-    func mono(_ size: CGFloat) -> Font {
-        let name = p.s("ui_mono", "")
-        return name.isEmpty ? .system(size: size, weight: .bold).monospacedDigit() : .custom(name, size: size).weight(.bold)
-    }
-    var r: CGFloat { min(max(p.num("radius_window", 12), 6), 16) }
     var symbol: String {
         switch m.kind {
         case .volume:
@@ -85,174 +93,79 @@ struct OSDView: View {
         }
     }
     var percent: String { m.level.map { "\(Int(($0 * 100).rounded()))" } ?? "" }
+    var accent: Color { p["cyan"] }
+    var label: String {
+        switch theme {
+        case "eclipse": return m.title.lowercased()
+        case "dark-souls-3": return m.title
+        default: return m.title.uppercased()
+        }
+    }
 
     var body: some View {
-        content
-            .opacity(m.visible ? 1 : 0)
-            .offset(y: m.visible ? 0 : -14)
-            .scaleEffect(m.visible ? 1 : 0.96, anchor: .top)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-    }
-
-    @ViewBuilder var content: some View {
-        switch theme {
-        case "night-city": nightCity
-        case "arasaka": arasaka
-        case "paradis": paradis
-        case "eclipse": eclipse
-        case "dark-souls-3": cinder
-        default: standard
-        }
-    }
-
-    // Night City: a HUD readout, corner brackets, a segmented bar
-    var nightCity: some View {
-        HStack(spacing: 12) {
-            Image(systemName: symbol).font(.system(size: 15, weight: .bold)).foregroundStyle(p["cyan"]).frame(width: 22)
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text(m.title.uppercased()).font(mono(11)).tracking(1.6).foregroundStyle(p["fg"])
-                    Spacer()
-                    Text(m.level == nil ? m.detail.uppercased() : percent).font(mono(11)).foregroundStyle(p["yellow"])
-                }
-                if let l = m.level {
-                    HStack(spacing: 3) {
-                        ForEach(0..<20, id: \.self) { i in
-                            Rectangle().fill(Double(i) < l * 20 ? p["cyan"] : p["fg"].opacity(0.12)).frame(height: 6)
-                        }
-                    }
-                }
-            }
-        }
-        .padding(.horizontal, 16).padding(.vertical, 12)
-        .background(RoundedRectangle(cornerRadius: 4, style: .continuous).fill(p["bg_dark"].opacity(0.96)))
-        .overlay(Brackets().stroke(p["cyan"], lineWidth: 1.5))
-        .shadow(color: p["cyan"].opacity(0.25), radius: 12)
-    }
-
-    // Arasaka: a bone-white plate with a red rule, condensed caps
-    var arasaka: some View {
+        let shape = UnevenRoundedRectangle(bottomLeadingRadius: 16, bottomTrailingRadius: 16, style: .continuous)
         HStack(spacing: 0) {
-            Rectangle().fill(p["cyan"]).frame(width: 4)
-            VStack(alignment: .leading, spacing: 7) {
-                HStack {
-                    Text(m.title.uppercased()).font(ui(12, .bold)).tracking(2.4).foregroundStyle(Color(white: 0.08))
-                    Spacer()
-                    Text(m.level == nil ? m.detail.uppercased() : percent).font(ui(12, .bold)).foregroundStyle(p["cyan"])
-                }
-                if let l = m.level {
-                    ZStack(alignment: .leading) {
-                        Rectangle().fill(Color(white: 0.08).opacity(0.14))
-                        GeometryReader { g in Rectangle().fill(p["cyan"]).frame(width: g.size.width * l) }
-                    }.frame(height: 3)
-                }
-            }.padding(.horizontal, 14).padding(.vertical, 11)
-        }
-        .background(Color(red: 0.93, green: 0.91, blue: 0.86))
-        .clipShape(RoundedRectangle(cornerRadius: r * 0.6, style: .continuous))
-        .shadow(color: .black.opacity(0.45), radius: 14, y: 6)
-    }
-
-    // Paradis: a typewritten field-report tag with a dotted leader
-    var paradis: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
-                Text(m.title.uppercased()).font(ui(13, .bold)).foregroundStyle(p["fg"])
+            // left wing: what changed
+            HStack(spacing: 8) {
+                Image(systemName: symbol).font(.system(size: 13, weight: .semibold)).foregroundStyle(accent)
+                Text(label).font(ui(13, .semibold)).tracking(theme == "eclipse" || theme == "dark-souls-3" ? 0 : 1.4)
+                    .foregroundStyle(Color.white.opacity(0.92)).lineLimit(1)
                 Spacer(minLength: 0)
-                Text(m.level == nil ? m.detail.uppercased() : "\(percent)%").font(ui(13, .bold)).foregroundStyle(p["cyan"])
             }
-            if let l = m.level {
-                GeometryReader { g in
-                    ZStack(alignment: .leading) {
-                        Rectangle().stroke(p["fg"].opacity(0.35), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                        Rectangle().fill(p["cyan"].opacity(0.85)).frame(width: g.size.width * l)
-                    }
-                }.frame(height: 6)
+            .padding(.leading, 18)
+            Spacer().frame(width: notchWidth)
+            // right wing: the reading
+            HStack(spacing: 10) {
+                if let l = m.level { meter(l).frame(height: 6) } else { Spacer(minLength: 0) }
+                Text(m.level == nil ? m.detail : percent).font(ui(13, .bold).monospacedDigit())
+                    .foregroundStyle(theme == "night-city" ? p["yellow"] : Color.white.opacity(0.92)).lineLimit(1)
             }
+            .padding(.trailing, 18)
         }
-        .padding(.horizontal, 16).padding(.vertical, 12)
-        .background(RoundedRectangle(cornerRadius: r * 0.5, style: .continuous).fill(p["surface"]))
-        .overlay(RoundedRectangle(cornerRadius: r * 0.5, style: .continuous).stroke(p["fg"].opacity(0.3), lineWidth: 1))
-        .shadow(color: .black.opacity(0.4), radius: 10, y: 4)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(shape.fill(Color.black))
+        // grows sideways out of the notch, then settles
+        .scaleEffect(x: m.visible ? 1 : max(0.3, notchWidth / 520), y: 1, anchor: .center)
+        .opacity(m.visible ? 1 : 0)
     }
 
-    // Eclipse: ink black, one crimson stroke, a serif numeral
-    var eclipse: some View {
-        VStack(spacing: 8) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(m.title.lowercased()).font(ui(14).italic()).foregroundStyle(p["fg"].opacity(0.75))
-                Spacer()
-                Text(m.level == nil ? m.detail.lowercased() : percent).font(ui(20, .bold)).foregroundStyle(p["fg"])
+    /// Each theme's meter: Night City segments, Eclipse a single stroke, Cinder moonlit glow, Paradis a field ruler, Arasaka a red rule.
+    @ViewBuilder func meter(_ l: Double) -> some View {
+        switch theme {
+        case "night-city":
+            HStack(spacing: 2) {
+                ForEach(0..<16, id: \.self) { i in Rectangle().fill(Double(i) < l * 16 ? accent : Color.white.opacity(0.14)) }
             }
-            if let l = m.level {
-                GeometryReader { g in
-                    Rectangle().fill(p["cyan"]).frame(width: max(2, g.size.width * l), height: 2)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }.frame(height: 2)
+        case "eclipse":
+            GeometryReader { g in
+                ZStack(alignment: .leading) {
+                    Rectangle().fill(Color.white.opacity(0.12)).frame(height: 1)
+                    Rectangle().fill(accent).frame(width: max(2, g.size.width * l), height: 2)
+                }.frame(maxHeight: .infinity)
             }
-        }
-        .padding(.horizontal, 20).padding(.vertical, 12)
-        .background(RoundedRectangle(cornerRadius: r * 0.5, style: .continuous).fill(Color.black.opacity(0.94)))
-        .overlay(RoundedRectangle(cornerRadius: r * 0.5, style: .continuous).stroke(p["fg"].opacity(0.16), lineWidth: 1))
-    }
-
-    // Cinder (Irithyll): a serif label over a moonlit bar that glows
-    var cinder: some View {
-        VStack(spacing: 7) {
-            HStack {
-                Text(m.title).font(ui(14, .medium)).foregroundStyle(p["fg"])
-                Spacer()
-                Text(m.level == nil ? m.detail : percent).font(ui(14, .medium)).foregroundStyle(p["yellow"])
+        case "dark-souls-3":
+            GeometryReader { g in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.white.opacity(0.12))
+                    Capsule().fill(LinearGradient(colors: [p["blue"], .white], startPoint: .leading, endPoint: .trailing))
+                        .frame(width: g.size.width * l).shadow(color: accent.opacity(0.8), radius: 5)
+                }
             }
-            if let l = m.level {
-                GeometryReader { g in
-                    ZStack(alignment: .leading) {
-                        Capsule().fill(p["fg"].opacity(0.1))
-                        Capsule().fill(LinearGradient(colors: [p["blue"], p["white"]], startPoint: .leading, endPoint: .trailing))
-                            .frame(width: g.size.width * l)
-                            .shadow(color: p["cyan"].opacity(0.75), radius: 7)
-                    }
-                }.frame(height: 4)
+        case "paradis":
+            GeometryReader { g in
+                ZStack(alignment: .leading) {
+                    Rectangle().stroke(Color.white.opacity(0.3), style: StrokeStyle(lineWidth: 1, dash: [2, 3]))
+                    Rectangle().fill(accent).frame(width: g.size.width * l)
+                }
+            }
+        default:
+            GeometryReader { g in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.white.opacity(0.14))
+                    Capsule().fill(accent).frame(width: g.size.width * l)
+                }
             }
         }
-        .padding(.horizontal, 18).padding(.vertical, 12)
-        .background(RoundedRectangle(cornerRadius: 6).fill(p["bg_dark"].opacity(0.95)))
-        .overlay(RoundedRectangle(cornerRadius: 6).stroke(p["cyan"].opacity(0.22), lineWidth: 1))
-        .shadow(color: .black.opacity(0.5), radius: 12, y: 5)
-    }
-
-    // every other environment: a quiet capsule in its palette
-    var standard: some View {
-        HStack(spacing: 12) {
-            Image(systemName: symbol).font(.system(size: 14, weight: .semibold)).foregroundStyle(p["fg"]).frame(width: 22)
-            if let l = m.level {
-                GeometryReader { g in
-                    ZStack(alignment: .leading) {
-                        Capsule().fill(p["fg"].opacity(0.16))
-                        Capsule().fill(p["cyan"]).frame(width: g.size.width * l)
-                    }
-                }.frame(height: 5)
-                Text(percent).font(.system(size: 12, weight: .semibold).monospacedDigit()).foregroundStyle(p["fg"]).frame(width: 28, alignment: .trailing)
-            } else {
-                Text(m.title).font(.system(size: 13, weight: .semibold)).foregroundStyle(p["fg"])
-                Spacer()
-                Text(m.detail).font(.system(size: 12)).foregroundStyle(p["comment"])
-            }
-        }
-        .padding(.horizontal, 16).frame(height: 40)
-        .background(Capsule().fill(p["bg_dark"].opacity(0.95)))
-        .overlay(Capsule().strokeBorder(p["border"], lineWidth: 1))
-    }
-}
-
-/// Night City's HUD corner brackets
-struct Brackets: Shape {
-    func path(in r: CGRect) -> Path {
-        var p = Path(); let k: CGFloat = 10
-        for (x, y, dx, dy) in [(r.minX, r.minY, 1.0, 1.0), (r.maxX, r.minY, -1.0, 1.0), (r.minX, r.maxY, 1.0, -1.0), (r.maxX, r.maxY, -1.0, -1.0)] {
-            p.move(to: CGPoint(x: x + dx * k, y: y)); p.addLine(to: CGPoint(x: x, y: y)); p.addLine(to: CGPoint(x: x, y: y + dy * k))
-        }
-        return p
     }
 }
 

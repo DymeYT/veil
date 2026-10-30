@@ -10,7 +10,7 @@ RIFT_COMMIT=3114cc5eb3eb6858a3495690312065fe9d95c609  # tested on macOS 27.0.1
 
 brew install sketchybar FelixKratz/formulae/borders fzf zoxide starship bat eza btop fastfetch cava jq
 brew install --cask ghostty font-jetbrains-mono-nerd-font font-symbols-only-nerd-font \
-  font-cormorant-garamond font-cinzel font-titillium-web font-monaspace font-courier-prime font-special-elite \
+  font-cormorant-garamond font-cinzel font-titillium-web font-monaspace font-courier-prime font-special-elite font-rajdhani \
   font-zen-maru-gothic font-victor-mono font-nunito font-maple-mono font-ibm-plex-mono  # theme fonts
 
 mkdir -p "$HOME/.local/bin"

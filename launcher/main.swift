@@ -1316,8 +1316,8 @@ struct LauncherView: View {
                 accentLine(p)
             }
         )
-        .clipShape(RoundedRectangle(cornerRadius: p.num("radius", 16), style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: p.num("radius", 16), style: .continuous).strokeBorder(p["border"], lineWidth: p.num("border_width", 1)))
+        .clipShape(PanelShape(chamfer: p.s("corner", "round") == "chamfer", radius: p.num("radius", 16)))
+        .overlay(PanelShape(chamfer: p.s("corner", "round") == "chamfer", radius: p.num("radius", 16)).stroke(p["border"], lineWidth: p.num("border_width", 1)))
         .overlay { Frame(kind: p.s("frame", "none"), radius: p.num("radius", 16), p: p) }
         .overlay(alignment: .bottomTrailing) { if m.actionsOpen { ActionPanel(m: m, p: p).padding(.trailing, 16).padding(.bottom, 44) } }
         .overlay(alignment: .bottom) {
@@ -1900,6 +1900,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         panel.setFrameTopLeftPoint(NSPoint(x: f.midX - panel.frame.width / 2, y: top))
         model.shown = false
+        Scrim.shared.show(on: screen, enabled: p.flag("scrim"))
         panel.makeKeyAndOrderFront(nil)
         DispatchQueue.main.async {
             self.model.shown = true
@@ -1937,6 +1938,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func hide() {
         guard panel.isVisible else { return }
         panel.orderOut(nil)
+        Scrim.shared.hide()
         model.shown = false
         model.actionsOpen = false
         model.historyIndex = -1
@@ -2057,7 +2059,7 @@ if let i = CommandLine.arguments.firstIndex(of: "--render-osd"), CommandLine.arg
     let a = CommandLine.arguments
     let m = OSDModel(); m.kind = .volume; m.level = 0.55; m.title = "Volume"; m.visible = true
     MainActor.assumeIsolated {
-        let r = ImageRenderer(content: OSDView(m: m, p: Palette.load(a[i + 1])).frame(width: 340, height: 76).background(Color(white: 0.25)))
+        let r = ImageRenderer(content: OSDView(m: m, p: Palette.load(a[i + 1]), notchWidth: 220).frame(width: 520, height: 38).background(Color(white: 0.3)))
         r.scale = 2
         guard let img = r.nsImage, let tiff = img.tiffRepresentation, let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) else { exit(1) }
         try? png.write(to: URL(fileURLWithPath: a[i + 2]))
@@ -2114,3 +2116,50 @@ struct Pressable: ViewModifier {
     }
 }
 extension View { func pressable() -> some View { modifier(Pressable()) } }
+
+
+/// Themes that ask for it (`l_scrim`) dim the screen behind the launcher, so text under its edges stops competing.
+final class Scrim {
+    static let shared = Scrim()
+    private var window: NSWindow?
+    func show(on screen: NSScreen, enabled: Bool) {
+        guard enabled else { hide(); return }
+        let w = window ?? {
+            let w = NSWindow(contentRect: screen.frame, styleMask: .borderless, backing: .buffered, defer: false)
+            w.isOpaque = false; w.backgroundColor = NSColor.black; w.ignoresMouseEvents = true; w.hasShadow = false
+            w.level = NSWindow.Level(rawValue: NSWindow.Level.modalPanel.rawValue - 1); w.isReleasedWhenClosed = false
+            w.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
+            return w
+        }()
+        w.setFrame(screen.frame, display: false)
+        w.alphaValue = 0
+        w.orderFrontRegardless()
+        let reduce = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        NSAnimationContext.runAnimationGroup { $0.duration = reduce ? 0 : 0.16; w.animator().alphaValue = 0.38 }
+        window = w
+    }
+    func hide() {
+        guard let w = window, w.isVisible else { return }
+        NSAnimationContext.runAnimationGroup({ $0.duration = 0.12; w.animator().alphaValue = 0 }, completionHandler: { w.orderOut(nil) })
+    }
+}
+
+
+/// The launcher's outline: rounded, or chamfered (cut corners, the Cyberpunk 2077 interface shape).
+struct PanelShape: Shape {
+    var chamfer: Bool
+    var radius: CGFloat
+    func path(in r: CGRect) -> Path {
+        guard chamfer else { return RoundedRectangle(cornerRadius: radius, style: .continuous).path(in: r) }
+        let c = max(radius, 10)  // the cut on the top-left and bottom-right corners; the other two stay square
+        var p = Path()
+        p.move(to: CGPoint(x: r.minX + c, y: r.minY))
+        p.addLine(to: CGPoint(x: r.maxX, y: r.minY))
+        p.addLine(to: CGPoint(x: r.maxX, y: r.maxY - c))
+        p.addLine(to: CGPoint(x: r.maxX - c, y: r.maxY))
+        p.addLine(to: CGPoint(x: r.minX, y: r.maxY))
+        p.addLine(to: CGPoint(x: r.minX, y: r.minY + c))
+        p.closeSubpath()
+        return p
+    }
+}

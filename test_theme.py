@@ -106,7 +106,9 @@ for path in (ROOT / "themes").glob("*.toml"):
     assert float(config["border_width"]) >= 0
     assert config["line_style"] in {"none", "solid", "double", "gradient"}
     rendered_border = nct.fill((ROOT / "templates/bordersrc").read_text(), values, "bordersrc")
-    assert "style=round" in rendered_border and "inactive_color=0x00000000" in rendered_border
+    inactive = re.search(r"inactive_color=0x([0-9a-fA-F]{2})", rendered_border)
+    # unfocused windows: no edge, or only a faint hairline (alpha at most 0x30)
+    assert "style=round" in rendered_border and inactive and int(inactive.group(1), 16) <= 0x30, path.stem
     assert "order=below" in rendered_border and "background_color=0x00000000" in rendered_border
 
 symbol = __import__("json").loads((ROOT / "art/symbols/brand-of-sacrifice.json").read_text())

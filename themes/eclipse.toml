@@ -40,6 +40,7 @@ STRUGGLE"""
 
 # Shape, type and layout (see ECOSYSTEMS.md). Values may name colors as %role%.
 [style]
+l_scrim = "true"
 panel_headers = "rule"  # control panel structure (sketchybarrc): text | rule | space
 panel_status = "top"
 panel_keys = "trailing"
@@ -65,8 +66,8 @@ value_case = "upper"
 app_glyph = ""
 border_style = "round"
 border_width = "3.0"
-border_active = "0xff%cyan%"
-border_inactive = "0x00000000"
+border_active = "0xffb02a2e"   # deep crimson focus edge (not a text colour, so free of the contrast rule)
+border_inactive = "0x24e6e0d6"   # a faint bone hairline so unfocused windows hold their shape on black
 gap_top = "6"
 gap_outer = "14"
 gap_bottom = "50"

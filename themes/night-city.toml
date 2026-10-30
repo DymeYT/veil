@@ -41,6 +41,8 @@ logo = """  ╱╱  NIGHT CITY
 
 # Shape, type and layout (see ECOSYSTEMS.md). Values may name colors as %role%.
 [style]
+l_corner = "chamfer"   # launcher outline: round | chamfer (cut corners)
+l_scrim = "false"   # dim the screen behind the launcher
 panel_headers = "text"  # control panel structure (sketchybarrc): text | rule | space
 panel_status = "top"
 panel_keys = "column"
@@ -56,7 +58,7 @@ font_label = "JetBrainsMono Nerd Font:SemiBold:12.5"
 font_small = "JetBrainsMono Nerd Font:Bold:12.0"
 font_chip = "JetBrainsMono Nerd Font:Bold:12.0"
 chip_style = "outline"
-chip_radius = "5"
+chip_radius = "2"
 ws_style = "pill"
 ws_radius = "5"
 ws_colors = "%red% %green% %blue% %yellow% %magenta%"
@@ -92,7 +94,7 @@ ff_logo_color = "cyan"
 ff_layout = "title separator os host kernel uptime memory battery"  # fastfetch readings, order and swatch (veil-theme fastfetch_modules)
 btop_graph = "braille"
 btop_rounded = "true"
-ui_font = "JetBrainsMono Nerd Font"
+ui_font = "Rajdhani"   # the angular face of Cyberpunk 2077's interface
 ui_mono = "JetBrainsMono Nerd Font"
 l_radius = "16"
 l_row = "bar"
