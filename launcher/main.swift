@@ -928,7 +928,7 @@ struct Row: View {
                 .clipShape(shape)
         default:
             shape.fill(p["selection"].opacity(0.85))
-                .overlay(alignment: .leading) { RoundedRectangle(cornerRadius: 2).fill(p["magenta"]).frame(width: 3, height: 22).offset(x: -1) }
+                .overlay(alignment: .leading) { RoundedRectangle(cornerRadius: 2).fill(p["cyan"]).frame(width: 3, height: 22).offset(x: -1) }
         }
     }
 }
@@ -1496,8 +1496,8 @@ struct LauncherView: View {
 
     func result(_ item: Item, index: Int, p: Palette) -> some View {
         HStack(spacing: 0) {
-            if layout == "ink" || layout == "transit" {
-                Text(layout == "ink" ? String(format: "%02d", index + 1) : String(index + 1))
+            if layout == "transit" {
+                Text(String(index + 1))
                     .font(code(layout == "ink" ? 11 : 15, "Bold"))
                     .foregroundStyle(layout == "transit" ? p["bg_dark"] : p["comment"])
                     .frame(width: 28, height: 28)
@@ -2057,7 +2057,7 @@ if let i = CommandLine.arguments.firstIndex(of: "--render-osd"), CommandLine.arg
     let a = CommandLine.arguments
     let m = OSDModel(); m.kind = .volume; m.level = 0.55; m.title = "Volume"; m.visible = true
     MainActor.assumeIsolated {
-        let r = ImageRenderer(content: OSDView(m: m, p: Palette.load(a[i + 1])).frame(width: 300, height: 64).background(Color(white: 0.25)))
+        let r = ImageRenderer(content: OSDView(m: m, p: Palette.load(a[i + 1])).frame(width: 340, height: 76).background(Color(white: 0.25)))
         r.scale = 2
         guard let img = r.nsImage, let tiff = img.tiffRepresentation, let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) else { exit(1) }
         try? png.write(to: URL(fileURLWithPath: a[i + 2]))

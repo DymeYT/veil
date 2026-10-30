@@ -7,7 +7,7 @@ adjust-cell-height = @@term_cell@@
 # @@title@@
 background = 090d17
 foreground = d9f4ff
-cursor-color = fcee09
+cursor-color = 00e5ff
 selection-background = 26385a
 selection-foreground = ffffff
 palette = 0=#151b2d

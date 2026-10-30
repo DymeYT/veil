@@ -160,7 +160,7 @@ row() {  # ID LABEL COMMAND [real shortcut, or a mark; rows without one show a q
       ${5:+label.color=$5} click_script="sketchybar --set city popup.drawing=off; $3"
   else
     sketchybar --add item "menu.$1" popup.city --set "menu.$1" icon="${4:-—}" icon.font="$F_SMALL" icon.width=76 icon.align=left \
-      icon.color="${5:-0xff76849c}" label="$2" click_script="sketchybar --set city popup.drawing=off; $3"
+      icon.color="${5:-0xff8794ad}" label="$2" click_script="sketchybar --set city popup.drawing=off; $3"
   fi
 }
 status_line() {

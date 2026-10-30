@@ -39,6 +39,7 @@ CORPORATE NETWORK"""
 
 # Shape, type and layout (see ECOSYSTEMS.md). Values may name colors as %role%.
 [style]
+term_cursor = "block"   # Arasaka keeps the solid block (Night City moved to a thin bar)
 l_opacity = "0.96"
 l_width = "1040"   # a wide command band rather than Night City's list-and-panel
 l_place = "center"

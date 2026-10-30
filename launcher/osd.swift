@@ -28,7 +28,7 @@ final class OSD {
     func show(_ kind: OSDKind, level: Double?, title: String, detail: String = "") {
         let p = palette()
         guard let screen = NSScreen.screens.first(where: { $0.safeAreaInsets.top > 0 }) ?? NSScreen.main else { return }
-        let size = NSSize(width: 300, height: 64)
+        let size = NSSize(width: 340, height: 76)
         let barBelowNotch: CGFloat = p.s("bar_position", "top") == "top" ? 38 : 0
         let top = screen.frame.maxY - max(screen.safeAreaInsets.top, 24) - barBelowNotch - 10
         let frame = NSRect(x: screen.frame.midX - size.width / 2, y: top - size.height, width: size.width, height: size.height)

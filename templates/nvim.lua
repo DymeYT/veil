@@ -43,7 +43,7 @@ return {
         -- quiet code spans: tinted text, no slab background
         hl["@markup.raw.markdown_inline"] = { fg = c.cyan }
         hl["@markup.raw"] = { fg = c.cyan }
-        hl["@markup.heading.1.markdown"] = { fg = c.yellow, bold = true }
+        hl["@markup.heading.1.markdown"] = { fg = c.fg, bold = true }  -- one accent per line: the cursor carries it
         hl["@markup.heading.2.markdown"] = { fg = c.cyan, bold = true }
         hl["@markup.heading.3.markdown"] = { fg = c.magenta, bold = true }
         hl.RenderMarkdownCode = { bg = c.bg_dark }
