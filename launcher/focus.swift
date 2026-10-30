@@ -1,6 +1,7 @@
 // Focus pulse: when focus moves to another window, a ring in the theme's accent blooms around it and fades,
 // handing over to the steady border. Event-driven (app activation + the frontmost app's focused-window change),
-// never polled; off under Reduce Motion and `veil quiet`.
+// never polled; off under Reduce Motion and `veil quiet`. The same events keep exactly one terminal opaque:
+// terminals run slightly translucent (term_opacity) and the focused Ghostty window is toggled solid.
 import AppKit
 import SwiftUI
 import ApplicationServices
@@ -27,13 +28,14 @@ final class FocusPulse {
     private var panel: NSPanel?
     private var observer: AXObserver?
     private var pending: DispatchWorkItem?
-    private var lastFrame = CGRect.zero
+    private var opaqueTerminal: String?  // the Ghostty window currently toggled solid
+    private let terminalQueue = DispatchQueue(label: "app.veil.search.terminal-opacity")
 
     func start() {
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] n in
             guard let app = n.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
             self?.watch(app.processIdentifier)
-            self?.pulse()
+            self?.focusChanged()
         }
         if let app = NSWorkspace.shared.frontmostApplication { watch(app.processIdentifier) }
     }
@@ -45,13 +47,53 @@ final class FocusPulse {
         var created: AXObserver?
         let callback: AXObserverCallback = { _, _, _, refcon in
             guard let refcon else { return }
-            Unmanaged<FocusPulse>.fromOpaque(refcon).takeUnretainedValue().pulse()
+            Unmanaged<FocusPulse>.fromOpaque(refcon).takeUnretainedValue().focusChanged()
         }
         guard AXObserverCreate(pid, callback, &created) == .success, let o = created else { return }
         AXObserverAddNotification(o, AXUIElementCreateApplication(pid), kAXFocusedWindowChangedNotification as CFString,
                                   Unmanaged.passUnretained(self).toOpaque())
         CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(o), .defaultMode)
         observer = o
+    }
+
+    func focusChanged() {
+        syncTerminalOpacity()
+        pulse()
+    }
+
+    // a Ghostty config reload keeps a toggled window solid, so theme switches need no resync
+
+    private func syncTerminalOpacity() {
+        guard NSRunningApplication.runningApplications(withBundleIdentifier: "com.mitchellh.ghostty").first != nil else { return }
+        let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.mitchellh.ghostty"
+        terminalQueue.async { [weak self] in
+            guard let self, front || self.opaqueTerminal != nil else { return }
+            // toggle_background_opacity flips one window between solid and its configured translucency
+            let script = """
+            on run argv
+              set prev to item 2 of argv
+              tell application "Ghostty"
+                set fid to ""
+                if item 1 of argv is "1" then set fid to (id of front window) as text
+                if prev is not "" and prev is not fid then
+                  try
+                    perform action "toggle_background_opacity" on focused terminal of selected tab of (window id prev)
+                  end try
+                end if
+                if fid is not "" and fid is not prev then perform action "toggle_background_opacity" on focused terminal of selected tab of front window
+                return fid
+              end tell
+            end run
+            """
+            let task = Process(), out = Pipe()
+            task.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+            task.arguments = ["-e", script, front ? "1" : "0", self.opaqueTerminal ?? ""]
+            task.standardOutput = out; task.standardError = FileHandle.nullDevice
+            guard (try? task.run()) != nil else { return }
+            task.waitUntilExit()
+            let id = String(data: out.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if task.terminationStatus == 0 { self.opaqueTerminal = id.isEmpty ? nil : id }
+        }
     }
 
     func pulse() {
