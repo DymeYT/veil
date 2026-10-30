@@ -39,6 +39,7 @@ CORPORATE NETWORK"""
 
 # Shape, type and layout (see ECOSYSTEMS.md). Values may name colors as %role%.
 [style]
+l_opacity = "0.96"
 l_width = "1040"   # a wide command band rather than Night City's list-and-panel
 l_place = "center"
 panel_headers = "text"  # control panel structure (sketchybarrc): text | rule | space
