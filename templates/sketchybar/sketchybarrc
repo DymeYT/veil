@@ -209,8 +209,6 @@ row quit 'Quit window manager…' "osascript -e 'display dialog \"Quit the windo
 case "$THEME" in
   night-city)  # sharp corners and roomier rows, matching the chamfered launcher; a neon edge like the focus glow
     sketchybar --set city popup.height=30 popup.background.corner_radius=2 popup.background.border_color=0x5900e5ff
-    # readings: labels recede, values carry the brightness
-    for i in cpu memory temp battery; do sketchybar --set $i icon.color=0x9900e5ff 2>/dev/null; done
     ;;
   factorio)
     sketchybar --set city popup.height=28 popup.background.border_width=2
