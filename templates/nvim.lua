@@ -103,6 +103,8 @@ return {
         opts.options.component_separators = l.comp or none
         if l.icons == false then opts.options.icons_enabled = false end
         opts.sections = l.sections
+      elseif opts.sections and opts.sections.lualine_z then
+        opts.sections.lualine_z = { clock }  -- LazyVim's own clock is 24-hour
       end
     end },
 }
