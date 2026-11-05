@@ -57,6 +57,7 @@ final class FocusPulse {
     }
 
     func focusChanged() {
+        guard !veilIsOff else { return }
         syncTerminalOpacity()
         pulse()
     }
@@ -120,7 +121,13 @@ final class FocusPulse {
         guard let posV, let sizeV, CFGetTypeID(posV) == AXValueGetTypeID(), CFGetTypeID(sizeV) == AXValueGetTypeID(),
               AXValueGetValue(posV as! AXValue, .cgPoint, &pos), AXValueGetValue(sizeV as! AXValue, .cgSize, &size),
               size.width > 120, size.height > 80, let primary = NSScreen.screens.first else { return nil }
-        return CGRect(x: pos.x, y: primary.frame.maxY - pos.y - size.height, width: size.width, height: size.height)
+        let frame = CGRect(x: pos.x, y: primary.frame.maxY - pos.y - size.height, width: size.width, height: size.height)
+        // Finder's desktop and true fullscreen windows fill the display — a pulse there is a full-screen ring.
+        if let screen = NSScreen.screens.first(where: { $0.frame.intersects(frame) }) ?? NSScreen.main {
+            let area = frame.width * frame.height, screenArea = screen.frame.width * screen.frame.height
+            if screenArea > 0, area / screenArea > 0.92 { return nil }
+        }
+        return frame
     }
 
     private func bloom() {

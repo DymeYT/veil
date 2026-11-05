@@ -2,7 +2,7 @@
 """veil-theme: render the Veil templates in a palette and deploy them.
 
 Templates are written in the night-city palette; a theme maps each palette role to a new hex.
-Usage: veil-theme list | status | diff THEME | apply THEME | restore
+Usage: veil-theme list | status | diff THEME | apply THEME|stock | restore   (stock = Veil off; see `veil on`)
 """
 import difflib, json, os, plistlib, re, shutil, subprocess, sys, tempfile, time, tomllib
 from pathlib import Path
@@ -354,8 +354,10 @@ def main(argv):
     cmd, arg = (argv + [None, None])[:2]
     if cmd == "list":
         cur = (ROOT / "current").read_text().strip() if (ROOT / "current").exists() else BASE
+        off = (GEN / "off").exists()
         for p in sorted(THEMES.glob("*.toml")):
-            print(("* " if p.stem == cur else "  ") + load_theme(p.stem)["name"])
+            print(("* " if p.stem == cur and not off else "  ") + load_theme(p.stem)["name"])
+        print(("* " if off else "  ") + "Stock macOS (Veil off)")
     elif cmd == "status":
         cur = (ROOT / "current").read_text().strip() if (ROOT / "current").exists() else BASE
         _, changes = plan(cur)
@@ -373,6 +375,12 @@ def main(argv):
             sys.stdout.writelines(difflib.unified_diff((old or "").splitlines(True), new.splitlines(True), f"{live} (now)", f"{live} ({arg})"))
         print(f"{len(changes)} file(s) would change")
     elif cmd == "apply" and arg:
+        # "stock" is the off switch, not a palette; any real theme while off turns Veil back on first
+        veil = str(HOME / ".local/bin/veil")
+        if arg == "stock":
+            os.execv(veil, [veil, "off"])
+        if (GEN / "off").exists():
+            os.execv(veil, [veil, "on", arg])
         apply(arg)
     elif cmd == "restore":
         backups = sorted(p for p in BACKUPS.iterdir() if (p / "manifest.json").exists()) if BACKUPS.exists() else []

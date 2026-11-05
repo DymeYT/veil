@@ -269,7 +269,7 @@ func ncItems(_ ws: [String]) -> [Item] {
         items.append(Item(kind: .nc, title: "Workspace \(i + 1) · \(name)", subtitle: "Switch workspace  ⌥\(i + 1)", symbol: "square.grid.2x2",
                           action: .run([home + "/.local/bin/rift-cli", "execute", "workspace", "switch", "\(i)"]), extra: "\(i)"))
     }
-    let commands = [("Quiet mode on / off", "toggle-quiet", "leaf"), ("Pause / resume tiling", "pause", "pause.circle"),
+    let commands = [("Turn Veil off (stock macOS)", "off", "power"), ("Quiet mode on / off", "toggle-quiet", "leaf"), ("Pause / resume tiling", "pause", "pause.circle"),
                     ("Reload bar and window manager", "reload", "arrow.clockwise"), ("Recover windows", "recover", "lifepreserver"),
                     ("System monitor (btop)", "btop", "waveform.path.ecg"), ("Self-test", "selftest-notify", "checkmark.seal")]
     for (title, cmd, sym) in commands {
@@ -284,6 +284,8 @@ func ncItems(_ ws: [String]) -> [Item] {
         items.append(Item(kind: .nc, title: "Theme: \(name)", subtitle: id == current ? "Current theme" : "Apply theme", symbol: "paintpalette",
                           action: .run([home + "/.local/bin/veil-theme", "apply", id]), extra: id))
     }
+    items.append(Item(kind: .nc, title: "Theme: Stock macOS", subtitle: "Turn Veil off · ⌃⌥⌘V brings it back", symbol: "power",
+                      action: .run([nc, "off"]), extra: "stock"))
     return items
 }
 
@@ -1636,6 +1638,8 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var panel: Panel!
     var hotKey: EventHotKeyRef?
     var lastToggle = Date.distantPast
+    /// Ignore resignKey briefly after show so the panel is not dismissed by the open itself.
+    var ignoreResignUntil = Date.distantPast
 
     func applicationDidFinishLaunching(_ n: Notification) {
         if Model.migrateRankingPrivacy(.standard) { model.usage = [:]; model.history = []; model.pins = [] }
@@ -1713,7 +1717,16 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
                     self.model.query = (p as NSString).abbreviatingWithTildeInPath + "/"; return nil
                 }
                 self.model.move(e.modifierFlags.contains(.shift) ? -1 : 1); return nil
-            case kVK_Return, kVK_ANSI_KeypadEnter: self.model.activate(reveal: cmd, paste: e.modifierFlags.contains(.option)); return nil
+            case kVK_Return, kVK_ANSI_KeypadEnter:
+                // Dismiss on Enter: run the selection when there is one, otherwise just close.
+                // Closing here (not on the launched app's activation) is what the user feels as "Enter".
+                let i = self.model.selected
+                if self.model.items.indices.contains(i), !self.model.items[i].isInformational {
+                    self.model.activate(reveal: cmd, paste: e.modifierFlags.contains(.option))
+                } else {
+                    self.hide()
+                }
+                return nil
             case kVK_ANSI_N where ctrl: self.model.move(1); return nil
             case kVK_ANSI_P where ctrl: self.model.move(-1); return nil
             case kVK_ANSI_O where ctrl: self.model.activate(reveal: true); return nil
@@ -1727,13 +1740,33 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
 
         var spec = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
-        InstallEventHandler(GetApplicationEventTarget(), { _, _, _ in
-            DispatchQueue.main.async { (NSApp.delegate as? App)?.toggle() }
+        InstallEventHandler(GetApplicationEventTarget(), { _, event, _ in
+            var hk = EventHotKeyID()
+            GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID), nil,
+                              MemoryLayout<EventHotKeyID>.size, nil, &hk)
+            DispatchQueue.main.async { if hk.id == 2 { VeilMode.toggle() } else { (NSApp.delegate as? App)?.toggle() } }
             return noErr
         }, 1, &spec, nil, nil)
-        let id = EventHotKeyID(signature: OSType(0x4E43_5348), id: 1)  // "NCSH"
-        let status = RegisterEventHotKey(UInt32(kVK_Space), UInt32(cmdKey), id, GetApplicationEventTarget(), 0, &hotKey)
-        if status != noErr { NSLog("veil-search: could not register ⌘Space (status \(status)); is Spotlight still using it?") }
+        // ⌃⌥⌘V turns Veil on or off; it stays registered while Veil is off, so the way back is always there
+        var toggleKey: EventHotKeyRef?
+        RegisterEventHotKey(UInt32(kVK_ANSI_V), UInt32(cmdKey | optionKey | controlKey), EventHotKeyID(signature: OSType(0x4E43_5348), id: 2),
+                            GetApplicationEventTarget(), 0, &toggleKey)
+        if !veilIsOff { registerSearchKey() }
+        // veil off / on: step aside or come back
+        DistributedNotificationCenter.default().addObserver(forName: Notification.Name("app.veil.search.mode"), object: nil, queue: .main) { [weak self] n in
+            guard let self else { return }
+            if (n.object as? String) == "off" {
+                if let k = self.hotKey { UnregisterEventHotKey(k); self.hotKey = nil }
+                self.hide()
+                self.band.reload(Palette.load())
+                // Rift has stopped by now; give its last frame writes a moment before reading positions
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { VeilMode.unparkWindows() }
+            } else {
+                // Spotlight lets go of ⌘Space a beat after its shortcut is switched off
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { self.registerSearchKey() }
+                self.band.reload(Palette.load())
+            }
+        }
         model.refresh()
         // veil launch --query "x" (and screenshots/tests) open the panel with a query
         DistributedNotificationCenter.default().addObserver(forName: Notification.Name("app.veil.search.show"), object: nil, queue: .main) { [weak self] n in
@@ -1908,6 +1941,8 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         panel.setFrameTopLeftPoint(NSPoint(x: f.midX - panel.frame.width / 2, y: top))
         model.shown = false
+        // Opening can briefly resign key (scrim / first-responder shuffle); do not treat that as dismiss.
+        ignoreResignUntil = Date().addingTimeInterval(0.35)
         Scrim.shared.show(on: screen, enabled: p.flag("scrim"))
         panel.makeKeyAndOrderFront(nil)
         DispatchQueue.main.async {
@@ -1954,7 +1989,17 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         model.mdQuery?.stop()
     }
 
-    func windowDidResignKey(_ n: Notification) { hide() }
+    func registerSearchKey() {
+        guard hotKey == nil else { return }
+        let id = EventHotKeyID(signature: OSType(0x4E43_5348), id: 1)  // "NCSH"
+        let status = RegisterEventHotKey(UInt32(kVK_Space), UInt32(cmdKey), id, GetApplicationEventTarget(), 0, &hotKey)
+        if status != noErr { NSLog("veil-search: could not register ⌘Space (status \(status)); is Spotlight still using it?") }
+    }
+
+    func windowDidResignKey(_ n: Notification) {
+        guard Date() >= ignoreResignUntil else { return }
+        hide()
+    }
 }
 
 extension NSView {
@@ -2086,7 +2131,7 @@ app.run()
 final class NotchBand {
     var window: NSWindow?
     func reload(_ p: Palette) {
-        guard p.flag("notch_band"), let s = NSScreen.screens.first(where: { $0.safeAreaInsets.top > 0 }) else {
+        guard !veilIsOff, p.flag("notch_band"), let s = NSScreen.screens.first(where: { $0.safeAreaInsets.top > 0 }) else {
             window?.orderOut(nil); window = nil; return
         }
         let h = s.safeAreaInsets.top, fade: CGFloat = 26

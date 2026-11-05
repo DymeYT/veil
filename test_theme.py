@@ -110,6 +110,7 @@ for path in (ROOT / "themes").glob("*.toml"):
     # unfocused windows: no edge, or only a faint hairline (alpha at most 0x30)
     assert "style=round" in rendered_border and inactive and int(inactive.group(1), 16) <= 0x30, path.stem
     assert "order=below" in rendered_border and "background_color=0x00000000" in rendered_border
+    assert 'blacklist="Veil Search"' in rendered_border, path.stem
 
 symbol = __import__("json").loads((ROOT / "art/symbols/brand-of-sacrifice.json").read_text())
 assert symbol["viewBox"] == [200, 320] and len(symbol["contours"]) == 3

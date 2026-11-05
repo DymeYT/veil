@@ -32,6 +32,7 @@ final class OSD {
     }
 
     func show(_ kind: OSDKind, level: Double?, title: String, detail: String = "") {
+        guard !veilIsOff else { return }  // stock macOS shows its own HUDs
         let p = palette()
         guard let screen = NSScreen.screens.first(where: { $0.safeAreaInsets.top > 0 }) ?? NSScreen.main else { return }
         // The overlay grows out of the notch, into the black band every theme keeps around it: never over windows.
@@ -195,7 +196,8 @@ final class MediaKeys {
                 if let t = MediaKeys.shared.tap { CGEvent.tapEnable(tap: t, enable: true) }
                 return Unmanaged.passUnretained(event)
             }
-            guard let ns = NSEvent(cgEvent: event), ns.subtype.rawValue == 8 else { return Unmanaged.passUnretained(event) }
+            // Veil off: volume and brightness keys go straight to macOS
+            guard !veilIsOff, let ns = NSEvent(cgEvent: event), ns.subtype.rawValue == 8 else { return Unmanaged.passUnretained(event) }
             let key = (ns.data1 & 0xFFFF0000) >> 16, down = ((ns.data1 & 0xFF00) >> 8) == 0xA
             let fine = ns.modifierFlags.contains(.option) && ns.modifierFlags.contains(.shift)
             // 0/1 sound up/down, 2/3 brightness up/down (NX_KEYTYPE_*)

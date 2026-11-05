@@ -1,6 +1,23 @@
 #!/bin/bash
 set -e
 export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+notify() {  # tell Veil Search the mode changed
+  osascript -l JavaScript -e "ObjC.import('Foundation'); \$.NSDistributedNotificationCenter.defaultCenter.postNotificationNameObjectUserInfoDeliverImmediately('app.veil.search.mode', '$1', \$(), true)" >/dev/null 2>&1 || true
+}
+spotlight_key() {  # true: Spotlight owns ⌘Space (symbolic hot key 64); false: Veil Search does
+  local f; f=$(mktemp)
+  defaults export com.apple.symbolichotkeys "$f" && plutil -replace AppleSymbolicHotKeys.64.enabled -bool "$1" "$f" \
+    && defaults import com.apple.symbolichotkeys "$f"
+  rm -f "$f"
+  /System/Library/PrivateFrameworks/SystemAdministration.framework/Resources/activateSettings -u >/dev/null 2>&1 || true
+}
+menubar() {  # true: auto-hide (Veil's bar stands in); false: macOS menu bar always shown
+  osascript -e "tell application \"System Events\" to tell dock preferences to set autohide menu bar to $1" >/dev/null 2>&1 \
+    || defaults write NSGlobalDomain _HIHideMenuBar -bool "$1"
+}
+ghostty_reload() {
+  osascript -e 'if application "Ghostty" is running then tell application "Ghostty" to perform action "reload_config" on focused terminal of selected tab of front window' >/dev/null 2>&1 || true
+}
 case "${1:-help}" in
  # quiet mode is kept in a flag file, so theme changes, reloads and reboots respect it (veil-theme reads it)
  quiet)
@@ -16,6 +33,42 @@ case "${1:-help}" in
   ;;
  toggle-quiet)
   if [ -f "$HOME/.config/veil/generated/quiet" ]; then "$0" normal; else "$0" quiet; fi ;;
+ # Stock macOS: everything Veil changes steps aside (tiling, bar, borders, overlays, wallpaper, accents, Ghostty,
+ # menu bar, ⌘Space); the flag file keeps it off across reboots. `veil on [THEME]` brings it back; ⌃⌥⌘V toggles.
+ off)
+  V="$HOME/.config/veil"; O="$V/backups/original"
+  [ -f "$V/generated/off" ] && { echo "Veil is already off (veil on)"; exit 0; }
+  theme=$(cat "$V/current" 2>/dev/null || echo night-city)
+  mb=$(defaults read NSGlobalDomain _HIHideMenuBar 2>/dev/null || echo 0)
+  printf 'theme=%s\nmenubar=%s\n' "$theme" "$mb" > "$V/generated/off"
+  rift service stop >/dev/null 2>&1 || true
+  brew services stop sketchybar >/dev/null 2>&1 || true; brew services stop borders >/dev/null 2>&1 || true
+  # Veil Search releases ⌘Space, hides its band and overlays, and brings back windows Rift parked off-screen
+  notify off
+  [ -f "$O/wallpaper.json" ] && [ -x "$V/bin/veil-wallpaper" ] && "$V/bin/veil-baseline" restore-wallpaper --wallpaper-helper "$V/bin/veil-wallpaper" >/dev/null 2>&1 || true
+  if [ -f "$O/appearance.json" ]; then
+   defaults write -g AppleAccentColor -int "$(jq -r .AppleAccentColor "$O/appearance.json")"
+   defaults write -g AppleHighlightColor "$(jq -r .AppleHighlightColor "$O/appearance.json")"
+  fi
+  defaults delete -g com.apple.sound.beep.sound 2>/dev/null || true
+  g="$HOME/Library/Application Support/com.mitchellh.ghostty/config.ghostty"
+  [ -f "$O/ghostty.config.ghostty" ] && cp "$O/ghostty.config.ghostty" "$g" && ghostty_reload
+  menubar false
+  spotlight_key true
+  echo "Veil is off. Turn it back on with: veil on (or ⌃⌥⌘V)" ;;
+ on)
+  V="$HOME/.config/veil"
+  [ -f "$V/generated/off" ] || { [ -n "${2:-}" ] && exec veil-theme apply "$2"; echo "Veil is already on"; exit 0; }
+  theme=${2:-$(sed -n 's/^theme=//p' "$V/generated/off")}; mb=$(sed -n 's/^menubar=//p' "$V/generated/off")
+  rm -f "$V/generated/off"
+  spotlight_key false
+  notify on   # Veil Search takes ⌘Space back once Spotlight has let go
+  [ "$mb" = 1 ] && menubar true
+  brew services start sketchybar >/dev/null 2>&1 || true; brew services start borders >/dev/null 2>&1 || true
+  rift service start >/dev/null 2>&1 || true
+  # the theme puts back wallpaper, accents, Ghostty and every config
+  veil-theme apply "${theme:-night-city}" ;;
+ toggle) if [ -f "$HOME/.config/veil/generated/off" ]; then "$0" on; else "$0" off; fi ;;
  pause) rift-cli execute space toggle-activated ;;
  reload) rift-cli execute config reload; sketchybar --reload ;;
  # recover brings back everything selftest checks; `start` re-enables Rift if it was quit
@@ -44,6 +97,7 @@ case "${1:-help}" in
   sketchybar --query bar
   ;;
  selftest)
+  [ -f "$HOME/.config/veil/generated/off" ] && { echo "Veil is off (stock macOS); nothing to check. Turn it on with: veil on"; exit 0; }
   set +e; fail=0
   check() { if eval "$2" >/dev/null 2>&1; then echo "PASS  $1"; else echo "FAIL  $1"; fail=1; fi; }
   for p in rift sketchybar borders; do check "$p running" "pgrep -x $p"; done
@@ -61,5 +115,5 @@ case "${1:-help}" in
   out=$("$0" selftest 2>&1) || true; n=$(grep -c '^FAIL' <<<"$out" || true)
   if [ "$n" = 0 ]; then msg="All checks passed"; else msg="$n failed: $(grep '^FAIL' <<<"$out" | cut -c7- | paste -sd, -)"; fi
   osascript -e "display notification \"$msg\" with title \"Veil self-test\"" ;;
- *) printf '%s\n' 'Veil: veil quiet | normal | toggle-quiet | pause | reload | recover | quit | keys | launch | term | btop | status | selftest' ;;
+ *) printf '%s\n' 'Veil: veil off | on [THEME] | toggle | quiet | normal | toggle-quiet | pause | reload | recover | quit | keys | launch | term | btop | status | selftest' ;;
 esac
