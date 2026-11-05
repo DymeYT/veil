@@ -209,7 +209,7 @@ for t in (ROOT / "themes").glob("*.toml"):
 with tempfile.TemporaryDirectory() as home:
     env = dict(os.environ, HOME=home, VEIL_ROOT=home + "/nc", VEIL_NO_RELOAD="1")
     subprocess.run(["cp", "-R", str(ROOT), home + "/nc"], check=True)
-    subprocess.run(["rm", "-rf", home + "/nc/backups", home + "/nc/current"], check=True)
+    subprocess.run(["rm", "-rf", home + "/nc/backups", home + "/nc/current", home + "/nc/generated/off"], check=True)  # an off Veil would hand apply to `veil on`
     cursor = Path(home, "Library/Application Support/Cursor/User/settings.json")
     cursor.parent.mkdir(parents=True)
     cursor.write_text('{"editor.fontSize": 13, "workbench.colorCustomizations": {"editorError.foreground": "#aa0000"}}\n')
