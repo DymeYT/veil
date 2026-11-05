@@ -33,17 +33,17 @@ case "${1:-help}" in
   ;;
  toggle-quiet)
   if [ -f "$HOME/.config/veil/generated/quiet" ]; then "$0" normal; else "$0" quiet; fi ;;
- # Stock macOS: everything Veil changes steps aside (tiling, bar, borders, overlays, wallpaper, accents, Ghostty,
- # menu bar, ⌘Space); the flag file keeps it off across reboots. `veil on [THEME]` brings it back; ⌃⌥⌘V toggles.
+ # Stock look: everything Veil changes steps aside except Rift, which keeps tiling and its keys (bar, borders,
+ # overlays, wallpaper, accents, Ghostty, menu bar and ⌘Space go back to macOS); the flag file survives reboots.
+ # `veil on [THEME]` brings it back; ⌃⌥⌘V toggles.
  off)
   V="$HOME/.config/veil"; O="$V/backups/original"
   [ -f "$V/generated/off" ] && { echo "Veil is already off (veil on)"; exit 0; }
   theme=$(cat "$V/current" 2>/dev/null || echo night-city)
   mb=$(defaults read NSGlobalDomain _HIHideMenuBar 2>/dev/null || echo 0)
   printf 'theme=%s\nmenubar=%s\n' "$theme" "$mb" > "$V/generated/off"
-  rift service stop >/dev/null 2>&1 || true
   brew services stop sketchybar >/dev/null 2>&1 || true; brew services stop borders >/dev/null 2>&1 || true
-  # Veil Search releases ⌘Space, hides its band and overlays, and brings back windows Rift parked off-screen
+  # Veil Search releases ⌘Space and hides its band and overlays
   notify off
   [ -f "$O/wallpaper.json" ] && [ -x "$V/bin/veil-wallpaper" ] && "$V/bin/veil-baseline" restore-wallpaper --wallpaper-helper "$V/bin/veil-wallpaper" >/dev/null 2>&1 || true
   if [ -f "$O/appearance.json" ]; then
@@ -65,7 +65,7 @@ case "${1:-help}" in
   notify on   # Veil Search takes ⌘Space back once Spotlight has let go
   [ "$mb" = 1 ] && menubar true
   brew services start sketchybar >/dev/null 2>&1 || true; brew services start borders >/dev/null 2>&1 || true
-  rift service start >/dev/null 2>&1 || true
+  rift service start >/dev/null 2>&1 || true   # normally already running; covers a Rift that was quit
   # the theme puts back wallpaper, accents, Ghostty and every config
   veil-theme apply "${theme:-night-city}" ;;
  toggle) if [ -f "$HOME/.config/veil/generated/off" ]; then "$0" on; else "$0" off; fi ;;

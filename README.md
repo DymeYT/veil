@@ -41,7 +41,7 @@ spreads its detail across the frame instead of giving the eye one subject to sta
 | Switch theme | control panel, launcher, or `veil-theme apply arasaka` |
 | Undo the last theme change | `veil-theme restore` |
 | Battery saver | `veil quiet` (back: `veil normal`) |
-| Back to stock macOS | `veil off` or ⌃⌥⌘V (back: `veil on`, or ⌃⌥⌘V again); also "Theme: Stock macOS" in Veil Search |
+| Stock look, keep tiling | `veil off` or ⌃⌥⌘V (Rift stays on; bar, borders, overlays, wallpaper and colours go stock; back: `veil on`, or ⌃⌥⌘V again); also "Theme: Stock macOS" in Veil Search |
 | Something looks broken | `veil selftest`, then `veil recover` |
 
 ## How theming works

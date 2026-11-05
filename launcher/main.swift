@@ -1759,8 +1759,6 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 if let k = self.hotKey { UnregisterEventHotKey(k); self.hotKey = nil }
                 self.hide()
                 self.band.reload(Palette.load())
-                // Rift has stopped by now; give its last frame writes a moment before reading positions
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { VeilMode.unparkWindows() }
             } else {
                 // Spotlight lets go of ⌘Space a beat after its shortcut is switched off
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { self.registerSearchKey() }
