@@ -15,6 +15,15 @@ menubar() {  # true: auto-hide (Veil's bar stands in); false: macOS menu bar alw
   osascript -e "tell application \"System Events\" to tell dock preferences to set autohide menu bar to $1" >/dev/null 2>&1 \
     || defaults write NSGlobalDomain _HIHideMenuBar -bool "$1"
 }
+# SketchyBar and borders run as Veil-owned LaunchAgents written once (`veil agents`): `brew services` rewrites
+# its plist on every start/stop, and macOS posts "Background Items Added" for each rewrite. These stay put and
+# only run while generated/off is absent (KeepAlive PathState), so off/on is just stop/start.
+agent() {  # agent ACTION NAME: kill | kick (start or restart)
+  case "$1" in
+   kill) launchctl kill SIGTERM "gui/$(id -u)/app.veil.$2" >/dev/null 2>&1 || true ;;
+   kick) launchctl kickstart -k "gui/$(id -u)/app.veil.$2" >/dev/null 2>&1 || true ;;
+  esac
+}
 ghostty_reload() {
   osascript -e 'if application "Ghostty" is running then tell application "Ghostty" to perform action "reload_config" on focused terminal of selected tab of front window' >/dev/null 2>&1 || true
 }
@@ -42,7 +51,7 @@ case "${1:-help}" in
   theme=$(cat "$V/current" 2>/dev/null || echo night-city)
   mb=$(defaults read NSGlobalDomain _HIHideMenuBar 2>/dev/null || echo 0)
   printf 'theme=%s\nmenubar=%s\n' "$theme" "$mb" > "$V/generated/off"
-  brew services stop sketchybar >/dev/null 2>&1 || true; brew services stop borders >/dev/null 2>&1 || true
+  agent kill sketchybar; agent kill borders   # the flag above keeps launchd from restarting them
   # Veil Search releases ⌘Space and hides its band and overlays
   notify off
   [ -f "$O/wallpaper.json" ] && [ -x "$V/bin/veil-wallpaper" ] && "$V/bin/veil-baseline" restore-wallpaper --wallpaper-helper "$V/bin/veil-wallpaper" >/dev/null 2>&1 || true
@@ -64,17 +73,47 @@ case "${1:-help}" in
   spotlight_key false
   notify on   # Veil Search takes ⌘Space back once Spotlight has let go
   [ "$mb" = 1 ] && menubar true
-  brew services start sketchybar >/dev/null 2>&1 || true; brew services start borders >/dev/null 2>&1 || true
+  agent kick sketchybar; agent kick borders
   rift service start >/dev/null 2>&1 || true   # normally already running; covers a Rift that was quit
   # the theme puts back wallpaper, accents, Ghostty and every config
   veil-theme apply "${theme:-night-city}" ;;
+ # (re)install the SketchyBar and borders LaunchAgents; replaces Homebrew's services for both (run by install.sh)
+ agents)
+  la="$HOME/Library/LaunchAgents"; mkdir -p "$la" /opt/homebrew/var/log/veil 2>/dev/null || true
+  for name in sketchybar borders; do
+   brew services stop "$name" >/dev/null 2>&1 || true   # one-time handover; brew deletes its own plist
+   bin="/opt/homebrew/opt/$name/bin/$name"; plist="$la/app.veil.$name.plist"
+   cat > "$plist.new" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key><string>app.veil.$name</string>
+	<key>ProgramArguments</key><array><string>$bin</string></array>
+	<key>EnvironmentVariables</key><dict>
+		<key>LANG</key><string>en_US.UTF-8</string>
+		<key>PATH</key><string>$HOME/.local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+	</dict>
+	<key>KeepAlive</key><dict>
+		<key>PathState</key><dict><key>$HOME/.config/veil/generated/off</key><false/></dict>
+	</dict>
+	<key>ProcessType</key><string>Interactive</string>
+	<key>StandardErrorPath</key><string>/opt/homebrew/var/log/veil/$name.err.log</string>
+</dict>
+</plist>
+PLIST
+   # only touch the file when it changed: every rewrite is a fresh "Background Items Added" notice
+   if cmp -s "$plist.new" "$plist"; then rm -f "$plist.new"; else mv -f "$plist.new" "$plist"; fi
+   launchctl bootstrap "gui/$(id -u)" "$plist" 2>/dev/null || true
+   [ -f "$HOME/.config/veil/generated/off" ] || agent kick "$name"
+  done ;;
  toggle) if [ -f "$HOME/.config/veil/generated/off" ]; then "$0" on; else "$0" off; fi ;;
  pause) rift-cli execute space toggle-activated ;;
  reload) rift-cli execute config reload; sketchybar --reload ;;
  # recover brings back everything selftest checks; `start` re-enables Rift if it was quit
  recover)
   rift service start 2>/dev/null || true; rift service restart 2>/dev/null || true
-  brew services restart sketchybar >/dev/null; brew services restart borders >/dev/null
+  agent kick sketchybar; agent kick borders
   launchctl kickstart -k "gui/$(id -u)/app.veil.search" 2>/dev/null || true ;;
  quit) rift service stop ;;  # also stops Rift starting at login; `veil recover` turns it back on
  keys)
@@ -102,7 +141,7 @@ case "${1:-help}" in
   check() { if eval "$2" >/dev/null 2>&1; then echo "PASS  $1"; else echo "FAIL  $1"; fail=1; fi; }
   for p in rift sketchybar borders; do check "$p running" "pgrep -x $p"; done
   check "launcher running" "pgrep -xq veil-search"
-  for a in git.acsandmann.rift sh.brew.sketchybar sh.brew.borders app.veil.search; do check "$a starts at login" "launchctl print gui/$(id -u)/$a"; done
+  for a in git.acsandmann.rift app.veil.sketchybar app.veil.borders app.veil.search; do check "$a starts at login" "launchctl print gui/$(id -u)/$a"; done
   check "rift answers queries" "perl -e 'alarm 5; exec @ARGV' rift-cli query workspaces"
   check "bar has all items" "[ \$(sketchybar --query bar | jq '.items|length') -gt 30 ]"
   check "theme files match templates" "veil-theme status | grep -q 'all files match'"

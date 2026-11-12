@@ -120,7 +120,7 @@ def targets():
         ("sketchybar/plugins/mode-event.sh", sb / "plugins/mode-event.sh", "sh", None),
         ("bordersrc", CFG / "borders/bordersrc", "sh",
          # message the running daemon; never let a reload become a second, short-lived daemon
-         ["bash", "-c", f"pgrep -xq borders && exec bash {CFG / 'borders/bordersrc'} || exec /opt/homebrew/bin/brew services restart borders"]),
+         ["bash", "-c", f"pgrep -xq borders && exec bash {CFG / 'borders/bordersrc'} || exec launchctl kickstart -k gui/$(id -u)/app.veil.borders"]),
         ("rift.toml", CFG / "rift/config.toml", "toml", None),  # rift hot-reloads
         ("starship.toml", CFG / "starship.toml", "toml", None),
         ("btop.theme", CFG / "btop/themes/veil.theme", "text", None),

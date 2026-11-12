@@ -75,8 +75,7 @@ PLIST
 pkill -x veil-search 2>/dev/null || true
 launchctl bootout "gui/$(id -u)/app.veil.search" 2>/dev/null || true
 launchctl bootstrap "gui/$(id -u)" "$agent" || { sleep 1; launchctl bootstrap "gui/$(id -u)" "$agent"; }  # bootout can lag
-brew services restart sketchybar
-brew services restart borders
+"$NC/bin/veil" agents   # SketchyBar + borders as Veil LaunchAgents (no Homebrew services: no repeat background-item notices)
 
 line='[ -f ~/.config/veil/generated/shell.zsh ] && source ~/.config/veil/generated/shell.zsh'
 grep -qF "$line" "$HOME/.zshrc" 2>/dev/null || printf '\n# Veil theme colors (fzf, bat)\n%s\n' "$line" >> "$HOME/.zshrc"

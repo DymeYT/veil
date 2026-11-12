@@ -9,8 +9,10 @@ O="$NC/backups/original"
 launchctl bootout "gui/$(id -u)/app.veil.search" 2>/dev/null
 rm -f "$HOME/Library/LaunchAgents/app.veil.search.plist"
 rm -rf "$HOME/Applications/Veil Search.app"
-brew services stop sketchybar
-brew services stop borders
+for name in sketchybar borders; do
+  launchctl bootout "gui/$(id -u)/app.veil.$name" 2>/dev/null
+  rm -f "$HOME/Library/LaunchAgents/app.veil.$name.plist"
+done
 
 g="$HOME/Library/Application Support/com.mitchellh.ghostty/config.ghostty"
 cp "$g" "$g.veil.bak" 2>/dev/null   # keep edits made after install
