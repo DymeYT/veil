@@ -23,6 +23,10 @@ final class GlyphShell: ObservableObject {
     @Published var styleLight = false
     @Published var previewName = "Nothing"
     @Published var toast = ""
+    /// VEI-36 state — logic/UI in vpn.swift / buds.swift
+    @Published var vpnServices: [VPNService] = []
+    @Published var budsInfo = BudsInfo()
+    @Published var noiseMode: BudsInfo.NoiseMode = .off
     private var window: NSWindow?
     private var keyMonitor: Any?
     private var reduceMotion: Bool {
@@ -52,6 +56,8 @@ final class GlyphShell: ObservableObject {
             }
         }
         installKeys()
+        if k == .vpn { refreshVPN() }
+        if k == .buds { refreshBuds() }
     }
 
     func dismiss() {
@@ -102,7 +108,8 @@ final class GlyphShell: ObservableObject {
         refresh()
     }
 
-    private func refresh() {
+    /// Internal for vpn.swift / buds.swift async refresh.
+    func refresh() {
         guard let window, let kind else { return }
         let p = Palette.load()
         window.contentView = NSHostingView(rootView:
@@ -635,34 +642,7 @@ struct GlyphRoot: View {
         shell.toast = "Wallpaper: \(url.deletingPathExtension().lastPathComponent)"
     }
 
-    // MARK: VPN
-
-    var vpn: some View {
-        let clash = FileManager.default.fileExists(atPath: "/Applications/Clash Verge.app")
-            || FileManager.default.fileExists(atPath: NSString("~/Applications/Clash Verge.app").expandingTildeInPath)
-        return ZStack {
-            VStack(alignment: .leading, spacing: 14) {
-                Text("VPN").font(doto(32)).foregroundStyle(fg)
-                Text(clash ? "Clash Verge detected" : "No Clash Verge · macOS VPN stubs").font(mono(10)).foregroundStyle(muted)
-                if clash {
-                    Button("Open Clash Verge") {
-                        NSWorkspace.shared.open(URL(fileURLWithPath: "/Applications/Clash Verge.app"))
-                        shell.dismiss()
-                    }.buttonStyle(GlyphBtn(p: p, filled: true))
-                }
-                Button("Open Network Settings") {
-                    NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Network-Settings.extension")!)
-                    shell.dismiss()
-                }.buttonStyle(GlyphBtn(p: p))
-                Button("Close") { shell.dismiss() }.buttonStyle(GlyphBtn(p: p))
-            }
-            .padding(28)
-            .frame(width: 420)
-            .background(opaquePanel(28))
-            .clipShape(RoundedRectangle(cornerRadius: 28, style: .circular))
-            .compositingGroup()
-        }
-    }
+    // VPN → vpn.swift (VEI-36)
 
     // MARK: Cal
 
@@ -696,36 +676,7 @@ struct GlyphRoot: View {
         }
     }
 
-    // MARK: Buds
-
-    var buds: some View {
-        ZStack {
-            VStack(alignment: .leading, spacing: 14) {
-                Text("BUDS").font(doto(32)).foregroundStyle(fg)
-                Text("Nothing / CMF · stub until BLE bridge").font(mono(10)).foregroundStyle(muted)
-                HStack(spacing: 20) {
-                    bud("L", "—"); bud("R", "—"); bud("CASE", "—")
-                }
-                Text("ANC · Transparency · Off").font(ui(13)).foregroundStyle(muted)
-                Text("Protocol bridge inventable post-SIP; UI ships now.").font(ui(12)).foregroundStyle(muted)
-                Button("Close") { shell.dismiss() }.buttonStyle(GlyphBtn(p: p))
-            }
-            .padding(28)
-            .frame(width: 420)
-            .background(opaquePanel(28))
-            .clipShape(RoundedRectangle(cornerRadius: 28, style: .circular))
-            .compositingGroup()
-        }
-    }
-
-    func bud(_ label: String, _ pct: String) -> some View {
-        VStack {
-            Text(label).font(mono(10)).foregroundStyle(muted)
-            Text(pct).font(doto(28)).foregroundStyle(fg)
-        }
-        .frame(width: 90, height: 90)
-        .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(bg))
-    }
+    // Buds → buds.swift (VEI-36)
 
     // MARK: Shot
 
