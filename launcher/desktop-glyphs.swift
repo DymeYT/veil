@@ -1,8 +1,10 @@
 // Desktop Glyph board: full-desktop snap grid, catalog of tiles, drag + fluent resize.
 // Wallpaper layer; empty chrome click-through. Stable API for unify in-process hosting.
 // VEI-37: remove via AX right-click menu + drag-to-trash (SwiftUI contextMenu never fires — pass-through host).
+// VEI-54: live-display geometry sync, empty→Finder, local CPU/RAM, Glyph-home default spine.
 import AppKit
 import Combine
+import Darwin
 import SwiftUI
 
 /// NSMenu target for AX right-click (board hit-tests nil → SwiftUI menus never open).
@@ -87,15 +89,26 @@ final class DesktopGlyphBoard: ObservableObject {
     let rows = 10
     let gutter: CGFloat = 10
     let marginX: CGFloat = 28
-    /// v5: full-desktop metrics + catalog + per-pin span resize.
-    private let storeVersion = 5
+    /// v6: Glyph-home spine defaults + live geometry / local metrics (VEI-54).
+    private let storeVersion = 6
+
+    /// Board-owned metric readouts so tiles refresh without observing VeilPanelHost.
+    @Published var cpuText = "—"
+    @Published var memText = "—"
+    @Published var gpuText = "—"
+    @Published var batteryText = "—"
+    @Published var netText = "Wi‑Fi"
+    @Published var volumeText = "—"
+    @Published var statusLine = ""
 
     private var window: NSWindow?
     private var host: GlyphBoardHost<AnyView>?
     private var tick: Timer?
+    private var geomTick: Timer?
     private var lastScreenSig = ""
     private var loadedTheme: String?
     private var mouseMonitors: [Any] = []
+    private var screenObserver: NSObjectProtocol?
     private var pendingID: DesktopGlyphID?
     private var pendingResize = false
     private var dragStartScreen: CGPoint = .zero
@@ -103,6 +116,7 @@ final class DesktopGlyphBoard: ObservableObject {
     private var resizeStartSpan: (cols: Int, rows: Int) = (1, 1)
     private let dragThreshold: CGFloat = 4
     private var menuTarget: GlyphCtxMenu?
+    private var lastLocalMetricsFetch = Date.distantPast
     private var themeId: String { Palette.load().s("theme_id", "nothing") }
     private var storePath: String { ncRoot + "/generated/desktop-glyphs-\(themeId).json" }
     private var legacyStorePath: String { ncRoot + "/generated/desktop-glyphs.json" }
@@ -124,12 +138,16 @@ final class DesktopGlyphBoard: ObservableObject {
         guard enabled, !veilIsOff else { stop(); return }
         ensureWindow(force: true)
         installMouseMonitors()
+        installScreenObserver()
         syncTick()
+        syncGeomTick()
         refreshMetaOnly()
     }
 
     func stop() {
         tick?.invalidate(); tick = nil
+        geomTick?.invalidate(); geomTick = nil
+        removeScreenObserver()
         removeMouseMonitors()
         clearInteraction()
         window?.orderOut(nil)
@@ -155,13 +173,45 @@ final class DesktopGlyphBoard: ObservableObject {
         tick?.invalidate(); tick = nil
         guard enabled, !veilIsOff, needsMetaTick else { return }
         let quiet = FileManager.default.fileExists(atPath: ncRoot + "/generated/quiet")
-        let interval: TimeInterval = (reduceMotion || quiet) ? 90 : 60
+        let interval: TimeInterval = (reduceMotion || quiet) ? 90 : 5
         let t = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.refreshMetaOnly() }
+            Task { @MainActor in
+                self?.syncGeometryIfNeeded()
+                self?.refreshMetaOnly()
+            }
         }
-        t.tolerance = interval * 0.25
+        t.tolerance = min(1.0, interval * 0.25)
         RunLoop.main.add(t, forMode: .common)
         tick = t
+    }
+
+    /// Fast geometry heartbeat — catch scaled-display / Space / wake desync without waiting on meta.
+    private func syncGeomTick() {
+        geomTick?.invalidate(); geomTick = nil
+        guard enabled, !veilIsOff else { return }
+        let t = Timer(timeInterval: 1.0, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.syncGeometryIfNeeded() }
+        }
+        t.tolerance = 0.25
+        RunLoop.main.add(t, forMode: .common)
+        geomTick = t
+    }
+
+    private func installScreenObserver() {
+        removeScreenObserver()
+        screenObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification,
+            object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.ensureWindow(force: true) }
+        }
+    }
+
+    private func removeScreenObserver() {
+        if let screenObserver {
+            NotificationCenter.default.removeObserver(screenObserver)
+            self.screenObserver = nil
+        }
     }
 
     func toggleEnabled() {
@@ -344,18 +394,21 @@ final class DesktopGlyphBoard: ObservableObject {
         }
     }
 
-    // MARK: - Balanced default on full-desktop grid
+    // MARK: - Glyph-home default on full-desktop grid (VEI-54)
     //
-    // 16×10 filling the usable frame. Clock ∥ Quick at mirrored margins; compact
-    // system chips centered under the seam — even gutters, balanced L/R weight.
+    // 16×10 usable frame. Large clock plane left; compact metric/Quick spine on the
+    // right — Hyprland Glyph-home rhythm, not sparse center islands.
     private func defaultLayout() -> [DesktopGlyphPin] {
         [
-            DesktopGlyphPin(id: .clock, col: 1, row: 1, pinned: true, colSpan: 2, rowSpan: 2),
-            DesktopGlyphPin(id: .quick, col: 13, row: 1, pinned: true, colSpan: 2, rowSpan: 2),
-            DesktopGlyphPin(id: .cpu, col: 6, row: 4, pinned: true, colSpan: 1, rowSpan: 1),
-            DesktopGlyphPin(id: .mem, col: 7, row: 4, pinned: true, colSpan: 1, rowSpan: 1),
-            DesktopGlyphPin(id: .cava, col: 8, row: 4, pinned: true, colSpan: 1, rowSpan: 1),
-            DesktopGlyphPin(id: .battery, col: 9, row: 4, pinned: true, colSpan: 1, rowSpan: 1),
+            DesktopGlyphPin(id: .clock, col: 1, row: 1, pinned: true, colSpan: 4, rowSpan: 3),
+            DesktopGlyphPin(id: .quick, col: 12, row: 1, pinned: true, colSpan: 3, rowSpan: 2),
+            DesktopGlyphPin(id: .media, col: 12, row: 3, pinned: true, colSpan: 3, rowSpan: 1),
+            DesktopGlyphPin(id: .cpu, col: 12, row: 4, pinned: true, colSpan: 1, rowSpan: 1),
+            DesktopGlyphPin(id: .mem, col: 13, row: 4, pinned: true, colSpan: 1, rowSpan: 1),
+            DesktopGlyphPin(id: .gpu, col: 14, row: 4, pinned: true, colSpan: 1, rowSpan: 1),
+            DesktopGlyphPin(id: .battery, col: 12, row: 5, pinned: true, colSpan: 1, rowSpan: 1),
+            DesktopGlyphPin(id: .cava, col: 13, row: 5, pinned: true, colSpan: 1, rowSpan: 1),
+            DesktopGlyphPin(id: .net, col: 14, row: 5, pinned: true, colSpan: 1, rowSpan: 1),
         ]
     }
 
@@ -474,11 +527,35 @@ final class DesktopGlyphBoard: ObservableObject {
     private func onMouseDown(_ event: NSEvent) {
         guard enabled, !veilIsOff else { return }
         let pt = NSEvent.mouseLocation
-        guard let pin = pinAtScreen(pt) else { pendingID = nil; return }
+        // Always re-assert pass-through — never leave a sticky capturing sheet (VEI-54).
+        window?.ignoresMouseEvents = true
+        guard let pin = pinAtScreen(pt) else {
+            pendingID = nil
+            activateFinderIfDesktopClick(at: pt)
+            return
+        }
         pendingID = pin.id
         pendingResize = inResizeHandle(pt, pin: pin)
         dragStartScreen = pt
         dragArmed = false
+    }
+
+    /// Empty wallpaper click → Finder frontmost when no foreign window owns the point.
+    private func activateFinderIfDesktopClick(at pt: CGPoint) {
+        let num = NSWindow.windowNumber(at: pt, belowWindowWithWindowNumber: 0)
+        if num != 0 {
+            if let win = window, num == win.windowNumber {
+                window?.ignoresMouseEvents = true
+            } else if let info = CGWindowListCopyWindowInfo([.optionIncludingWindow], CGWindowID(num)) as? [[String: Any]],
+                      let owner = info.first?[kCGWindowOwnerName as String] as? String,
+                      owner != "Finder" {
+                return // Real app window under cursor — don't steal.
+            }
+        }
+        DispatchQueue.main.async {
+            NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.finder")
+                .first?.activate(options: [.activateIgnoringOtherApps])
+        }
     }
 
     private func onMouseDragged(_ event: NSEvent) {
@@ -570,10 +647,43 @@ final class DesktopGlyphBoard: ObservableObject {
 
     // MARK: - Window
 
+    /// Live main-display frame in AppKit points (not a stale backing/pixel husk).
+    private func liveScreen() -> NSScreen {
+        let mouse = NSEvent.mouseLocation
+        if let hit = NSScreen.screens.first(where: { $0.frame.contains(mouse) }) { return hit }
+        return NSScreen.main ?? NSScreen.screens[0]
+    }
+
+    private func liveFrame() -> NSRect { liveScreen().frame }
+
+    private func screenSignature(_ frame: NSRect, scale: CGFloat) -> String {
+        String(format: "%.1fx%.1f@%.1f,%.1f#%.2f", frame.width, frame.height, frame.origin.x, frame.origin.y, scale)
+    }
+
+    /// Refit when scaled-display / wake leaves the host at the old 2056×1329 @ (0,-481) husk.
+    private func syncGeometryIfNeeded() {
+        guard enabled, !veilIsOff else { return }
+        let frame = liveFrame()
+        let scale = liveScreen().backingScaleFactor
+        let sig = screenSignature(frame, scale: scale)
+        let winFrame = window?.frame ?? .zero
+        let mismatch = window == nil
+            || abs(winFrame.width - frame.width) > 0.5
+            || abs(winFrame.height - frame.height) > 0.5
+            || abs(winFrame.origin.x - frame.origin.x) > 0.5
+            || abs(winFrame.origin.y - frame.origin.y) > 0.5
+            || sig != lastScreenSig
+        if mismatch {
+            ensureWindow(force: true)
+        } else {
+            window?.ignoresMouseEvents = true
+        }
+    }
+
     private func ensureWindow(force: Bool = false) {
-        let screen = NSScreen.main ?? NSScreen.screens[0]
+        let screen = liveScreen()
         let frame = screen.frame
-        let sig = "\(Int(frame.width))x\(Int(frame.height))@\(Int(frame.origin.x)),\(Int(frame.origin.y))"
+        let sig = screenSignature(frame, scale: screen.backingScaleFactor)
         if window == nil {
             let w = NSPanel(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel],
                             backing: .buffered, defer: false)
@@ -588,11 +698,20 @@ final class DesktopGlyphBoard: ObservableObject {
             w.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenNone]
             window = w
         }
-        // Re-assert every ensure — never leave a sticky capturing layer after rebuild (VEI-42).
+        // Re-assert every ensure — never leave a sticky capturing layer (VEI-42 / VEI-54).
         window?.ignoresMouseEvents = true
-        let screenChanged = sig != lastScreenSig
+        let winFrame = window?.frame ?? .zero
+        let frameDrift = abs(winFrame.width - frame.width) > 0.5
+            || abs(winFrame.height - frame.height) > 0.5
+            || abs(winFrame.origin.x - frame.origin.x) > 0.5
+            || abs(winFrame.origin.y - frame.origin.y) > 0.5
+        let screenChanged = sig != lastScreenSig || frameDrift
         if force || screenChanged {
             window?.setFrame(frame, display: true)
+            // Second pass — some wake/scale transitions ignore the first setFrame.
+            if let w = window, abs(w.frame.width - frame.width) > 0.5 || abs(w.frame.origin.y - frame.origin.y) > 0.5 {
+                w.setFrame(frame, display: true)
+            }
             lastScreenSig = sig
             let root = AnyView(DesktopGlyphCanvas(board: self).frame(width: frame.width, height: frame.height))
             if let host {
@@ -611,7 +730,9 @@ final class DesktopGlyphBoard: ObservableObject {
         loadedTheme = themeId
         ensureWindow(force: true)
         if mouseMonitors.isEmpty { installMouseMonitors() }
+        installScreenObserver()
         syncTick()
+        syncGeomTick()
         refreshMetaOnly()
         objectWillChange.send()
     }
@@ -621,10 +742,128 @@ final class DesktopGlyphBoard: ObservableObject {
         if pins.contains(where: { $0.pinned && $0.id == .media }) {
             VeilPanelHost.shared.ensureMusicMeta(artwork: false)
         }
-        if pins.contains(where: { $0.pinned && [.sys, .cpu, .mem, .gpu, .battery, .net, .volume].contains($0.id) }) {
+        let wantSys = pins.contains(where: { $0.pinned && [.sys, .cpu, .mem, .gpu, .battery, .net, .volume].contains($0.id) })
+        if wantSys {
+            // Keep panel host warm for shared chrome, but board owns tile digits (VEI-54).
             VeilPanelHost.shared.ensureStatusMeta()
+            sampleLocalMetrics(force: false)
         }
     }
+
+    /// Sample CPU/RAM (and friends) for desktop tiles — never leave "—" husks when metrics work.
+    private func sampleLocalMetrics(force: Bool) {
+        if !force, Date().timeIntervalSince(lastLocalMetricsFetch) < 4 { return }
+        lastLocalMetricsFetch = Date()
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let sampled = Self.readSystemMetrics()
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.cpuText = sampled.cpu
+                self.memText = sampled.mem
+                self.gpuText = sampled.gpu
+                self.batteryText = sampled.battery
+                self.volumeText = sampled.volume
+                self.netText = sampled.net
+                self.statusLine = "CPU \(sampled.cpu)  ·  MEM \(sampled.mem)  ·  VOL \(sampled.volume)"
+                // Mirror into panel host so Overview / Control stay consistent when they read shared fields.
+                if sampled.cpu != "—" { VeilPanelHost.shared.cpuText = sampled.cpu }
+                if sampled.mem != "—" { VeilPanelHost.shared.memText = sampled.mem }
+                if sampled.battery != "—" { VeilPanelHost.shared.batteryText = sampled.battery }
+                if sampled.volume != "—" { VeilPanelHost.shared.volumeText = sampled.volume }
+                VeilPanelHost.shared.netText = sampled.net
+                VeilPanelHost.shared.statusLine = self.statusLine
+                self.objectWillChange.send()
+            }
+        }
+    }
+
+    nonisolated private static func readSystemMetrics() -> (cpu: String, mem: String, gpu: String, battery: String, volume: String, net: String) {
+        var cpu = "—", mem = "—", battery = "—", volume = "—", net = "Wi‑Fi"
+        let home = NSHomeDirectory()
+        let metrics = Process()
+        metrics.executableURL = URL(fileURLWithPath: home + "/.local/bin/veil-metrics")
+        metrics.arguments = [home + "/Library/Caches/veil-cpu", "--instant"]
+        let pipe = Pipe()
+        metrics.standardOutput = pipe
+        metrics.standardError = FileHandle.nullDevice
+        if (try? metrics.run()) != nil {
+            let out = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            metrics.waitUntilExit()
+            let bits = out.split(whereSeparator: { $0.isWhitespace }).map(String.init)
+            if bits.count >= 2 {
+                cpu = bits[0] == "?" ? "—" : "\(bits[0])%"
+                mem = bits[1] == "?" ? "—" : "\(bits[1])G"
+            }
+        }
+        if cpu == "—" || mem == "—" {
+            let fallback = hostCPUMemFallback()
+            if cpu == "—" { cpu = fallback.cpu }
+            if mem == "—" { mem = fallback.mem }
+        }
+        let batt = Process()
+        batt.executableURL = URL(fileURLWithPath: "/usr/bin/pmset")
+        batt.arguments = ["-g", "batt"]
+        let bp = Pipe()
+        batt.standardOutput = bp
+        batt.standardError = FileHandle.nullDevice
+        if (try? batt.run()) != nil {
+            let bout = String(data: bp.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+            batt.waitUntilExit()
+            if let match = bout.range(of: #"\d+%"#, options: .regularExpression) {
+                battery = String(bout[match])
+            }
+        }
+        let vp = Process()
+        vp.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        vp.arguments = ["-e", "if output muted of (get volume settings) then return \"MUTE\"",
+                        "-e", "return (output volume of (get volume settings) as text) & \"%\""]
+        let vpPipe = Pipe()
+        vp.standardOutput = vpPipe
+        vp.standardError = FileHandle.nullDevice
+        if (try? vp.run()) != nil {
+            volume = String(data: vpPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? "—"
+            vp.waitUntilExit()
+            if volume.isEmpty { volume = "—" }
+        }
+        return (cpu, mem, "—", battery, volume, net)
+    }
+
+    nonisolated private static func hostCPUMemFallback() -> (cpu: String, mem: String) {
+        var cpu = "—", mem = "—"
+        var size = mach_msg_type_number_t(MemoryLayout<host_cpu_load_info_data_t>.size / MemoryLayout<integer_t>.size)
+        var load = host_cpu_load_info_data_t()
+        let kr = withUnsafeMutablePointer(to: &load) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(size)) {
+                host_statistics(mach_host_self(), HOST_CPU_LOAD_INFO, $0, &size)
+            }
+        }
+        if kr == KERN_SUCCESS {
+            let total = Double(load.cpu_ticks.0 + load.cpu_ticks.1 + load.cpu_ticks.2 + load.cpu_ticks.3)
+            let idle = Double(load.cpu_ticks.2) // CPU_STATE_IDLE
+            if total > 0 {
+                let pct = Int(((total - idle) / total * 100).rounded())
+                cpu = "\(min(100, max(0, pct)))%"
+            }
+        }
+        var pageSize: vm_size_t = 0
+        host_page_size(mach_host_self(), &pageSize)
+        var vm = vm_statistics64_data_t()
+        var vmCount = mach_msg_type_number_t(MemoryLayout<vm_statistics64_data_t>.size / MemoryLayout<integer_t>.size)
+        let vmKr = withUnsafeMutablePointer(to: &vm) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(vmCount)) {
+                host_statistics64(mach_host_self(), HOST_VM_INFO64, $0, &vmCount)
+            }
+        }
+        if vmKr == KERN_SUCCESS, pageSize > 0 {
+            let used = UInt64(vm.active_count + vm.wire_count + vm.compressor_page_count) * UInt64(pageSize)
+            let gib = Double(used) / 1_073_741_824.0
+            mem = String(format: "%.1fG", gib)
+        }
+        return (cpu, mem)
+    }
+
 
     // MARK: - Full-desktop grid math
 
@@ -690,8 +929,8 @@ final class DesktopGlyphBoard: ObservableObject {
     }
 
     func screenFrame(for id: DesktopGlyphID) -> CGRect? {
-        guard let pin = pins.first(where: { $0.id == id && $0.pinned }),
-              let screen = NSScreen.main else { return nil }
+        guard let pin = pins.first(where: { $0.id == id && $0.pinned }) else { return nil }
+        let screen = liveScreen()
         let m = metrics(in: screen.frame.size)
         let local = frame(for: pin, metrics: m)
         return CGRect(x: screen.frame.minX + local.minX,
@@ -844,12 +1083,12 @@ struct DesktopGlyphCanvas: View {
         case .quick: quickWidget
         case .cava: cavaWidget
         case .media: mediaWidget
-        case .cpu: metricWidget(.cpu, "CPU", VeilPanelHost.shared.cpuText)
-        case .mem: metricWidget(.mem, "MEM", VeilPanelHost.shared.memText)
-        case .gpu: metricWidget(.gpu, "GPU", VeilPanelHost.shared.gpuText)
+        case .cpu: metricWidget(.cpu, "CPU", board.cpuText)
+        case .mem: metricWidget(.mem, "MEM", board.memText)
+        case .gpu: metricWidget(.gpu, "GPU", board.gpuText)
         case .battery: batteryWidget(pin)
-        case .net: metricWidget(.net, "NET", VeilPanelHost.shared.netText)
-        case .volume: metricWidget(.volume, "VOL", VeilPanelHost.shared.volumeText)
+        case .net: metricWidget(.net, "NET", board.netText)
+        case .volume: metricWidget(.volume, "VOL", board.volumeText)
         case .sys: sysWidget
         }
     }
@@ -864,7 +1103,7 @@ struct DesktopGlyphCanvas: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("BATTERY").font(mono(7)).foregroundStyle(p["comment"])
                     if devices.isEmpty {
-                        Text(VeilPanelHost.shared.batteryText).font(display(16)).foregroundStyle(p["fg"])
+                        Text(board.batteryText).font(display(16)).foregroundStyle(p["fg"])
                     } else {
                         ForEach(devices) { d in
                             HStack(spacing: 6) {
@@ -895,7 +1134,7 @@ struct DesktopGlyphCanvas: View {
                 }
                 .contextMenu { pinMenu(.battery) }
             } else {
-                metricWidget(.battery, "BAT", VeilPanelHost.shared.batteryText)
+                metricWidget(.battery, "BAT", board.batteryText)
             }
         }
     }
@@ -989,7 +1228,7 @@ struct DesktopGlyphCanvas: View {
     private var sysWidget: some View {
         VStack(spacing: 2) {
             Text("SYS").font(mono(7)).foregroundStyle(p["comment"])
-            Text(VeilPanelHost.shared.statusLine.isEmpty ? "· · ·" : VeilPanelHost.shared.statusLine)
+            Text(board.statusLine.isEmpty ? "· · ·" : board.statusLine)
                 .font(mono(6)).foregroundStyle(p["dim"]).lineLimit(3)
                 .multilineTextAlignment(.center).minimumScaleFactor(0.5)
         }

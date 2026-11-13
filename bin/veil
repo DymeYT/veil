@@ -367,5 +367,8 @@ PLIST
     fi ;;
    *) echo "usage: veil feature [list|enable NAME|disable NAME]"; exit 1 ;;
   esac ;;
-  *) printf '%s\n' 'Veil: veil off | on [THEME] | toggle | quiet | normal | toggle-quiet | feature | pause | reload | recover | quit | keys | overview | themes | music-popup | panel | dismiss-popups | saver-preview | saver-companion | ws-chrome | launch | term | btop | status | selftest' ;;
+  rice)
+  # VEI-57 Nothing Glyph-field chrome (wall/Dock/desktop icons) — see tools/rice/README.md
+  exec "$HOME/.config/veil/bin/veil-rice" "${@:2}" ;;
+  *) printf '%s\n' 'Veil: veil off | on [THEME] | toggle | quiet | normal | toggle-quiet | feature | pause | reload | recover | quit | keys | overview | themes | music-popup | panel | dismiss-popups | saver-preview | saver-companion | ws-chrome | rice | launch | term | btop | status | selftest' ;;
 esac

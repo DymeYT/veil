@@ -289,6 +289,27 @@ def set_wallpaper(theme):
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
+def apply_rice_chrome(theme):
+    """VEI-57: when style.wall_lock=glyph-field, lock dotted wall + Nothing Dock/Finder chrome."""
+    if os.environ.get("VEIL_NO_RICE"):
+        return
+    # Read the theme's own [style] (do not merge base — night-city must not inherit rice lock).
+    lock = str((theme.get("style") or {}).get("wall_lock", ""))
+    if lock != "glyph-field":
+        return
+    script = ROOT / "tools/rice/apply-chrome.sh"
+    if not script.is_file():
+        return
+    env = os.environ.copy()
+    env["VEIL_ROOT"] = str(ROOT)
+    subprocess.Popen(
+        [str(script), "--quiet", "--from-theme", theme.get("id", "nothing")],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        env=env,
+    )
+
+
 def sync_screensaver():
     # Disable with: veil feature disable screensaver-sync
     if (ROOT / "generated/features/disable-screensaver-sync").is_file():
@@ -326,6 +347,7 @@ def system_accents(theme):
   .forEach(n => $.NSDistributedNotificationCenter.defaultCenter.postNotificationNameObjectUserInfoDeliverImmediately(n, $(), $(), true));"""
     subprocess.Popen(["osascript", "-l", "JavaScript", "-e", js], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     set_wallpaper(theme)
+    apply_rice_chrome(theme)
     # Boot splash is fire-and-forget — never stall apply on the splash window.
     subprocess.Popen(["osascript", "-l", "JavaScript", "-e",
                       "ObjC.import('Foundation'); $.NSDistributedNotificationCenter.defaultCenter"

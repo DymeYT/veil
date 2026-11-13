@@ -1,6 +1,7 @@
 // Glyph / Nothing OS surfaces for Veil: Quick, Deck, Prefs, Power, Home, Walls,
-// VPN, Cal, Buds, Shot, Charms, Style (theme creator), Lock/Login mocks.
+// VPN, Cal→Quick, AirPods (buds), Screenshot, Charms, Style creator, Lock/Login mocks.
 // Edge Glyph lights ride OSD when theme_id == nothing. Lock never touches ScreenSaverEngine.
+// VEI-56: plain-English labels; Cal stub timer removed (⌃⌥C / .cal → Quick).
 import AppKit
 import Carbon
 import Combine
@@ -34,13 +35,17 @@ final class GlyphShell: ObservableObject {
     }
 
     func toggle(_ k: GlyphKind) {
-        if kind == k { dismiss(); return }
-        present(k)
+        // VEI-56: Cal stub is gone — calendar/date opens Quick (same as bar clock).
+        let target = k == .cal ? GlyphKind.quick : k
+        if kind == target { dismiss(); return }
+        present(target)
     }
 
     func present(_ k: GlyphKind) {
-        kind = k
-        sel = k == .power ? 2 : 0
+        // VEI-56: never show the old Cal stub timer; route to Quick settings.
+        let target = k == .cal ? GlyphKind.quick : k
+        kind = target
+        sel = target == .power ? 2 : 0
         ensureWindow()
         refresh()
         guard let window else { return }
@@ -56,8 +61,8 @@ final class GlyphShell: ObservableObject {
             }
         }
         installKeys()
-        if k == .vpn { refreshVPN() }
-        if k == .buds { refreshBuds() }
+        if target == .vpn { refreshVPN() }
+        if target == .buds { refreshBuds() }
     }
 
     func dismiss() {
@@ -199,7 +204,8 @@ final class GlyphShell: ObservableObject {
             (UInt32(kVK_Escape), UInt32(controlKey | optionKey), 13, .power),
             (UInt32(kVK_ANSI_W), UInt32(controlKey | optionKey), 14, .walls),
             (UInt32(kVK_ANSI_P), UInt32(controlKey | optionKey), 15, .vpn),
-            (UInt32(kVK_ANSI_C), UInt32(controlKey | optionKey), 16, .cal),
+            // 16 was Cal stub — now Quick (calendar/date → Quick settings).
+            (UInt32(kVK_ANSI_C), UInt32(controlKey | optionKey), 16, .quick),
             (UInt32(kVK_ANSI_B), UInt32(controlKey | optionKey), 17, .buds),
             (UInt32(kVK_ANSI_S), UInt32(controlKey | optionKey), 18, .shot),
             (UInt32(kVK_ANSI_Period), UInt32(controlKey | optionKey), 19, .charms),
@@ -233,7 +239,7 @@ final class GlyphShell: ObservableObject {
             }
             let map: [UInt32: GlyphKind] = [
                 10: .quick, 11: .deck, 12: .prefs, 13: .power, 14: .walls, 15: .vpn,
-                16: .cal, 17: .buds, 18: .shot, 19: .charms, 20: .style, 21: .home
+                16: .quick, 17: .buds, 18: .shot, 19: .charms, 20: .style, 21: .home
             ]
             guard let kind = map[hk.id] else { return OSStatus(eventNotHandledErr) }
             let run = { GlyphShell.shared.toggle(kind) }
@@ -314,23 +320,30 @@ struct GlyphRoot: View {
 
     var quick: some View {
         // Opaque card only — no in-window scrim (that painted a translucent/solid husk past the Glyph).
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 14) {
             HStack {
                 Text(Date(), style: .time).font(doto(42)).foregroundStyle(fg)
                 Spacer()
                 Text("QUICK").font(mono(11)).foregroundStyle(muted).tracking(2)
             }
-            HStack(spacing: 10) {
+            HStack(spacing: 8) {
                 pill("Wi‑Fi", veilPanel.wifiOn ? "wifi" : "wifi.slash", on: veilPanel.wifiOn) { veilPanel.toggleWifi() }
                 pill("Bluetooth", "wave.3.right", on: veilPanel.bluetoothOn) { veilPanel.toggleBluetooth() }
+                // Focus = macOS Focus / Do Not Disturb (not Veil Quiet).
                 pill("Focus", "moon.fill", on: veilPanel.focusOn) { veilPanel.enableDoNotDisturb() }
+                // Quiet = Veil hush flag (dim chrome); distinct from Focus.
+                pill("Quiet", "leaf") { veilPanel.runVeil(["toggle-quiet"]) }
             }
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+            Text("Focus = Do Not Disturb · Quiet = Veil hush")
+                .font(mono(8)).foregroundStyle(muted)
+                .lineLimit(1).minimumScaleFactor(0.7)
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
                 tile("Dark", "circle.lefthalf.filled") { shell.applyStylePack(id: "nothing") }
-                tile("Theme", "paintpalette") { shell.present(.style) }
-                tile("Shot", "camera") { shell.present(.shot) }
-                tile("VPN", "lock.shield") { shell.present(.vpn) }
-                tile("Buds", "earbuds") { shell.present(.buds) }
+                // Themes = gallery/switcher; Style = creator (⌃⌥Y).
+                tile("Themes", "paintpalette") { veilPanel.openThemeGallery() }
+                tile("Style", "slider.horizontal.3") { shell.present(.style) }
+                tile("Screenshot", "camera") { shell.present(.shot) }
+                tile("AirPods", "earbuds") { shell.present(.buds) }
                 tile("Power", "power") { shell.present(.power) }
             }
             liveSlider("VOLUME", isVolume: true)
@@ -338,7 +351,7 @@ struct GlyphRoot: View {
             mediaStrip
             Text("Notifications · empty").font(ui(12)).foregroundStyle(muted)
         }
-        .padding(22)
+        .padding(20)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(opaquePanel(28))
         .clipShape(RoundedRectangle(cornerRadius: 28, style: .circular))
@@ -389,34 +402,55 @@ struct GlyphRoot: View {
         }.buttonStyle(.plain)
     }
 
+    /// VEI-56 denser now-playing — album + transport, less empty air.
     var mediaStrip: some View {
-        HStack(spacing: 14) {
-            Group {
-                if let art = VeilPanelHost.shared.musicArtwork {
-                    Image(nsImage: art).resizable().aspectRatio(1, contentMode: .fill)
-                } else {
-                    Circle().fill(Color.white.opacity(0.08)).overlay(DotField().clipShape(Circle()))
+        let host = VeilPanelHost.shared
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .center, spacing: 12) {
+                Group {
+                    if let art = host.musicArtwork {
+                        Image(nsImage: art).resizable().aspectRatio(1, contentMode: .fill)
+                    } else {
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(Color.white.opacity(0.08))
+                            .overlay(DotField().clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous)))
+                    }
                 }
+                .frame(width: 64, height: 64)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(host.musicSource.uppercased()).font(mono(8)).foregroundStyle(muted)
+                        .lineLimit(1).minimumScaleFactor(0.8)
+                    Text(host.musicTitle).font(ui(15, .semibold)).foregroundStyle(fg)
+                        .lineLimit(1).truncationMode(.tail)
+                    Text(host.musicArtist).font(ui(12)).foregroundStyle(muted)
+                        .lineLimit(1).truncationMode(.tail)
+                    if !host.musicAlbum.isEmpty {
+                        Text(host.musicAlbum).font(ui(11)).foregroundStyle(muted.opacity(0.85))
+                            .lineLimit(1).truncationMode(.tail)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(width: 52, height: 52)
-            .clipShape(Circle())
-            VStack(alignment: .leading, spacing: 2) {
-                Text("NOW PLAYING").font(mono(9)).foregroundStyle(muted)
-                Text(VeilPanelHost.shared.musicTitle).font(ui(14, .semibold)).foregroundStyle(fg).lineLimit(1)
-                Text(VeilPanelHost.shared.musicArtist).font(ui(12)).foregroundStyle(muted).lineLimit(1)
+            HStack(spacing: 18) {
+                Spacer(minLength: 0)
+                Button { host.musicAction("previous") } label: {
+                    Image(systemName: "backward.fill").font(.system(size: 13, weight: .bold)).foregroundStyle(fg)
+                }.buttonStyle(.plain)
+                Button { host.musicAction("playpause") } label: {
+                    Circle().fill(p["cyan"]).frame(width: 40, height: 40)
+                        .overlay(Image(systemName: host.playing ? "pause.fill" : "play.fill")
+                            .font(.system(size: 13, weight: .bold)).foregroundStyle(.white))
+                }.buttonStyle(.plain)
+                Button { host.musicAction("next") } label: {
+                    Image(systemName: "forward.fill").font(.system(size: 13, weight: .bold)).foregroundStyle(fg)
+                }.buttonStyle(.plain)
+                Spacer(minLength: 0)
             }
-            Spacer()
-            Button {
-                VeilPanelHost.shared.musicAction("playpause")
-            } label: {
-                Circle().fill(p["cyan"]).frame(width: 36, height: 36)
-                    .overlay(Image(systemName: VeilPanelHost.shared.playing ? "pause.fill" : "play.fill")
-                        .font(.system(size: 12, weight: .bold)).foregroundStyle(.white))
-            }.buttonStyle(.plain)
         }
         .padding(12)
-        .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(bg))
-        .onAppear { VeilPanelHost.shared.ensureMusicMeta(artwork: true) }
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(bg))
+        .onAppear { host.ensureMusicMeta(artwork: true) }
     }
 
     // MARK: Deck
@@ -425,14 +459,15 @@ struct GlyphRoot: View {
         ZStack(alignment: .bottom) {
             HStack(spacing: 14) {
                 deckCard("CPU", sys("cpu"))
-                deckCard("MEM", sys("mem"))
-                deckCard("BAT", sys("bat"))
+                deckCard("Memory", sys("mem"))
+                deckCard("Battery", sys("bat"))
                 VStack(alignment: .leading, spacing: 8) {
                     Text("DECK").font(mono(10)).foregroundStyle(muted).tracking(3)
                     Text(Date(), style: .time).font(doto(36)).foregroundStyle(fg)
                     Text(greeting()).font(ui(16)).foregroundStyle(fg)
                     HStack(spacing: 8) {
                         Button("Style") { shell.present(.style) }.buttonStyle(GlyphBtn(p: p))
+                        Button("Themes") { veilPanel.openThemeGallery() }.buttonStyle(GlyphBtn(p: p))
                         Button("Prefs") { shell.present(.prefs) }.buttonStyle(GlyphBtn(p: p))
                         Button("Home") { shell.present(.home) }.buttonStyle(GlyphBtn(p: p))
                     }
@@ -482,7 +517,7 @@ struct GlyphRoot: View {
         ZStack {
             VStack(alignment: .leading, spacing: 18) {
                 Text("PREFS").font(doto(36)).foregroundStyle(fg)
-                Text("Bar · Home · Audio · Style").font(mono(11)).foregroundStyle(muted).tracking(2)
+                Text("Bar · Home · Audio · Style creator").font(mono(11)).foregroundStyle(muted).tracking(2)
                 Group {
                     prefRow("Bar position", p.s("bar_position", "bottom"))
                     prefRow("Bar layout", p.s("bar_layout", "strip"))
@@ -490,7 +525,8 @@ struct GlyphRoot: View {
                     prefRow("Accent", "#D71921")
                 }
                 HStack {
-                    Button("Open Style") { shell.present(.style) }.buttonStyle(GlyphBtn(p: p, filled: true))
+                    Button("Style creator") { shell.present(.style) }.buttonStyle(GlyphBtn(p: p, filled: true))
+                    Button("Themes gallery") { veilPanel.openThemeGallery() }.buttonStyle(GlyphBtn(p: p))
                     Button("Home widgets") { shell.present(.home) }.buttonStyle(GlyphBtn(p: p))
                     Spacer()
                     Button("Close") { shell.dismiss() }.buttonStyle(GlyphBtn(p: p))
@@ -567,17 +603,17 @@ struct GlyphRoot: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .layoutPriority(1)
                 LazyVGrid(columns: [GridItem(.fixed(150)), GridItem(.fixed(150))], spacing: 14) {
-                    // Calendar Glyph slot → Quick (bar date + desktop clock also open Quick).
+                    // Calendar / date → Quick (no Cal stub timer).
                     Button { shell.present(.quick) } label: {
                         homeTile("QUICK", Image(systemName: "switch.2").font(.system(size: 36, weight: .medium)))
                     }.buttonStyle(.plain)
                     homeTile("GPU", Text("·").font(doto(42)))
-                    homeTile("SYS", Text("CPU").font(mono(12)))
+                    homeTile("System", Text("CPU").font(mono(12)))
                     ZStack {
                         Circle().stroke(Color.white.opacity(0.15), lineWidth: 8)
                         Circle().trim(from: 0, to: 0.55).stroke(p["cyan"], style: StrokeStyle(lineWidth: 8, lineCap: .round))
                             .rotationEffect(.degrees(-90))
-                        Text("CAVA").font(mono(10)).foregroundStyle(muted).lineLimit(1)
+                        Text("Audio").font(mono(10)).foregroundStyle(muted).lineLimit(1)
                     }
                     .frame(width: 150, height: 150)
                     .background(Circle().fill(panel))
@@ -586,7 +622,7 @@ struct GlyphRoot: View {
             }
             .padding(60)
             .overlay(alignment: .bottomLeading) {
-                Text("Calendar · click clock on desktop Glyph or ⌃⌥C")
+                Text("Date & clock open Quick · ⌃⌥C")
                     .font(mono(9)).foregroundStyle(muted)
                     .lineLimit(1).truncationMode(.tail)
                     .padding(.leading, 60).padding(.bottom, 24)
@@ -672,52 +708,22 @@ struct GlyphRoot: View {
 
     // VPN → vpn.swift (VEI-36)
 
-    // MARK: Cal
+    // MARK: Cal (VEI-56 — stub timer removed; present(.cal) redirects to Quick)
+    // Kept for switch exhaustiveness / GlyphKind.cal notification alias only.
 
     var cal: some View {
-        let day = Calendar.current.component(.day, from: Date())
-        return ZStack {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("CAL").font(doto(32)).foregroundStyle(fg).lineLimit(1).minimumScaleFactor(0.6)
-                HStack(alignment: .top, spacing: 24) {
-                    VStack {
-                        Text(DateFormatter.month.string(from: Date()).uppercased()).font(mono(10)).foregroundStyle(muted)
-                            .lineLimit(1).minimumScaleFactor(0.7)
-                        Text("\(day)").font(doto(72)).foregroundStyle(fg).lineLimit(1).minimumScaleFactor(0.5)
-                    }
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("FOCUS TIMER").font(mono(10)).foregroundStyle(muted).lineLimit(1)
-                        Text("25:00").font(doto(36)).foregroundStyle(fg).lineLimit(1)
-                        Text("Click clock in bar · stub timer UI").font(ui(12)).foregroundStyle(muted)
-                            .lineLimit(2).truncationMode(.tail)
-                        let events = CalendarSource.upcoming("today")
-                        ForEach(Array(events.prefix(3).enumerated()), id: \.offset) { _, e in
-                            Text(e.title).font(ui(13)).foregroundStyle(fg)
-                                .lineLimit(1).truncationMode(.tail)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                Button("Close") { shell.dismiss() }.buttonStyle(GlyphBtn(p: p))
-            }
-            .padding(28)
-            .frame(width: 480)
-            .background(opaquePanel(28))
-            .clipShape(RoundedRectangle(cornerRadius: 28, style: .circular))
-            .compositingGroup()
-        }
+        Color.clear.onAppear { shell.present(.quick) }
     }
 
-    // Buds → buds.swift (VEI-36)
+    // Buds UI → buds.swift (VEI-36 / VEI-58 owns live-device sync). Glyph labels say AirPods.
 
-    // MARK: Shot
+    // MARK: Screenshot
 
     var shot: some View {
         ZStack {
             VStack(alignment: .leading, spacing: 14) {
-                Text("SHOT").font(doto(32)).foregroundStyle(fg).lineLimit(1).minimumScaleFactor(0.6)
-                Text("Screenshots · recording").font(mono(10)).foregroundStyle(muted).lineLimit(1)
+                Text("SCREENSHOT").font(doto(32)).foregroundStyle(fg).lineLimit(1).minimumScaleFactor(0.55)
+                Text("Capture · screen recording").font(mono(10)).foregroundStyle(muted).lineLimit(1)
                 HStack(spacing: 10) {
                     Button("Selection") { runShot(["-i"]); shell.dismiss() }.buttonStyle(GlyphBtn(p: p, filled: true))
                     Button("Window") { runShot(["-i", "-w"]); shell.dismiss() }.buttonStyle(GlyphBtn(p: p))
@@ -796,8 +802,11 @@ struct GlyphRoot: View {
             HStack(alignment: .top, spacing: 20) {
                 VStack(alignment: .leading, spacing: 14) {
                     Text("STYLE").font(doto(36)).foregroundStyle(fg).lineLimit(1).minimumScaleFactor(0.55)
-                    Text("Theme creator · live preview").font(mono(10)).foregroundStyle(muted).tracking(1)
+                    Text("Style creator · live preview").font(mono(10)).foregroundStyle(muted).tracking(1)
                         .lineLimit(1).truncationMode(.tail)
+                    Text("Themes gallery is separate · Quick → Themes or ⌃⌥T")
+                        .font(mono(8)).foregroundStyle(muted)
+                        .lineLimit(1).truncationMode(.tail).minimumScaleFactor(0.7)
                     Text("SOURCE").font(mono(9)).foregroundStyle(muted).lineLimit(1)
                     HStack {
                         sourceChip("nothing", "Nothing")
@@ -1033,8 +1042,3 @@ struct DotRing: View {
     }
 }
 
-private extension DateFormatter {
-    static let month: DateFormatter = {
-        let f = DateFormatter(); f.dateFormat = "MMMM"; return f
-    }()
-}

@@ -1,4 +1,5 @@
 # Glyph / Nothing OS: black, white dots, one red. Fonts: Doto, Space Grotesk, Space Mono, JM Nerd.
+# VEI-57 rice: wall_lock keeps art/nothing.jpg (dotted Glyph field); dock/desktop chrome via veil-rice.
 name = "Nothing"
 macos_accent = 0
 
@@ -55,7 +56,7 @@ l_opacity = "1.0"
 l_row_height = "44"
 l_symbol_size = "20"
 l_button = "fill"
-l_scene = "art"
+l_scene = "art"          # splash/launcher use art/<id>.jpg — Nothing = Glyph field, never scenic
 l_scrim = "false"
 l_place = "center"
 l_prompt = "Search"
@@ -64,6 +65,12 @@ l_head = "plain"
 search_symbol = "circle.fill"
 ui_font = "Space Grotesk"
 ui_mono = "Space Mono"
+display_font = "Doto"    # clock / big Glyph digits (Swift already special-cases nothing → Doto)
+clock_font = "Doto"
+# Rice chrome tokens (read by veil-theme → tools/rice/apply-chrome.sh):
+wall_lock = "glyph-field"  # re-pin art/nothing.jpg; reject scenic drift on apply
+dock_chrome = "autohide"   # Nothing-friendly Dock (hide + small tiles)
+desktop_icons = "hidden"   # Finder CreateDesktop off for clean Glyph field
 
 bar_layout = "strip"
 bar_position = "bottom"
@@ -82,6 +89,7 @@ font_tag = "Space Mono:Bold:11.0"
 font_label = "Space Grotesk:Medium:13.0"
 font_small = "Space Mono:Bold:10.0"
 font_chip = "Space Grotesk:SemiBold:12.0"
+font_clock = "Doto:Bold:48.0"
 app_glyph = "·"
 value_case = "upper"
 clock_time = "%H:%M"
