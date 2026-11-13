@@ -59,14 +59,12 @@ struct DesktopGlyphPin: Codable, Identifiable, Equatable {
     var spanRows: Int { max(1, rowSpan ?? id.defaultSpan.rows) }
 }
 
-/// Pass-through host; interaction via AX monitors on the board (desktop panels rarely get mouseDown).
+/// Full click-through host (VEI-42). Window uses `ignoresMouseEvents = true`; hitTest always nil.
+/// Tile click/drag/remove stay on AX global monitors — never steal empty-desktop / show-desktop clicks.
 final class GlyphBoardHost<Content: View>: NSHostingView<Content> {
     weak var board: DesktopGlyphBoard?
-    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
-    override func hitTest(_ point: NSPoint) -> NSView? {
-        guard let board, board.dragging != nil || board.resizing != nil else { return nil }
-        return self
-    }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { false }
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
 @MainActor
@@ -177,8 +175,12 @@ final class DesktopGlyphBoard: ObservableObject {
 
     func togglePin(_ id: DesktopGlyphID) {
         if let i = pins.firstIndex(where: { $0.id == id }) {
-            pins[i].pinned.toggle()
-            if pins[i].pinned { pins[i] = placeWithoutOverlap(pins[i]) }
+            if pins[i].pinned {
+                removePin(id)
+                return
+            }
+            pins[i].pinned = true
+            pins[i] = placeWithoutOverlap(pins[i])
         } else {
             pins.append(placeWithoutOverlap(DesktopGlyphPin(
                 id: id, col: 0, row: 0, pinned: true,
@@ -427,7 +429,14 @@ final class DesktopGlyphBoard: ObservableObject {
             }
         }
         if let g = NSEvent.addGlobalMonitorForEvents(matching: .rightMouseDown, handler: right) { mouseMonitors.append(g) }
-        if let g = NSEvent.addLocalMonitorForEvents(matching: .rightMouseDown, handler: { e in right(e); return e }) {
+        if let g = NSEvent.addLocalMonitorForEvents(matching: .rightMouseDown, handler: { [weak self] e in
+            // Swallow only over a pin — empty desktop keeps Finder's menu.
+            if self?.pinAtScreen(NSEvent.mouseLocation) != nil {
+                Task { @MainActor in self?.onRightMouseDown(e) }
+                return nil
+            }
+            return e
+        }) {
             mouseMonitors.append(g)
         }
     }
@@ -573,12 +582,14 @@ final class DesktopGlyphBoard: ObservableObject {
             w.hasShadow = false
             w.hidesOnDeactivate = false
             w.isReleasedWhenClosed = false
-            w.ignoresMouseEvents = false
-            w.acceptsMouseMovedEvents = true
+            w.ignoresMouseEvents = true
+            w.acceptsMouseMovedEvents = false
             w.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopIconWindow)) + 2)
             w.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenNone]
             window = w
         }
+        // Re-assert every ensure — never leave a sticky capturing layer after rebuild (VEI-42).
+        window?.ignoresMouseEvents = true
         let screenChanged = sig != lastScreenSig
         if force || screenChanged {
             window?.setFrame(frame, display: true)
