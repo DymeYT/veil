@@ -17,6 +17,7 @@ that license, this patch is a modification of Rift, and the patched files are ch
 | `src/layout_engine/systems/traditional.rs`, `bsp.rs` | Directional resize: an edge moves in the pressed direction; edge tiles move their opposite edge instead |
 | `src/layout_engine/systems/scrolling.rs` | Treats directional resizes as their axis |
 | `src/bin/rift-cli.rs`, `src/ui/settings/commands.rs` | Expose the new directions |
+| `src/ipc.rs`, `src/actor/reactor/query.rs`, `crates/rift-protocol/src/transport.rs`, `src/bin/rift-cli.rs` | Add `rift-cli query workspace-summary` so the bar can read workspace occupancy without calculating window layouts |
 
 Each changed file starts with a `// Modified by Veil` line, as section 4(b) asks. The patch is formatted with Rift's own
 `rustfmt.toml` (`cargo +nightly fmt`), so it holds only real changes. The rest of Rift is unchanged. Veil's config (`templates/rift.toml`) uses the new resize directions, so it needs

@@ -2,5 +2,7 @@
 # Explicitly reset properties owned by this theme system; preserve user app filters.
 # hidpi=off: a 1pt solid line looks the same and the daemon uses about half the memory (168MB to 90MB).
 # round follows native window geometry; inactive frames and background fill are transparent.
+# ax_focus=on: Rift (like yabai) moves windows outside the fast path — without AX the active
+# border sticks to stale frames / wrong windows when focus switches.
 # Veil Search's launcher/scrim/pulse/OSD are overlays — bordering them leaves ghost frames after orderOut.
-exec /opt/homebrew/bin/borders style=@@border_style@@ width=@@border_width@@ hidpi=off order=below background_color=0x00000000 active_color='@@border_active@@' inactive_color=@@border_inactive@@ blacklist="Veil Search"
+exec /opt/homebrew/bin/borders style=@@border_style@@ width=@@border_width@@ hidpi=off ax_focus=on order=below background_color=0x00000000 active_color='@@border_active@@' inactive_color=@@border_inactive@@ blacklist="Veil Search"

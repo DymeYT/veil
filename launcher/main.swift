@@ -9,9 +9,11 @@ import QuickLookThumbnailing
 import SwiftUI
 import UniformTypeIdentifiers
 import CoreText
+import Darwin
+import ImageIO
 
 let home = FileManager.default.homeDirectoryForCurrentUser.path
-let ncRoot = home + "/.config/veil"
+let ncRoot = ProcessInfo.processInfo.environment["VEIL_ROOT"] ?? home + "/.config/veil"
 let binPath = "\(home)/.local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
 // MARK: palette
@@ -31,7 +33,8 @@ struct Palette {
     static func load(_ path: String = ncRoot + "/generated/launcher.json") -> Palette {
         var p = Palette()
         let url = URL(fileURLWithPath: path)
-        let raw = (try? JSONSerialization.jsonObject(with: Data(contentsOf: url))) as? [String: String] ?? [:]
+        // .uncached: theme apply atomically replaces this file; a mapped cache kept stale ws after brand updates.
+        let raw = (try? JSONSerialization.jsonObject(with: Data(contentsOf: url, options: [.uncached]))) as? [String: String] ?? [:]
         let fallback = ["bg_float": "0e1524", "bg_dark": "070a12", "surface": "151b2d", "border": "26324a",
                         "selection": "26385a", "line": "334563", "comment": "76849c", "dim": "8794ad",
                         "fg": "d9f4ff", "white": "ffffff", "cyan": "00e5ff", "magenta": "ff4fbc", "yellow": "fcee09", "green": "5af7a5"]
@@ -141,15 +144,18 @@ struct Item: Identifiable {
     var path: String?  // file or app path: real icon, reveal in Finder, copy path
     var action: Action
     var score = 0
+    var matchScore: Int? = nil
     var extra = ""  // workspace index or theme id, for the detail pane
     var origin: Kind? = nil  // the kind before promotion to TOP HIT, so labels stay accurate
     var key: String { path ?? title }
-    var id: String { "\(kind.rawValue)|\(key)" }
+    var id: String { resultIdentity }
+    var resultIdentity: String { "\((origin ?? kind).rawValue)|\(key)|\(title)|\(subtitle)" }
+    var learningKey: String { "\((origin ?? kind).rawValue)|\(key)" }
     var isInformational: Bool { if case .copy(let value) = action { return value.isEmpty }; return false }
     // Copy results derive their identity from user content. They must never become disk-backed ranking or pin keys.
     var canPersist: Bool {
         if case .copy = action { return false }
-        return ![Kind.answer, .calc].contains(origin ?? kind) && extra != "secret" && extra != "clip"
+        return ![Kind.answer, .calc].contains(origin ?? kind) && !["secret", "clip", "tab", "window", "menu"].contains(extra)
     }
 }
 
@@ -159,22 +165,46 @@ func canRememberQuery(_ query: String) -> Bool {
     return !q.isEmpty && !privateCommands.contains { q == $0 || q.hasPrefix($0 + " ") } && !ClipHistory.looksLikeSecret(query)
 }
 
-// Fuzzy score of `name` for query `q` (both compared lowercased), nil when it doesn't match.
-func score(_ q: String, _ name: String) -> Int? {
-    let n = name.lowercased(), q = q.lowercased()
-    if q.isEmpty { return nil }
-    if n == q { return 1000 }
-    if n.hasPrefix(q) { return 900 - min(n.count - q.count, 99) }
-    let words = n.split(whereSeparator: { !$0.isLetter && !$0.isNumber })
-    if words.contains(where: { $0.hasPrefix(q) }) { return 800 }
-    if String(words.compactMap(\.first)).hasPrefix(q) && q.count > 1 { return 750 }  // "vsc" -> Visual Studio Code
-    let squash = { (s: String) in s.filter { $0.isLetter || $0.isNumber } }
-    if squash(n).contains(squash(q)) && !squash(q).isEmpty { return 600 }  // "wifi" -> "Wi-Fi"
-    guard q.count >= 4 else { return nil }  // short queries stay strict so "saf" never matches "Workspace 5 · FREE"
-    if wordSubsequence(q, n) { return 420 }  // "sfri" -> Safari
-    if words.contains(where: { withinOneEdit(q, String($0.prefix(q.count))) || withinOneEdit(q, String($0)) }) { return 380 }  // one typo
-    return nil
+// Match strength is independent of usage, so a popular typo cannot beat a literal match.
+struct SearchTerm {
+    let lower: String
+    let compact: String
+    private let length: Int
+    private let permitsTypo: Bool
+
+    init(_ query: String) {
+        lower = query.lowercased()
+        compact = lower.filter { $0.isLetter || $0.isNumber }
+        length = lower.count
+        permitsTypo = length >= 4 && length <= 64 && lower.allSatisfy(\.isLetter)
+    }
+
+    func score(_ name: String) -> Int? {
+        guard !lower.isEmpty else { return nil }
+        let title = name.lowercased()
+        if title == lower { return 1000 }
+        let words = title.split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+        if !compact.isEmpty && words.joined() == compact { return 990 }
+        if title.hasPrefix(lower) { return 900 - min(title.count - length, 32) }
+        if words.contains(where: { $0.hasPrefix(lower) }) { return 810 }
+        if length > 1, String(words.compactMap(\.first)).hasPrefix(lower) { return 750 }
+        if compact.count >= 3 && words.joined().contains(compact) { return 600 }
+        guard permitsTypo else { return nil }
+        for word in words where word.allSatisfy(\.isLetter) {
+            if length >= 5 || word.first == lower.first, withinOneEdit(lower, String(word)) { return 540 }
+            if word.first == lower.first, word.count > length, withinOneEdit(lower, String(word.prefix(length))) { return 510 }
+        }
+        if words.contains(where: { word in
+            guard word.first == lower.first, word.count <= length + 3 else { return false }
+            var next = lower.startIndex
+            for letter in word where next < lower.endIndex && letter == lower[next] { next = lower.index(after: next) }
+            return next == lower.endIndex
+        }) { return 420 }
+        return nil
+    }
 }
+
+func score(_ query: String, _ name: String) -> Int? { SearchTerm(query).score(name) }
 
 // Tiny calculator: + - * / % ^ parentheses, unary minus. nil on anything else.
 func calc(_ s: String) -> Double? {
@@ -262,6 +292,125 @@ let settingsPanes: [(String, String, String)] = [
     ("VPN", "com.apple.NetworkExtensionSettingsUI.NESettingsUIExtension", "lock.shield"), ("Siri", "com.apple.Siri-Settings.extension", "waveform"),
 ]
 
+private let sketchybarBin: String = {
+    for path in ["/opt/homebrew/bin/sketchybar", "/usr/local/bin/sketchybar", home + "/.local/bin/sketchybar"] {
+        if FileManager.default.isExecutableFile(atPath: path) { return path }
+    }
+    return "/opt/homebrew/bin/sketchybar"
+}()
+
+/// True when a bar label is a slot numeral (diamond regression) rather than theme vocabulary.
+func isNumericWorkspaceToken(_ raw: String) -> Bool {
+    let t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    return !t.isEmpty && t.unicodeScalars.allSatisfy { CharacterSet.decimalDigits.contains($0) }
+}
+
+func themeTomlWorkspaceNames() -> [String] {
+    guard let idData = try? Data(contentsOf: URL(fileURLWithPath: ncRoot + "/current"), options: [.uncached]),
+          let id = String(data: idData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+          let tomlData = try? Data(contentsOf: URL(fileURLWithPath: ncRoot + "/themes/\(id).toml"), options: [.uncached]),
+          let toml = String(data: tomlData, encoding: .utf8) else { return [] }
+    let re = try? NSRegularExpression(pattern: "(?m)^ws\\s*=\\s*\"([^\"]+)\"")
+    let ns = toml as NSString
+    var last = ""
+    re?.enumerateMatches(in: toml, range: NSRange(location: 0, length: ns.length)) { m, _, _ in
+        guard let m, m.numberOfRanges > 1 else { return }
+        last = ns.substring(with: m.range(at: 1))
+    }
+    return last.split(separator: " ").map(String.init).filter { !$0.isEmpty }
+}
+
+func riftWorkspaceNames() -> [String] {
+    guard let data = try? Data(contentsOf: URL(fileURLWithPath: home + "/.config/rift/config.toml"), options: [.uncached]),
+          let text = String(data: data, encoding: .utf8) else { return [] }
+    let re = try? NSRegularExpression(pattern: "workspace_names\\s*=\\s*\\[([^\\]]*)\\]", options: [])
+    let ns = text as NSString
+    guard let match = re?.firstMatch(in: text, range: NSRange(location: 0, length: ns.length)), match.numberOfRanges > 1 else { return [] }
+    let body = ns.substring(with: match.range(at: 1))
+    var names: [String] = []
+    let quoted = try? NSRegularExpression(pattern: "\"([^\"]+)\"")
+    let bns = body as NSString
+    quoted?.enumerateMatches(in: body, range: NSRange(location: 0, length: bns.length)) { m, _, _ in
+        guard let m, m.numberOfRanges > 1 else { return }
+        names.append(bns.substring(with: m.range(at: 1)))
+    }
+    return names
+}
+
+func sketchybarWorkspaceNames() -> [String] {
+    var fromBar: [String] = []
+    for i in 0..<5 {
+        let p = Process(), pipe = Pipe()
+        p.executableURL = URL(fileURLWithPath: sketchybarBin)
+        p.arguments = ["--query", "ws.\(i)"]
+        p.standardOutput = pipe
+        p.standardError = FileHandle.nullDevice
+        guard (try? p.run()) != nil else { break }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        p.waitUntilExit()
+        guard p.terminationStatus == 0,
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { break }
+        let label = ((obj["label"] as? [String: Any])?["value"] as? String) ?? ""
+        let icon = ((obj["icon"] as? [String: Any])?["value"] as? String) ?? ""
+        // Prefer label; fall back to icon only when label empty (never prefer a lone numeral over a named icon).
+        var name = label.trimmingCharacters(in: .whitespaces)
+            .replacingOccurrences(of: "•", with: "")
+            .trimmingCharacters(in: .whitespaces)
+        if name.isEmpty || isNumericWorkspaceToken(name) {
+            let iconName = icon.trimmingCharacters(in: .whitespaces)
+            if !iconName.isEmpty && !isNumericWorkspaceToken(iconName)
+                && iconName != "◆" && iconName != "◈" && iconName != "◇" {
+                name = iconName
+            }
+        }
+        if name.isEmpty || isNumericWorkspaceToken(name) { break }
+        fromBar.append(name)
+    }
+    return fromBar.count == 5 ? fromBar : []
+}
+
+/// Live workspace vocabulary — must match the settled bar after `veil-theme apply`.
+/// Never trust cached palette alone; never accept diamond-style numeric 1–5 as vocabulary.
+func liveWorkspaceNames(paletteWS: [String] = []) -> [String] {
+    // 1) SketchyBar live labels when they carry real theme words
+    let fromBar = sketchybarWorkspaceNames()
+    if fromBar.count == 5 { return fromBar }
+
+    // 2) Theme.toml ws= (canonical vocabulary veil-theme expands into the bar)
+    let fromTheme = themeTomlWorkspaceNames()
+    if fromTheme.count >= 5 { return Array(fromTheme.prefix(5)) }
+
+    // 3) Rift config workspace_names
+    let fromRift = riftWorkspaceNames()
+    if fromRift.count >= 5 { return Array(fromRift.prefix(5)) }
+
+    // 4) Fresh launcher.json
+    let fromLauncher = Palette.load().s("ws", "").split(separator: " ").map(String.init).filter { !$0.isEmpty }
+    if fromLauncher.count >= 5 { return Array(fromLauncher.prefix(5)) }
+
+    // 5) Caller palette / default
+    if paletteWS.count >= 5 { return Array(paletteWS.prefix(5)) }
+    return ["ONE", "TWO", "THREE", "FOUR", "FIVE"]
+}
+
+/// Overview cards only — never Theme: gallery rows. Titles are bare ws names for OCR/product sync.
+/// Explicit `paletteWS` (≥5) wins — fixtures/selftest must not be overridden by live bar names.
+func overviewWorkspaceCards(paletteWS: [String] = []) -> [Item] {
+    let names = paletteWS.count >= 5
+        ? Array(paletteWS.prefix(5))
+        : liveWorkspaceNames(paletteWS: paletteWS)
+    let rift = home + "/.local/bin/rift-cli"
+    return names.enumerated().map { i, name in
+        Item(kind: .nc,
+             title: name,
+             subtitle: "Workspace \(i + 1)  ⌥\(i + 1)",
+             symbol: "square.grid.2x2",
+             action: .run([rift, "execute", "workspace", "switch", "\(i)"]),
+             score: 10_000 - i,
+             extra: "overview-ws:\(i)")
+    }
+}
+
 func ncItems(_ ws: [String]) -> [Item] {
     let nc = home + "/.local/bin/veil"
     var items: [Item] = []
@@ -269,6 +418,8 @@ func ncItems(_ ws: [String]) -> [Item] {
         items.append(Item(kind: .nc, title: "Workspace \(i + 1) · \(name)", subtitle: "Switch workspace  ⌥\(i + 1)", symbol: "square.grid.2x2",
                           action: .run([home + "/.local/bin/rift-cli", "execute", "workspace", "switch", "\(i)"]), extra: "\(i)"))
     }
+    items.append(Item(kind: .nc, title: "Workspace Overview", subtitle: "Browse all workspaces  ⌃⌥M",
+                      symbol: "rectangle.grid.2x2", action: .run([nc, "overview"])))
     let commands = [("Turn Veil off (stock macOS)", "off", "power"), ("Quiet mode on / off", "toggle-quiet", "leaf"), ("Pause / resume tiling", "pause", "pause.circle"),
                     ("Reload bar and window manager", "reload", "arrow.clockwise"), ("Recover windows", "recover", "lifepreserver"),
                     ("System monitor (btop)", "btop", "waveform.path.ecg"), ("Self-test", "selftest-notify", "checkmark.seal")]
@@ -304,16 +455,19 @@ func themeSwatches(_ id: String) -> [Color] {
 struct Win: Hashable { var app: String; var title: String; var bundle: String? }
 
 // Windows per workspace index, from Rift (for the workspace detail pane).
-func riftWindows() -> [Int: [Win]] {
+func riftWorkspaces() -> [[String: Any]] {
     let p = Process(), pipe = Pipe()
     p.executableURL = URL(fileURLWithPath: home + "/.local/bin/rift-cli")
     p.arguments = ["query", "workspaces"]
     p.standardOutput = pipe
     p.standardError = FileHandle.nullDevice
-    guard (try? p.run()) != nil else { return [:] }
+    guard (try? p.run()) != nil else { return [] }
     let data = pipe.fileHandleForReading.readDataToEndOfFile()
     p.waitUntilExit()
-    guard let list = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { return [:] }
+    return (try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]) ?? []
+}
+
+func riftWindows(_ list: [[String: Any]]) -> [Int: [Win]] {
     var out: [Int: [Win]] = [:]
     for ws in list {
         guard let i = ws["index"] as? Int else { continue }
@@ -368,7 +522,17 @@ final class Model: NSObject, ObservableObject {
     @Published var palette = Palette.load()
     @Published var searchingFiles = false
     @Published var windows: [Int: [Win]] = [:]
+    /// Live window thumbnails for Workspace Overview (ScreenCaptureKit / app-icon fallback).
+    @Published var overviewThumbs: [Int: [WinThumb]] = [:]
     @Published var shown = false
+    /// Exclusive launcher surface — overview and theme gallery never share card sources.
+    enum Surface: Equatable { case search, overview, themes }
+    @Published var surface: Surface = .search
+    /// Overview-only cards (never Theme: rows). Bound by overviewPicker exclusively.
+    @Published var overviewCards: [Item] = []
+    /// Theme-gallery-only cards. Bound by themePicker exclusively.
+    @Published var themeCards: [Item] = []
+    var overviewActive: Bool { surface == .overview }
     var openMouse = NSPoint.zero  // hover selects only after the pointer moves from where it was at open
     var apps: [Item] = []
     var shortcuts: [Item] = []
@@ -384,76 +548,135 @@ final class Model: NSObject, ObservableObject {
     var history: [String] = UserDefaults.standard.stringArray(forKey: "history") ?? []
     var pins: [String] = UserDefaults.standard.stringArray(forKey: "pins") ?? []
     var historyIndex = -1
-    var recentFiles: [Item] = []
     var fileItems: [Item] = []
-    var mdQuery: NSMetadataQuery?
+    private var mdQuery: NSMetadataQuery?
     var usage: [String: Int] = UserDefaults.standard.dictionary(forKey: "usage") as? [String: Int] ?? [:]
+    var queryChoices = UserDefaults.standard.dictionary(forKey: "queryChoices") as? [String: [String: Int]] ?? [:]
     var close: () -> Void = {}
 
     static func migrateRankingPrivacy(_ store: UserDefaults) -> Bool {
         guard store.integer(forKey: "rankingPrivacyVersion") < 2 else { return false }
         // Legacy keys mixed arbitrary clipboard text with titles/paths, so they cannot be safely classified.
-        for key in ["usage", "history", "pins"] { store.removeObject(forKey: key) }
+        for key in ["usage", "history", "pins", "queryChoices"] { store.removeObject(forKey: key) }
         store.set(2, forKey: "rankingPrivacyVersion")
         return true
     }
 
-    func refresh() {
+    private var refreshGeneration = 0
+    private var shortcutsLoadedAt = Date.distantPast
+    private var loadingShortcuts = false
+
+    func refresh(updateHiddenResults: Bool = false) {
+        // Always reread launcher.json — theme apply must not leave stale ws/brand in memory.
         palette = Palette.load()
-        ncCache = ncItems(wsNames)
+        ncCache = ncItems(liveWorkspaceNames(paletteWS: wsNames))
         SourceCache.reload()
-        DispatchQueue.global(qos: .userInitiated).async {
-            SafariTabs.load()
-            let a = scanApps(), w = riftWindows(), sc = shortcutItems(), ow = windowItems(), pj = cursorProjects(), bm = bookmarkItems()
-            DispatchQueue.main.async {
-                self.apps = a; self.windows = w; self.shortcuts = sc; self.openWindows = ow; self.projects = pj; self.bookmarks = bm
-                self.search()
+        refreshGeneration += 1
+        let generation = refreshGeneration
+        if !loadingShortcuts && Date().timeIntervalSince(shortcutsLoadedAt) > 60 {
+            loadingShortcuts = true
+            DispatchQueue.global(qos: .utility).async {
+                let result = shortcutItems()
+                DispatchQueue.main.async {
+                    self.shortcuts = result
+                    self.shortcutsLoadedAt = Date()
+                    self.loadingShortcuts = false
+                    if (self.shown || updateHiddenResults) && !self.query.isEmpty { self.search() }
+                }
             }
+        }
+        DispatchQueue.global(qos: .userInitiated).async {
+            let workspaces = riftWorkspaces()
+            let a = scanApps(), w = riftWindows(workspaces), ow = windowItems(workspaces)
+            let pj = cursorProjects(), bm = bookmarkItems()
+            DispatchQueue.main.async {
+                guard generation == self.refreshGeneration else { return }
+                self.apps = a; self.windows = w; self.openWindows = ow; self.projects = pj; self.bookmarks = bm
+                if (self.shown || updateHiddenResults) && !self.query.isEmpty { self.search() }
+            }
+        }
+        if SafariTabs.enabled {
+            DispatchQueue.global(qos: .utility).async {
+                let tabs = SafariTabs.load()
+                DispatchQueue.main.async {
+                    guard generation == self.refreshGeneration else { return }
+                    SafariTabs.tabs = tabs
+                    if (self.shown || updateHiddenResults) && !self.query.isEmpty { self.search() }
+                }
+            }
+        } else {
+            SafariTabs.tabs = []
         }
     }
 
     var wsNames: [String] { palette.s("ws", "NET CODE COMMS MEDIA FREE").split(separator: " ").map(String.init) }
 
-    // frecency plus what was chosen last time for this query prefix (LaunchBar-style learning)
-    func boost(_ it: Item) -> Int {
-        let q = query.trimmingCharacters(in: .whitespaces).lowercased()
-        let learned = q.isEmpty ? 0 : (usage["q:\(q.prefix(4))|\(it.key)"] ?? 0)
-        return min((usage[it.key] ?? 0) * 25, 250) + min(learned * 150, 450)
+    // Exact-query choices can reorder similarly matched results. Global usage only breaks ties.
+    func preference(_ item: Item, for term: String) -> Int {
+        guard item.canPersist else { return 0 }
+        let recent = usage[item.key] ?? 0
+        let chosen = queryChoices[term]?[item.learningKey] ?? 0
+        return min(max(0, recent), 6) * 2 + min(max(0, chosen), 5) * 8
+    }
+
+    private func recordSelection(_ item: Item, query: String) {
+        guard item.canPersist, canRememberQuery(query) else { return }
+        usage[item.key] = min(999, max(0, usage[item.key] ?? 0)) + 1
+        history.removeAll { $0.caseInsensitiveCompare(query) == .orderedSame }
+        history.insert(query, at: 0)
+        history = Array(history.prefix(50))
+
+        let term = query.lowercased()
+        var choices = queryChoices[term] ?? [:]
+        choices[item.learningKey] = min(999, max(0, choices[item.learningKey] ?? 0)) + 1
+        if choices.count > 10, let least = choices.filter({ $0.key != item.learningKey }).min(by: { $0.value < $1.value }) {
+            choices.removeValue(forKey: least.key)
+        }
+        queryChoices[term] = choices
+        let retained = Set(history.map { $0.lowercased() })
+        queryChoices = queryChoices.filter { retained.contains($0.key) }
+        UserDefaults.standard.set(history, forKey: "history")
+        UserDefaults.standard.set(usage, forKey: "usage")
+        UserDefaults.standard.set(queryChoices, forKey: "queryChoices")
     }
 
     func search() {
         let q = query.trimmingCharacters(in: .whitespaces)
+        if q != fileQuery { cancelFileSearch() }
+        if mode == 4 || !Weather.isWeatherQuery(q) { Weather.shared.cancelPending() }
         var out: [Item] = []
         // clipboard mode: ⌘4 or "clip …"
         if mode == 4 || q.lowercased() == "clip" || q.lowercased().hasPrefix("clip ") {
             let f = mode == 4 ? q : String(q.dropFirst(4)).trimmingCharacters(in: .whitespaces)
-            mdQuery?.stop(); searchingFiles = false
+            cancelFileSearch()
             let clips = ClipHistory.shared.items(f)
             publish(clips.isEmpty ? [Item(kind: .answer, title: ClipHistory.enabled ? "Clipboard history is empty" : "Clipboard history is off", subtitle: ClipHistory.enabled ? "Copied text appears here (kept for 8 hours, never saved to disk)" : "Enable with defaults write app.veil.search clipboardHistory -bool true",
                                           symbol: "doc.on.clipboard", action: .copy(""), score: 0)] : clips)
             return
         }
+        // Exclusive surfaces — never let Theme: rows and overview chrome share `items`.
+        if surface == .overview || q.lowercased() == "overview" {
+            cancelFileSearch()
+            enterOverview()
+            return
+        }
+        if surface == .themes || q.lowercased() == "theme" {
+            cancelFileSearch()
+            enterThemes()
+            return
+        }
         if q.isEmpty {
-            // start state: what you use most, like Spotlight's recents
-            let all = apps + ncCache
-            let pinned = pins.compactMap { k in all.first { $0.key == k } }.map { var i = $0; i.kind = .top; i.extra = i.extra.isEmpty ? "pinned" : i.extra; return i }
-            out = pinned + all.filter { (usage[$0.key] ?? 0) > 0 && !pins.contains($0.key) }
-                .sorted { (usage[$0.key] ?? 0) > (usage[$1.key] ?? 0) }.prefix(max(0, 6 - pinned.count)).map {
-                var i = $0; i.kind = .top; return i
-            }
-            // opens as just the search field, like Spotlight; results appear once you type
-            fileItems = []
-            searchingFiles = false
-            mdQuery?.stop()
+            cancelFileSearch()
             items = []
             selected = 0
             return
         }
+        surface = .search
         if let entries = folderItems(q) {  // "~/Dev/": browse instead of search
-            fileItems = []; mdQuery?.stop(); searchingFiles = false
+            cancelFileSearch()
             publish(entries); return
         }
-        if let emoji = emojiItems(q) { mdQuery?.stop(); searchingFiles = false; publish(emoji); return }
+        if let emoji = emojiItems(q) { cancelFileSearch(); publish(emoji); return }
         out += aliasItems(q)
         if let w = Weather.shared.answer(q, refresh: { [weak self] in self?.search() }) { out.append(w) }
         out += utilityAnswers(q)
@@ -467,25 +690,28 @@ final class Model: NSObject, ObservableObject {
             let r = formatNumber(v)
             out.append(Item(kind: .calc, title: r, subtitle: "\(q) =   ↵ copies the result", symbol: "equal", action: .copy(r), score: 2000))
         }
+        let term = SearchTerm(q)
         func ranked(_ list: [Item], limit: Int) -> [Item] {
-            list.compactMap { it -> Item? in
-                guard let s = score(q, it.title) else { return nil }
-                var it = it; it.score = s + boost(it) + it.score; return it  // an item's own score is a tie-breaking bias
-            }.sorted { $0.score > $1.score }.prefix(limit).map { $0 }
+            list.compactMap { item -> Item? in
+                guard let strength = term.score(item.title) else { return nil }
+                var item = item
+                item.matchScore = strength
+                item.score += strength + preference(item, for: term.lower)
+                return item
+            }.sorted(by: ranksAhead).prefix(limit).map { $0 }
         }
         out += ranked(apps, limit: 6)
-        // a pane whose name matches the query once punctuation is ignored ("wifi" → Wi-Fi) beats same-named files
-        let alnum = { (x: String) in x.lowercased().filter { $0.isLetter || $0.isNumber } }
         out += ranked(settingsPanes.map { Item(kind: .setting, title: $0.0, subtitle: "System Settings", symbol: $0.2,
-                                               action: .open(safeURL("x-apple.systempreferences:\($0.1)")),
-                                               score: alnum($0.0) == alnum(q) ? 250 : 0) }, limit: 4)
+                                               action: .open(safeURL("x-apple.systempreferences:\($0.1)"))) }, limit: 4)
         let commands = ncCache
         out += ranked(commands, limit: commands.count)  // include every installed environment
-        out += ranked(systemActionItems() + moreSystemItems(q).filter { $0.score < 2000 }, limit: 3)
-        out += moreSystemItems(q).filter { $0.score >= 2000 }
+        let systemItems = moreSystemItems(q)
+        out += ranked(systemActionItems() + glyphSurfaceItems() + systemItems.filter { $0.score < 2000 }, limit: 5)
+        out += systemItems.filter { $0.score >= 2000 }
         out += ranked(scriptItems(q), limit: 3)
-        out += ranked(obsidianItems(q).filter { $0.score < 2000 }, limit: 2)
-        out += obsidianItems(q).filter { $0.score >= 2000 }
+        let vaultItems = obsidianItems(q)
+        out += ranked(vaultItems.filter { $0.score < 2000 }, limit: 2)
+        out += vaultItems.filter { $0.score >= 2000 }
         // Shortcuts only when a word of the name starts with the query ("sa" → "Save…", not "Source Adder")
         let ql = q.lowercased()
         out += ranked(shortcuts.filter { $0.title.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }).contains { $0.hasPrefix(ql) } }, limit: 4)
@@ -496,10 +722,9 @@ final class Model: NSObject, ObservableObject {
         out += ContactSource.items(q)
         out += CalendarSource.upcoming(q) + CalendarSource.create(q)
         let menus = MenuItems.items(q)
-        if !menus.isEmpty { mdQuery?.stop(); searchingFiles = false; publish(menus); return }
+        if !menus.isEmpty { cancelFileSearch(); publish(menus); return }
         // inline dictionary definition when nothing stronger answers a plain word
         if !out.contains(where: { $0.score >= 800 }), let d = definitionAnswer(q) { out.append(d) }
-        let enc = q.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? q
         var web: [Item] = []
         // a URL: has a scheme, starts with www., or ends in a common web TLD (so "README.md" stays a file search)
         let tlds = "com|org|net|io|dev|app|ai|co|edu|gov|me|tv|gg|xyz|info|so|sh|us|uk|ca|de|fr|jp|in|au|nz|eu|ly|to|fm|tech|site|news|blog"
@@ -521,43 +746,83 @@ final class Model: NSObject, ObservableObject {
     var pending: [Item] = []
     var pendingWeb: [Item] = []
 
-    // Promote the best strong match to TOP HIT and keep groups in a fixed order.
+    private func ranksAhead(_ lhs: Item, _ rhs: Item) -> Bool {
+        // Match classes preserve literal intent; score within each class includes personal preference.
+        func tier(_ item: Item) -> Int {
+            guard let match = item.matchScore else { return item.score }
+            switch match {
+            case 990...: return 1000
+            case 868...: return 900
+            default: return match
+            }
+        }
+        return (tier(lhs), lhs.score) > (tier(rhs), rhs.score)
+    }
+
+    // Promote the best actionable match, then preserve explicit selection across asynchronous updates.
     func publish(_ list: [Item]) {
-        var list = list
-        if let best = list.indices.filter({ [.answer, .app, .setting, .action, .nc, .file].contains(list[$0].kind) && list[$0].score >= 800 })
-            .max(by: { list[$0].score < list[$1].score }), list.first?.kind != .calc, list.first?.kind != .top {
+        let previous = userMoved && items.indices.contains(selected) ? items[selected].resultIdentity : nil
+        var list = list.filter { item in
+            let kind = item.origin ?? item.kind
+            switch mode {
+            case 1: return kind == .app
+            case 2: return kind == .file
+            case 3: return [.action, .setting, .nc].contains(kind)
+            default: return true
+            }
+        }
+        if list.first?.kind != .calc, list.first?.kind != .top,
+           let best = list.indices.filter({ index in
+               let item = list[index]
+               return [.answer, .app, .setting, .action, .nc, .file].contains(item.kind) &&
+                   (item.matchScore.map { $0 >= 510 } ?? (item.score >= 800))
+           }).max(by: { ranksAhead(list[$1], list[$0]) }) {
             var top = list.remove(at: best); top.origin = top.kind; top.kind = .top; list.insert(top, at: 0)
         }
-        let order = { (k: Kind) in k.rawValue }
-        if mode == 1 { list = list.filter { $0.kind == .app || ($0.kind == .top && ($0.path ?? "").hasSuffix(".app")) } }
-        if mode == 2 { list = list.filter { $0.kind == .file || ($0.kind == .top && $0.path != nil && !($0.path ?? "").hasSuffix(".app")) } }
-        if mode == 3 { list = list.filter { [.action, .setting, .nc].contains($0.kind) || ($0.kind == .top && $0.path == nil) } }
-        items = list.enumerated().sorted { (order($0.element.kind), $0.offset) < (order($1.element.kind), $1.offset) }.map(\.element)
-        selected = min(selected, max(items.count - 1, 0))
-        if selected >= items.count || query.isEmpty { selected = 0 }
+        items = list.enumerated().sorted { ($0.element.kind.rawValue, $0.offset) < ($1.element.kind.rawValue, $1.offset) }.map(\.element)
+        selected = previous.flatMap { identity in items.firstIndex { $0.resultIdentity == identity } } ?? 0
     }
 
     // Files from the Spotlight index: name matches first (prefix, then anywhere), content matches after, recent first.
-    var recentMode = false
+    private var fileQuery: String?
+    private var fileSearchWork: DispatchWorkItem?
 
-    func searchFiles(_ query: String, recent: Bool = false) {
-        mdQuery?.stop()
-        NotificationCenter.default.removeObserver(self, name: .NSMetadataQueryDidFinishGathering, object: nil)
-        NotificationCenter.default.removeObserver(self, name: .NSMetadataQueryGatheringProgress, object: nil)
-        recentMode = recent
+    func cancelFileSearch() {
+        fileSearchWork?.cancel()
+        fileSearchWork = nil
+        stopMetadataQuery()
+        fileQuery = nil
+        if !fileItems.isEmpty { fileItems = [] }
+        if searchingFiles { searchingFiles = false }
+    }
+
+    private func stopMetadataQuery() {
+        guard let mq = mdQuery else { return }
+        NotificationCenter.default.removeObserver(self, name: .NSMetadataQueryDidFinishGathering, object: mq)
+        NotificationCenter.default.removeObserver(self, name: .NSMetadataQueryGatheringProgress, object: mq)
+        mdQuery = nil
+        mq.stop()
+    }
+
+    func searchFiles(_ query: String) {
+        guard query != fileQuery else { return }
+        fileQuery = query
         var q = query, kindClause = ""
         if let (uti, rest) = kindFilter(query) { kindClause = "kMDItemContentTypeTree == \"\(uti)\""; q = rest }
-        let qs: String
-        if recent {
-            qs = "kMDItemLastUsedDate >= $time.today(-3) && kMDItemContentTypeTree != \"com.apple.application\""
-        } else {
-            guard q.count >= 2 || (!kindClause.isEmpty && q.isEmpty) else { fileItems = []; searchingFiles = false; return }
-            let esc = q.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
-            var name = q.isEmpty ? "" : "kMDItemFSName == \"*\(esc)*\"cd"
-            if q.count >= 4 { name = "(\(name) || kMDItemTextContent == \"\(esc)*\"cdw)" }
-            qs = [name, kindClause].filter { !$0.isEmpty }.joined(separator: " && ")
-        }
-        guard let pred = NSPredicate(fromMetadataQueryString: qs) else { return }
+        guard q.count >= 2 || (!kindClause.isEmpty && q.isEmpty) else { return }
+        let esc = q.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
+        var name = q.isEmpty ? "" : "kMDItemFSName == \"*\(esc)*\"cd"
+        if q.count >= 4 { name = "(\(name) || kMDItemTextContent == \"\(esc)*\"cdw)" }
+        let predicate = [name, kindClause].filter { !$0.isEmpty }.joined(separator: " && ")
+        searchingFiles = true
+        let work = DispatchWorkItem { [weak self] in self?.startFileSearch(predicate) }
+        fileSearchWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.14, execute: work)
+    }
+
+    private func startFileSearch(_ predicate: String) {
+        fileSearchWork = nil
+        guard let pred = NSPredicate(fromMetadataQueryString: predicate) else { searchingFiles = false; return }
         let mq = NSMetadataQuery()
         mq.predicate = pred
         mq.searchScopes = [NSMetadataQueryUserHomeScope]
@@ -565,8 +830,7 @@ final class Model: NSObject, ObservableObject {
         NotificationCenter.default.addObserver(self, selector: #selector(filesUpdated), name: .NSMetadataQueryDidFinishGathering, object: mq)
         NotificationCenter.default.addObserver(self, selector: #selector(filesUpdated), name: .NSMetadataQueryGatheringProgress, object: mq)
         mdQuery = mq
-        searchingFiles = !recent  // the start screen's recents load quietly
-        mq.start()
+        if !mq.start() { stopMetadataQuery(); searchingFiles = false }
     }
 
     static let noise = try! NSRegularExpression(pattern:
@@ -576,6 +840,7 @@ final class Model: NSObject, ObservableObject {
         guard let mq = note.object as? NSMetadataQuery, mq === mdQuery else { return }
         mq.disableUpdates()
         let typed = query.trimmingCharacters(in: .whitespaces)
+        let lower = typed.lowercased()
         let q = (kindFilter(typed)?.1 ?? typed).lowercased()
         var found: [(Item, Int, Double)] = []
         for i in 0..<min(mq.resultCount, 600) {
@@ -586,57 +851,148 @@ final class Model: NSObject, ObservableObject {
             let group = lname.hasPrefix(q) ? 0 : lname.contains(q) ? 1 : 2
             let used = (r.value(forAttribute: kMDItemLastUsedDate as String) as? Date ?? r.value(forAttribute: kMDItemContentModificationDate as String) as? Date)?.timeIntervalSince1970 ?? 0
             let isDir = (r.value(forAttribute: kMDItemContentType as String) as? String) == "public.folder"
-            let it = Item(kind: .file, title: name, subtitle: ((path as NSString).deletingLastPathComponent as NSString).abbreviatingWithTildeInPath,
+            var it = Item(kind: .file, title: name, subtitle: ((path as NSString).deletingLastPathComponent as NSString).abbreviatingWithTildeInPath,
                           // a file whose name only starts with the query ranks below apps, settings and answers;
                           // an exact name leads the files, but the top hit stays with apps, settings and answers
                           symbol: isDir ? "folder" : "doc", path: path, action: .open(URL(fileURLWithPath: path)),
                           score: (lname == q || (lname as NSString).deletingPathExtension == q) ? 790 : group == 0 ? 700 : group == 1 ? 600 : 100)
+            if !q.isEmpty {
+                let nameWithoutExtension = (lname as NSString).deletingPathExtension
+                if lname == q || nameWithoutExtension == q { it.matchScore = 990 }
+                else if group == 0 { it.matchScore = 868 }
+            }
+            it.score += preference(it, for: lower)
             found.append((it, group, used))
         }
         mq.enableUpdates()
-        if recentMode {
-            recentFiles = found.sorted { $0.2 > $1.2 }.prefix(6).map { var i = $0.0; i.score = 0; return i }
-            if note.name == .NSMetadataQueryDidFinishGathering { mq.stop() }
-            if query.trimmingCharacters(in: .whitespaces).isEmpty { publish(items.filter { $0.kind == .top } + recentFiles) }
-            return
-        }
         var seenNames: [String: Int] = [:]
-        let sorted = found.sorted { ($0.1, -$0.2) < ($1.1, -$1.2) }.filter { f in  // at most two of the same filename
+        let sorted = found.sorted { ($0.1, -$0.0.score, -$0.2) < ($1.1, -$1.0.score, -$1.2) }.filter { f in  // at most two of the same filename
             seenNames[f.0.title, default: 0] += 1
             return seenNames[f.0.title]! <= 2
         }
         fileItems = (sorted.filter { $0.1 < 2 }.prefix(8) + sorted.filter { $0.1 == 2 }.prefix(3)).prefix(8).map(\.0)
-        if note.name == .NSMetadataQueryDidFinishGathering { searchingFiles = false; mq.stop() }
-        let sel = userMoved && items.indices.contains(selected) ? items[selected].id : nil
+        if note.name == .NSMetadataQueryDidFinishGathering { searchingFiles = false; stopMetadataQuery() }
         publish(pending + fileItems + pendingWeb)
-        if let sel, let i = items.firstIndex(where: { $0.id == sel }) { selected = i } else if !userMoved { selected = 0 }
     }
 
     // the rest of the selected result's title when the query is its prefix
     var completion: String? {
-        guard !query.isEmpty, items.indices.contains(selected) else { return nil }
+        guard !choosingTheme, !query.isEmpty, items.indices.contains(selected) else { return nil }
         let t = items[selected].title
         guard !t.hasSuffix("…"), t.count > query.count, t.lowercased().hasPrefix(query.lowercased()) else { return nil }
         return String(t.dropFirst(query.count))
     }
 
     var userMoved = false  // keep the selection on a row only after the user picked it
-    func move(_ d: Int) { if !items.isEmpty { selected = (selected + d + items.count) % items.count; userMoved = true } }
 
     /// Columns in the result grid (Foundry's console and Cinder's register are two-up); 1 for lists.
-    var gridColumns: Int { ["console", "embers"].contains(palette.s("layout", "")) ? 2 : 1 }
+    var choosingTheme: Bool { surface == .themes }
+    var choosingOverview: Bool { surface == .overview }
+    var gridColumns: Int {
+        if choosingTheme { return 3 }
+        if choosingOverview { return 2 }
+        return ["console", "embers"].contains(palette.s("layout", "")) ? 2 : 1
+    }
+
+    /// Build workspace cards BEFORE flipping chrome — never leave Theme: rows under WORKSPACE OVERVIEW.
+    func enterOverview() {
+        mode = 0
+        actionsOpen = false
+        cancelFileSearch()
+        palette = Palette.load()
+        let names = liveWorkspaceNames(paletteWS: wsNames)
+        ncCache = ncItems(names)
+        let cards = overviewWorkspaceCards(paletteWS: names)
+        let safe = cards.isEmpty
+            ? [Item(kind: .answer, title: "No workspaces", subtitle: "Theme vocabulary missing",
+                    symbol: "rectangle.grid.2x2", action: .copy(""), score: 0)]
+            : cards
+        // Live window list for thumbnails (Rift window_server_id → ScreenCaptureKit).
+        let rift = riftWorkspaces()
+        windows = riftWindows(rift)
+        overviewThumbs = riftWindowsDetailed(rift)
+        // Cards first, then exclusive surface — prevents gallery bleed for one paint cycle.
+        overviewCards = safe
+        themeCards = []
+        items = safe
+        selected = 0
+        surface = .overview
+        if query.trimmingCharacters(in: .whitespaces).lowercased() != "overview" {
+            // Avoid re-entrant search wiping surface: set without didSet search if possible.
+            if renderingFixture {
+                query = "overview"
+            } else {
+                renderingFixture = true
+                query = "overview"
+                renderingFixture = false
+            }
+        }
+    }
+
+    func enterThemes() {
+        mode = 0
+        actionsOpen = false
+        cancelFileSearch()
+        palette = Palette.load()
+        // Keep a pre-seeded ncCache (selftest / fixtures); otherwise refresh from live theme list.
+        if ncCache.filter({ $0.symbol == "paintpalette" }).isEmpty {
+            ncCache = ncItems(liveWorkspaceNames(paletteWS: wsNames))
+        }
+        let themes = ncCache.filter { $0.symbol == "paintpalette" }.sorted {
+            ($0.subtitle == "Current theme" ? 0 : 1, $0.title) < ($1.subtitle == "Current theme" ? 0 : 1, $1.title)
+        }
+        themeCards = themes
+        overviewCards = []
+        items = themes
+        selected = 0
+        surface = .themes
+        if query.trimmingCharacters(in: .whitespaces).lowercased() != "theme" {
+            renderingFixture = true
+            query = "theme"
+            renderingFixture = false
+        }
+    }
+
+    func presentOverviewCards() { enterOverview() }
+
+    func toggleThemePicker() {
+        if surface == .themes {
+            surface = .search
+            overviewCards = []
+            themeCards = []
+            query = ""
+            items = []
+        } else {
+            enterThemes()
+        }
+    }
 
     /// Grid moves: up/down by a row, left/right by a column, stopping at the edges instead of wrapping.
     func moveGrid(dx: Int, dy: Int) {
-        guard !items.isEmpty else { return }
+        let pool = surfaceItems()
+        guard !pool.isEmpty else { return }
         let c = gridColumns, col = selected % c
         let next = dx != 0 ? (col + dx >= 0 && col + dx < c ? selected + dx : selected) : selected + dy * c
-        selected = max(0, min(items.count - 1, next)); userMoved = true
+        selected = max(0, min(pool.count - 1, next)); userMoved = true
+    }
+
+    func move(_ d: Int) {
+        let pool = surfaceItems()
+        if !pool.isEmpty { selected = (selected + d + pool.count) % pool.count; userMoved = true }
+    }
+
+    func surfaceItems() -> [Item] {
+        switch surface {
+        case .overview: return overviewCards
+        case .themes: return themeCards
+        case .search: return items
+        }
     }
 
     func activate(_ i: Int? = nil, reveal: Bool = false, paste: Bool = false) {
-        guard items.indices.contains(i ?? selected) else { return }
-        let it = items[i ?? selected]
+        let pool = surfaceItems()
+        guard pool.indices.contains(i ?? selected) else { return }
+        let it = pool[i ?? selected]
         guard !it.isInformational else { return }
         // permission rows ask, then search again with the new source
         if it.extra.hasPrefix("grant:") {
@@ -645,7 +1001,7 @@ final class Model: NSObject, ObservableObject {
             switch what {
             case "contacts": ContactSource.request(again)
             case "calendar", "reminders": CalendarSource.request(what, again)
-            case "safari": UserDefaults.standard.set(true, forKey: "safariTabs"); DispatchQueue.global().async { SafariTabs.load(); DispatchQueue.main.async(execute: again) }
+            case "safari": UserDefaults.standard.set(true, forKey: "safariTabs"); again()
             default: MenuItems.requestTrust()
             }
             return
@@ -676,46 +1032,50 @@ final class Model: NSObject, ObservableObject {
             if !pasteIntoFrontApp(text, secret: it.extra == "secret", completion: fallback) { fallback(false) }
             return
         }
-        let q = query.trimmingCharacters(in: .whitespaces)
-        if it.canPersist && canRememberQuery(q) {
-            usage[it.key, default: 0] += 1
-            usage["q:\(q.lowercased().prefix(4))|\(it.key)", default: 0] += 1
-            history.removeAll { $0 == q }; history.insert(q, at: 0); history = Array(history.prefix(50))
-            UserDefaults.standard.set(history, forKey: "history")
-            UserDefaults.standard.set(usage, forKey: "usage")
-        }
+        recordSelection(it, query: query.trimmingCharacters(in: .whitespaces))
         if case .copy = it.action, !reveal {  // brief confirmation before the panel goes away
             copyText({ if case .copy(let v) = it.action { return v }; return "" }(), secret: it.extra == "secret")
             toast = "Copied"
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { self.toast = ""; self.close() }
             return
         }
+        // Spotlight feel: UI gone this frame; open/run never blocks dismiss.
         close()
-        if reveal, let p = it.path { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: p)]); return }
-        switch it.action {
-        case .open(let url): NSWorkspace.shared.open(url.isFileURL ? (obsidianURL(for: url.path) ?? url) : url)
-        case .copy(let s): copyText(s, secret: it.extra == "secret")
-        case .run(let argv):
-            let p = Process()
-            p.executableURL = URL(fileURLWithPath: argv[0])
-            p.arguments = Array(argv.dropFirst())
-            p.environment = ProcessInfo.processInfo.environment.merging(["PATH": binPath]) { $1 }
-            if it.extra.hasPrefix("stdin:"), let data = Data(base64Encoded: String(it.extra.dropFirst(6))) {
-                let pipe = Pipe(); p.standardInput = pipe
-                try? p.run(); pipe.fileHandleForWriting.write(data); try? pipe.fileHandleForWriting.close()
-            } else if argv[0].hasSuffix("veil-theme") {
-                // report a refused theme change instead of failing silently
-                let err = Pipe(); p.standardError = err
-                try? p.run()
-                DispatchQueue.global().async {
-                    p.waitUntilExit()
-                    guard p.terminationStatus != 0 else { return }
-                    let msg = String(data: err.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
-                        .split(separator: "\n").last.map(String.init) ?? "Theme change failed"
-                    let safe = msg.replacingOccurrences(of: "\\", with: "").replacingOccurrences(of: "\"", with: "'")
-                    _ = try? Process.run(URL(fileURLWithPath: "/usr/bin/osascript"), arguments: ["-e", "display notification \"\(safe)\" with title \"Veil theme\""])
-                }
-            } else { try? p.run() }
+        let action = it.action
+        let path = it.path
+        let extra = it.extra
+        let secret = it.extra == "secret"
+        DispatchQueue.main.async {
+            if reveal, let p = path {
+                NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: p)])
+                return
+            }
+            switch action {
+            case .open(let url):
+                NSWorkspace.shared.open(url.isFileURL ? (obsidianURL(for: url.path) ?? url) : url)
+            case .copy(let s):
+                copyText(s, secret: secret)
+            case .run(let argv):
+                let p = Process()
+                p.executableURL = URL(fileURLWithPath: argv[0])
+                p.arguments = Array(argv.dropFirst())
+                p.environment = ProcessInfo.processInfo.environment.merging(["PATH": binPath]) { $1 }
+                if extra.hasPrefix("stdin:"), let data = Data(base64Encoded: String(extra.dropFirst(6))) {
+                    let pipe = Pipe(); p.standardInput = pipe
+                    try? p.run(); pipe.fileHandleForWriting.write(data); try? pipe.fileHandleForWriting.close()
+                } else if argv[0].hasSuffix("veil-theme") {
+                    let err = Pipe(); p.standardError = err
+                    try? p.run()
+                    DispatchQueue.global().async {
+                        p.waitUntilExit()
+                        guard p.terminationStatus != 0 else { return }
+                        let msg = String(data: err.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+                            .split(separator: "\n").last.map(String.init) ?? "Theme change failed"
+                        let safe = msg.replacingOccurrences(of: "\\", with: "").replacingOccurrences(of: "\"", with: "'")
+                        _ = try? Process.run(URL(fileURLWithPath: "/usr/bin/osascript"), arguments: ["-e", "display notification \"\(safe)\" with title \"Veil theme\""])
+                    }
+                } else { try? p.run() }
+            }
         }
     }
 
@@ -790,14 +1150,41 @@ final class Model: NSObject, ObservableObject {
 
 // MARK: views
 
-final class IconCache {
-    static var cache: [String: NSImage] = [:]
+enum IconCache {
+    private static let cache: NSCache<NSString, NSImage> = {
+        let cache = NSCache<NSString, NSImage>()
+        cache.countLimit = 64
+        cache.totalCostLimit = 8 * 1024 * 1024
+        return cache
+    }()
+
+    static func clear() { cache.removeAllObjects() }
+
     static func icon(_ path: String) -> NSImage {
-        if let i = cache[path] { return i }
-        let i = NSWorkspace.shared.icon(forFile: path)
-        cache[path] = i
-        return i
+        let key = path as NSString
+        if let icon = cache.object(forKey: key) { return icon }
+        let source = NSWorkspace.shared.icon(forFile: path)
+        // The largest icon in Search is 96 points. Store one Retina representation
+        // instead of retaining every representation from the system icon bundle.
+        let size = NSSize(width: 96, height: 96)
+        let pixels = 192
+        guard let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: pixels, pixelsHigh: pixels,
+                                            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                                            colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0),
+              let context = NSGraphicsContext(bitmapImageRep: bitmap) else { return source }
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = context
+        context.imageInterpolation = .high
+        source.draw(in: NSRect(x: 0, y: 0, width: pixels, height: pixels), from: .zero, operation: .copy, fraction: 1)
+        context.flushGraphics()
+        NSGraphicsContext.restoreGraphicsState()
+        bitmap.size = size
+        let icon = NSImage(size: size)
+        icon.addRepresentation(bitmap)
+        cache.setObject(icon, forKey: key, cost: bitmap.bytesPerRow * pixels)
+        return icon
     }
+
     static func app(_ bundle: String?) -> NSImage? {
         guard let b = bundle, let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: b) else { return nil }
         return icon(url.path)
@@ -861,7 +1248,7 @@ struct GroupHeader: View {
             }.padding(.leading, 12)
         case "strip":
             t.foregroundStyle(p["dim"]).padding(.leading, 12).frame(maxWidth: .infinity, alignment: .leading).frame(height: 20)
-                .background(p["bg_dark"].opacity(0.7)).overlay(alignment: .bottom) { p["border"].frame(height: 1) }
+                .background(p["bg_dark"]).overlay(alignment: .bottom) { p["border"].frame(height: 1) }
         case "ornament":
             HStack(spacing: 8) {
                 Text("❦").font(.system(size: 11)).foregroundStyle(p["yellow"])
@@ -961,8 +1348,8 @@ struct Detail: View {
                 actionButton.frame(width: 110)
             }
             .padding(.horizontal, 16).padding(.vertical, 10).frame(maxWidth: .infinity).frame(height: 92)
-            .background(p["bg_dark"].opacity(0.45))
-            .task(id: item.id) { await loadThumb() }
+            .background(p["bg_dark"])
+            .task(id: m.shown ? item.id : nil) { if m.shown { await loadThumb() } else { thumb = nil } }
         } else { fullBody }
     }
 
@@ -983,9 +1370,9 @@ struct Detail: View {
         .padding(18)
         .frame(width: asCard ? 278 : 300)
         .frame(maxHeight: .infinity)
-        .background(asCard ? .clear : p["bg_dark"].opacity(0.35))
+        .background(asCard ? .clear : p["bg_dark"])
         .overlay(alignment: .leading) { if !asCard { Rectangle().fill(p["border"]).frame(width: 1) } }
-        .task(id: item.id) { await loadThumb() }
+        .task(id: m.shown ? item.id : nil) { if m.shown { await loadThumb() } else { thumb = nil } }
     }
 
     var actionButton: some View {
@@ -1046,7 +1433,7 @@ struct Detail: View {
         } else if let t = thumb {
             Image(nsImage: t).resizable().aspectRatio(contentMode: .fit).frame(maxWidth: 220, maxHeight: 120)
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .shadow(color: .black.opacity(0.5), radius: 10, y: 4)
+                
         } else if let path = item.path {
             Image(nsImage: IconCache.icon(path)).resizable().interpolation(.high).frame(width: 96, height: 96)
                 .shadow(color: p["cyan"].opacity(0.18), radius: 18)
@@ -1095,7 +1482,7 @@ struct Detail: View {
                 ScrollView { Text(text).font(code(11)).foregroundStyle(p["fg"].opacity(0.85)).lineSpacing(2)
                     .frame(maxWidth: .infinity, alignment: .leading).textSelection(.enabled) }
                     .frame(maxHeight: 150).padding(8)
-                    .background(RoundedRectangle(cornerRadius: 6).fill(p["bg_dark"].opacity(0.6)))
+                    .background(RoundedRectangle(cornerRadius: 6).fill(p["bg_dark"]))
                     .padding(.bottom, 10)
                 let facts = fileFacts(path).filter { $0.0 != "WHERE" }
                 ForEach(facts, id: \.0) { fact($0.0, $0.1) }
@@ -1144,12 +1531,21 @@ struct Detail: View {
     }
 
     func loadThumb() async {
+        guard !Task.isCancelled else { return }
         thumb = nil
         guard let path = item.path, !path.hasSuffix(".app") else { return }
         let ext = (path as NSString).pathExtension.lowercased()
         guard ["png", "jpg", "jpeg", "heic", "gif", "webp", "tiff", "pdf", "mov", "mp4", "key", "pages", "numbers", "psd", "svg"].contains(ext) else { return }
-        let req = QLThumbnailGenerator.Request(fileAt: URL(fileURLWithPath: path), size: CGSize(width: 440, height: 240), scale: 2, representationTypes: .thumbnail)
-        if let rep = try? await QLThumbnailGenerator.shared.generateBestRepresentation(for: req) { thumb = rep.nsImage }
+        let generator = QLThumbnailGenerator.shared
+        let request = QLThumbnailGenerator.Request(fileAt: URL(fileURLWithPath: path),
+                                                   size: CGSize(width: 220, height: 120),
+                                                   scale: 2, representationTypes: .thumbnail)
+        let thumbnail = await withTaskCancellationHandler {
+            try? await generator.generateBestRepresentation(for: request)
+        } onCancel: {
+            generator.cancel(request)
+        }
+        if !Task.isCancelled { thumb = thumbnail?.nsImage }
     }
 }
 
@@ -1255,6 +1651,128 @@ struct Texture: View {
     }
 }
 
+struct OverviewCard: View {
+    let item: Item
+    let palette: Palette
+    let selected: Bool
+    let index: Int
+    var windows: [WinThumb] = []
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(String(format: "%02d", index + 1))
+                    .font(.system(size: 22, weight: .bold, design: .monospaced))
+                    .foregroundStyle(selected ? palette["bg_dark"] : palette["yellow"])
+                    .padding(.horizontal, 8).padding(.vertical, 4)
+                    .background(RoundedRectangle(cornerRadius: 6).fill(selected ? palette["yellow"] : palette["surface"]))
+                Spacer(minLength: 6)
+                Text(windows.isEmpty ? "empty" : "\(windows.count) win")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundStyle(selected ? palette["cyan"] : palette["dim"])
+            }
+            OverviewWindowStrip(thumbs: windows, palette: palette, live: selected && VeilFeature.overviewLiveThumbs)
+            Text(item.title)
+                .font(.system(size: 18, weight: .bold, design: .monospaced))
+                .foregroundStyle(palette["fg"])
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityLabel(item.title)
+            Text(item.subtitle)
+                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .foregroundStyle(palette["dim"])
+                .lineLimit(1)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, minHeight: 168, alignment: .topLeading)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .circular)
+                .fill(selected ? palette["selection"] : palette["surface"])
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .circular))
+        .compositingGroup()
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .circular)
+                .strokeBorder(selected ? palette["cyan"] : palette["border"], lineWidth: selected ? 2 : 1)
+        )
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Workspace \(item.title)")
+        .pressable()
+    }
+}
+
+struct ThemePreview: View {
+    let item: Item
+    let palette: Palette
+    let selected: Bool
+    @State private var artwork: CGImage?
+    @State private var swatches: [Color] = []
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ZStack(alignment: .bottomLeading) {
+                LinearGradient(colors: [swatches.dropFirst(3).first?.opacity(0.62) ?? palette["surface"],
+                                        swatches.first ?? palette["bg_dark"]],
+                               startPoint: .topTrailing, endPoint: .bottomLeading)
+                    .overlay(alignment: .topTrailing) {
+                        Circle()
+                            .strokeBorder(.white.opacity(0.14), lineWidth: 1)
+                            .frame(width: 120, height: 120)
+                            .offset(x: 18, y: 16)
+                            .accessibilityHidden(true)
+                    }
+                    .clipped()
+                if let artwork {
+                    GeometryReader { geometry in
+                        Image(decorative: artwork, scale: 1)
+                            .resizable().scaledToFill()
+                            .frame(width: geometry.size.width, height: geometry.size.height)
+                            .clipped()
+                    }
+                }
+                HStack(spacing: 3) {
+                    ForEach(Array(swatches.dropFirst(2).prefix(5).enumerated()), id: \.offset) { _, color in
+                        Circle().fill(color).frame(width: 7, height: 7)
+                    }
+                }
+                .padding(6)
+                .background(palette["bg_dark"], in: Capsule())
+                .padding(8)
+            }
+            .frame(height: 84)
+            HStack {
+                Text(item.title.replacingOccurrences(of: "Theme: ", with: ""))
+                    .font(.system(size: 13, weight: .medium)).lineLimit(1)
+                Spacer()
+                if item.subtitle == "Current theme" {
+                    Image(systemName: "checkmark.circle.fill").foregroundStyle(palette["cyan"])
+                        .accessibilityLabel("Current theme")
+                }
+            }
+            .padding(.horizontal, 10)
+            .frame(height: 30)
+            .foregroundStyle(palette["fg"])
+            .background(palette["surface"])
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 9))
+        .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(selected ? palette["cyan"] : palette["border"], lineWidth: selected ? 2 : 1))
+        .task(id: item.extra) {
+            let id = item.extra
+            swatches = themeSwatches(id)
+            let image = await Task.detached(priority: .utility) { () -> CGImage? in
+                let url = URL(fileURLWithPath: ncRoot + "/art/\(id).jpg")
+                guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+                return CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                    kCGImageSourceCreateThumbnailFromImageAlways: true,
+                    kCGImageSourceCreateThumbnailWithTransform: true,
+                    kCGImageSourceThumbnailMaxPixelSize: 280
+                ] as CFDictionary)
+            }.value
+            if !Task.isCancelled { artwork = image }
+        }
+    }
+}
+
 struct LauncherView: View {
     @Environment(\.accessibilityReduceMotion) var reduceMotion
     @Environment(\.accessibilityReduceTransparency) var reduceTransparency
@@ -1278,10 +1796,21 @@ struct LauncherView: View {
                     .background(alignment: .leading) {
                         // ghost completion of the selected result; → accepts
                         if let rest = m.completion {
-                            (Text(m.query).foregroundColor(.clear) + Text(rest).foregroundColor(p["comment"].opacity(0.75)))
+                            Text("\(Text(m.query).foregroundColor(.clear))\(Text(rest).foregroundColor(p["comment"].opacity(0.75)))")
                                 .font(mono(21, "Medium")).lineLimit(1).allowsHitTesting(false)
                         }
                     }
+                if layout == "umbra" {
+                    Button { m.toggleThemePicker() } label: {
+                        Image(systemName: "paintpalette")
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundStyle(m.choosingTheme ? p["yellow"] : p["dim"])
+                            .padding(8)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Browse themes (⌃⌥T · ⌘T in launcher · Search “theme”)")
+                    .accessibilityLabel("Browse themes")
+                }
                 if m.searchingFiles {
                     ProgressView().controlSize(.small).tint(p["cyan"])
                 } else if m.query.isEmpty && p.s("frame", "none") == "hud" {
@@ -1297,33 +1826,44 @@ struct LauncherView: View {
             .padding(.horizontal, 18).frame(height: 62)
             .background(p.s("frame", "none") == "station" ? p["bg_dark"] : .clear)
 
-            if !m.items.isEmpty {
+            let surfaceHasCards = m.surface == .overview ? !m.overviewCards.isEmpty
+                : m.surface == .themes ? !m.themeCards.isEmpty
+                : !m.items.isEmpty
+            if surfaceHasCards {
                 if p.s("frame", "none") == "station" { p["white"].opacity(0.85).frame(height: 2) } else { divider(p) }
-                results(p).frame(height: 412)
+                // Exclusive surfaces: chrome and card source are one enum — never mix Theme: into overview.
+                if m.surface == .themes { themePicker(p).frame(height: 412) }
+                else if m.surface == .overview { overviewPicker(p).frame(height: 412) }
+                else { results(p).frame(height: 412) }
                 HStack(spacing: 16) {
                     // four hints at most (the rest live in ⌘K); narrow launchers drop to two
-                    ViewThatFits(in: .horizontal) {
+                    if m.surface == .themes {
+                        hint("↑↓←→", "navigate"); hint("↵", "apply"); hint("esc", "back")
+                    } else if m.surface == .overview {
+                        hint("↑↓", "workspace"); hint("↵", "switch"); hint("esc", "close")
+                    } else { ViewThatFits(in: .horizontal) {
                         HStack(spacing: 16) { hint("↵", "open"); hint("⌘K", "actions"); hint("⌘C", "copy"); hint("esc", "close") }
                         HStack(spacing: 16) { hint("↵", "open"); hint("⌘K", "actions") }
-                    }
+                    } }
                     Spacer(minLength: 12)
                     Text(p.cased("\(p.s("brand", "VEIL")) // search")).font(mono(11, "Bold")).tracking(1.4).foregroundStyle(p["comment"]).lineLimit(1).fixedSize()
                 }
                 .padding(.horizontal, 18).frame(height: 32)
-                .background(p["bg_dark"].opacity(0.55))
+                .background(p["bg_dark"]) // opaque footer — no frosted strip
                 .overlay(alignment: .top) { Rectangle().fill(p["border"]).frame(height: 1) }
             }
         }
         .frame(width: p.num("width", 860))
         .background(
             ZStack(alignment: .top) {
-                if !reduceTransparency { VisualEffect() }
-                p["bg_float"].opacity(reduceTransparency ? 1 : p.num("opacity", 0.88))
+                // Opaque theme fill only — VisualEffect / translucency killed (VEI-31).
+                p["bg_float"]
                 Texture(kind: p.s("texture", "scanlines"), p: p)
                 accentLine(p)
             }
         )
         .clipShape(PanelShape(chamfer: p.s("corner", "round") == "chamfer", radius: p.num("radius", 16)))
+        .compositingGroup() // flatten opaque chrome — no soft AA frost fringe
         .overlay(PanelShape(chamfer: p.s("corner", "round") == "chamfer", radius: p.num("radius", 16)).stroke(p["border"], lineWidth: p.num("border_width", 1)))
         .overlay { Frame(kind: p.s("frame", "none"), radius: p.num("radius", 16), p: p) }
         .overlay(alignment: .bottomTrailing) { if m.actionsOpen { ActionPanel(m: m, p: p).padding(.trailing, 16).padding(.bottom, 44) } }
@@ -1337,20 +1877,40 @@ struct LauncherView: View {
         }
         .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: m.toast)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: m.actionsOpen)
-        .shadow(color: p["cyan"].opacity(p.flag("glow") ? 0.16 : 0), radius: 16, y: 4)  // tight neon, so it never smears the text behind
-        .shadow(color: .black.opacity(0.55), radius: 24, y: 14)
+        // No soft outer shadow — bled past opaque chrome like a frosted husk.
         .scaleEffect(m.shown || reduceMotion ? 1 : 0.97, anchor: p.s("place", "top") == "bottom" ? .bottom : .top)
         .opacity(m.shown ? 1 : 0)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: m.shown)
         .padding(.horizontal, 40).padding(.top, 40).padding(.bottom, p.s("place", "top") == "bottom" ? 84 : 40)
         .frame(maxHeight: .infinity, alignment: p.s("place", "top") == "bottom" ? .bottom : .top)
-        .onAppear { if !m.renderingFixture { focused = true } }
+        .onChange(of: m.shown) { _, shown in
+            if !m.renderingFixture { focused = shown }
+        }
     }
 
     var layout: String { m.palette.s("layout", "split") }
 
     @ViewBuilder func results(_ p: Palette) -> some View {
         switch layout {
+        case "umbra":
+            HStack(spacing: 0) {
+                resultList(p).padding(.horizontal, 8)
+                Rectangle().fill(p["border"]).frame(width: 1)
+                VStack(spacing: 0) {
+                    sectionTitle("Preview", p)
+                    preview(p)
+                }
+                .frame(width: 320)
+                .background(alignment: .topTrailing) {
+                    Circle()
+                        .strokeBorder(p["cyan"].opacity(0.17), lineWidth: 1)
+                        .frame(width: 260, height: 260)
+                        .offset(x: 100, y: -158)
+                        .accessibilityHidden(true)
+                }
+                .background(p["bg_dark"])
+                .clipped()
+            }
         case "ops":
             // Arasaka: a wide executive command band — directory header, one full-width column, details in a strip below
             VStack(spacing: 0) {
@@ -1360,7 +1920,7 @@ struct LauncherView: View {
                     Text("NETWORK DIRECTORY").font(mono(11, "Bold")).tracking(2.4).foregroundStyle(p["fg"])
                     Spacer()
                 }
-                .padding(.horizontal, 20).frame(height: 34).background(p["bg_dark"].opacity(0.7))
+                .padding(.horizontal, 20).frame(height: 34).background(p["bg_dark"])
                 p["cyan"].opacity(0.6).frame(height: 1)
                 resultList(p).padding(.horizontal, 10)
                 p["border"].frame(height: 1)
@@ -1383,7 +1943,7 @@ struct LauncherView: View {
         case "archive":
             HStack(spacing: 0) {
                 resultList(p).padding(.trailing, 4)
-                preview(p).frame(width: 300).background(p["bg_dark"].opacity(0.35))
+                preview(p).frame(width: 300).background(p["bg_dark"])
             }
         case "field":
             HStack(spacing: 0) {
@@ -1393,7 +1953,7 @@ struct LauncherView: View {
                     Text("\(m.items.count)\nRESULTS").font(code(11, "Bold")).foregroundStyle(p["dim"])
                     Spacer()
                     Text("\(Image(systemName: "command")) SPACE").font(code(11)).foregroundStyle(p["comment"])
-                }.padding(18).frame(width: 124).background(p["bg_dark"].opacity(0.5))
+                }.padding(18).frame(width: 124).background(p["bg_dark"])
                 VStack(spacing: 0) { resultList(p); preview(p, compact: true) }
             }
         case "ink":
@@ -1412,7 +1972,7 @@ struct LauncherView: View {
                     Spacer()
                     Text("↵  OPEN").font(code(11, "Bold")).foregroundStyle(p["dim"])
                 }
-                .padding(16).frame(width: 106).background(p["bg_dark"].opacity(0.72))
+                .padding(16).frame(width: 106).background(p["bg_dark"])
                 Rectangle().fill(p["yellow"].opacity(0.3)).frame(width: 1)
                 VStack(spacing: 0) { sectionTitle("SITES OF GRACE", p); resultList(p) }
                 preview(p)
@@ -1426,7 +1986,7 @@ struct LauncherView: View {
                     }.padding(.leading, 18)
                     Spacer(minLength: 8)
                     preview(p, compact: true).frame(width: 330)
-                }.frame(height: 104).background(p["bg_dark"].opacity(0.56))
+                }.frame(height: 104).background(p["bg_dark"])
                 p["yellow"].opacity(0.42).frame(height: 1)
                 resultList(p, grid: true).padding(6)
             }
@@ -1442,12 +2002,72 @@ struct LauncherView: View {
                     Text(String(format: "%02d", min(m.selected + 1, m.items.count)))
                         .font(code(11, "Bold")).foregroundStyle(p["dim"])
                 }
-                .frame(width: 42).background(p["bg_dark"].opacity(0.64))
+                .frame(width: 42).background(p["bg_dark"])
                 Rectangle().fill(p["red"].opacity(0.35)).frame(width: 1)
                 preview(p)
             }
         default:
             HStack(spacing: 0) { resultList(p); preview(p, card: p.s("detail", "panel") == "card") }
+        }
+    }
+
+    func themePicker(_ p: Palette) -> some View {
+        let cards = m.themeCards
+        return ScrollViewReader { proxy in
+            ScrollView {
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 10) {
+                    ForEach(Array(cards.enumerated()), id: \.element.id) { index, item in
+                        Button { m.activate(index) } label: {
+                            ThemePreview(item: item, palette: p, selected: index == m.selected)
+                        }
+                        .buttonStyle(.plain)
+                        .id(index)
+                        .accessibilityAddTraits(index == m.selected ? .isSelected : [])
+                    }
+                }
+                .padding(12)
+            }
+            .onChange(of: m.selected) { _, index in
+                withAnimation(reduceMotion ? nil : .easeOut(duration: 0.14)) { proxy.scrollTo(index) }
+            }
+        }
+    }
+
+    /// Theme-aware workspace overview surface (pairs with Rift mission control on ⌃⌥M).
+    /// Cards come ONLY from overviewCards — never from Theme gallery `items`.
+    func overviewPicker(_ p: Palette) -> some View {
+        let cards = m.overviewCards
+        return VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 10) {
+                Text(p.cased("Workspace Overview"))
+                    .font(mono(13, "Bold")).tracking(1.6).foregroundStyle(p["yellow"])
+                Text(p.cased("⌃⌥M · Esc dismisses"))
+                    .font(mono(11, "Bold")).tracking(0.8).foregroundStyle(p["dim"])
+                Spacer(minLength: 8)
+                Text(p.cased("\(cards.count) spaces"))
+                    .font(mono(11, "Bold")).tracking(1.2).foregroundStyle(p["comment"])
+            }
+            .padding(.horizontal, 16).frame(height: 36)
+            .overlay(alignment: .bottom) { p["border"].frame(height: 1) }
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 2), spacing: 12) {
+                        ForEach(Array(cards.enumerated()), id: \.element.id) { index, item in
+                            Button { m.activate(index) } label: {
+                                OverviewCard(item: item, palette: p, selected: index == m.selected, index: index,
+                                             windows: m.overviewThumbs[index] ?? [])
+                            }
+                            .buttonStyle(.plain)
+                            .id(index)
+                            .accessibilityAddTraits(index == m.selected ? .isSelected : [])
+                        }
+                    }
+                    .padding(14)
+                }
+                .onChange(of: m.selected) { _, index in
+                    withAnimation(reduceMotion ? nil : .easeOut(duration: 0.14)) { proxy.scrollTo(index) }
+                }
+            }
         }
     }
 
@@ -1473,7 +2093,7 @@ struct LauncherView: View {
                     LazyVGrid(columns: [GridItem(.flexible(), spacing: 6), GridItem(.flexible(), spacing: 6)], spacing: 6) {
                         ForEach(Array(m.items.enumerated()), id: \.element.id) { i, item in
                             result(item, index: i, p: p)
-                                .background(RoundedRectangle(cornerRadius: max(p.num("chip_radius", 4), 3), style: .continuous).fill(p["surface"].opacity(0.7)))
+                                .background(RoundedRectangle(cornerRadius: max(p.num("chip_radius", 4), 3), style: .continuous).fill(p["surface"]))
                         }
                     }.padding(6)
                 } else {
@@ -1607,22 +2227,42 @@ struct ActionPanel: View {
             }
         }
         .padding(6).frame(width: 300)
-        .background(RoundedRectangle(cornerRadius: min(p.num("radius", 16), 12), style: .continuous).fill(p["bg_float"]))
+        .background(RoundedRectangle(cornerRadius: min(p.num("radius", 16), 12), style: .circular).fill(p["surface"]))
+        .clipShape(RoundedRectangle(cornerRadius: min(p.num("radius", 16), 12), style: .circular))
+        .compositingGroup()
         .overlay(RoundedRectangle(cornerRadius: min(p.num("radius", 16), 12), style: .continuous).stroke(p["border"], lineWidth: 1))
-        .shadow(color: .black.opacity(0.5), radius: 18, y: 8)
+        
     }
 }
 
-struct VisualEffect: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSVisualEffectView {
-        let v = NSVisualEffectView()
-        v.material = .hudWindow
-        v.blendingMode = .behindWindow
-        v.state = .active
-        v.appearance = NSAppearance(named: .darkAqua)
-        return v
+/// Former frosted material — VEI-31: solid opaque fill only (never NSVisualEffectView).
+struct VisualEffect: View {
+    var body: some View { Palette.load()["bg_float"] }
+}
+
+/// Esc → `veil dismiss-popups` (SketchyBar music/calendar/control/keys + Rift overview).
+/// NSEvent global monitor (Veil Search needs Accessibility). Never locks; never ScreenSaverEngine.
+enum EscDismiss {
+    private static var veilBin = NSString(string: "~/.local/bin/veil").expandingTildeInPath
+
+    static func install(veilBin: String) {
+        Self.veilBin = veilBin
+        NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { e in
+            guard e.keyCode == UInt16(kVK_Escape) else { return }
+            run()
+        }
     }
-    func updateNSView(_ v: NSVisualEffectView, context: Context) {}
+
+    static func run() {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let task = Process()
+            task.executableURL = URL(fileURLWithPath: veilBin)
+            task.arguments = ["dismiss-popups"]
+            task.standardOutput = FileHandle.nullDevice
+            task.standardError = FileHandle.nullDevice
+            try? task.run()
+        }
+    }
 }
 
 // MARK: panel + app
@@ -1640,13 +2280,19 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var lastToggle = Date.distantPast
     /// Ignore resignKey briefly after show so the panel is not dismissed by the open itself.
     var ignoreResignUntil = Date.distantPast
+    /// Distributed hide from a prior `dismiss-popups` must not win over a just-posted show.
+    var suppressHideUntil = Date.distantPast
+    /// Monotonic show generation — stale force-hides posted before this show are ignored.
+    var showGeneration = 0
+    var lastShowAt = Date.distantPast
 
     func applicationDidFinishLaunching(_ n: Notification) {
-        if Model.migrateRankingPrivacy(.standard) { model.usage = [:]; model.history = []; model.pins = [] }
+        if Model.migrateRankingPrivacy(.standard) { model.usage = [:]; model.history = []; model.pins = []; model.queryChoices = [:] }
         panel = Panel(contentRect: NSRect(x: 0, y: 0, width: 940, height: 640),
                       styleMask: [.borderless, .nonactivatingPanel, .fullSizeContentView], backing: .buffered, defer: false)
         panel.isFloatingPanel = true
-        panel.level = .modalPanel
+        // Above normal / full-screen media apps so overview/theme surfaces stay visible for product use.
+        panel.level = .statusBar
         panel.backgroundColor = .clear
         panel.isOpaque = false
         panel.hasShadow = false
@@ -1654,20 +2300,54 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         panel.isMovable = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient, .ignoresCycle]
         panel.delegate = self
+        model.close = { [weak self] in self?.hide() }
+        // Pre-warm the SwiftUI tree so the first ⌘Space does not pay hosting-view compile cost.
         panel.contentView = NSHostingView(rootView: LauncherView(m: model))
         panel.contentView?.wantsLayer = true
-        model.close = { [weak self] in self?.hide() }
+        panel.setFrame(NSRect(x: 0, y: 0, width: 1, height: 1), display: false)
+        panel.orderOut(nil)
+
+        // Glyph / Nothing OS surfaces (⌃⌥ + letter). Does not steal Option←/→ word navigation.
+        GlyphShell.registerHotkeys()
+        // Pin-able desktop Glyph widgets (wallpaper layer) — every theme.
+        if !veilIsOff { DesktopGlyphBoard.shared.start() }
 
         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] e in
-            guard let self, e.window === self.panel else { return e }
+            guard let self, self.panel.isVisible,
+                  e.window === self.panel || (e.window == nil && self.panel.isKeyWindow) else { return e }
             let cmd = e.modifierFlags.contains(.command), ctrl = e.modifierFlags.contains(.control)
+            let shift = e.modifierFlags.contains(.shift), option = e.modifierFlags.contains(.option)
+            let editor = self.panel.firstResponder as? NSTextView
+            let key = Int(e.keyCode)
+            if cmd && !ctrl && !option {
+                // This accessory app has no Edit menu to dispatch standard text shortcuts.
+                switch key {
+                case kVK_ANSI_A where !shift: editor?.selectAll(nil); return nil
+                case kVK_ANSI_C where !shift:
+                    if let editor, editor.selectedRange().length > 0 { editor.copy(nil) }
+                    else if !self.model.actionsOpen { self.model.copySelected() }
+                    return nil
+                case kVK_ANSI_V where !shift: editor?.pasteAsPlainText(nil); return nil
+                case kVK_ANSI_X where !shift: editor?.cut(nil); return nil
+                case kVK_ANSI_Z:
+                    if shift { editor?.undoManager?.redo() }
+                    else { editor?.undoManager?.undo() }
+                    return nil
+                default: break
+                }
+            }
             // a second ⌘Space closes the launcher even when the search field has the keyboard
+            if cmd && !ctrl && !option && !shift && key == kVK_ANSI_T {
+                self.model.toggleThemePicker()
+                return nil
+            }
             if cmd, Int(e.keyCode) == kVK_Space { self.lastToggle = Date(); self.hide(); return nil }  // the hotkey must not reopen it
             // ⌘K action panel takes the keyboard while open
             if self.model.actionsOpen {
                 let n = self.model.currentActions.count
                 switch Int(e.keyCode) {
-                case kVK_Escape, kVK_ANSI_K where cmd: self.model.actionsOpen = false; return nil
+                case kVK_Escape: self.model.actionsOpen = false; return nil
+                case kVK_ANSI_K where cmd: self.model.actionsOpen = false; return nil
                 case kVK_DownArrow: self.model.actionIndex = n == 0 ? 0 : (self.model.actionIndex + 1) % n; return nil
                 case kVK_UpArrow: self.model.actionIndex = n == 0 ? 0 : (self.model.actionIndex - 1 + n) % n; return nil
                 case kVK_Return, kVK_ANSI_KeypadEnter: self.model.runAction(self.model.actionIndex); return nil
@@ -1675,7 +2355,10 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 }
             }
             switch Int(e.keyCode) {
-            case kVK_Escape:  // Esc clears the query, then the mode, then closes
+            case kVK_Escape:  // Overview: close immediately. Else clear query → mode → close.
+                if self.model.surface == .overview {
+                    self.hide(force: true); return nil
+                }
                 if !self.model.query.isEmpty { self.model.query = ""; self.model.historyIndex = -1 }
                 else if self.model.mode != 0 { self.model.mode = 0; self.model.search() }
                 else { self.hide() }
@@ -1687,17 +2370,20 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 self.model.search(); return nil
             case kVK_ANSI_R where cmd: self.model.activate(reveal: true); return nil
             case kVK_ANSI_P where cmd: self.model.togglePin(); return nil
-            case kVK_RightArrow where !cmd:
+            case kVK_RightArrow where !cmd && !option:
                 // → at the end of the query accepts the ghost completion
                 if let rest = self.model.completion, let tv = self.panel.firstResponder as? NSTextView,
                    tv.selectedRange().location == (self.model.query as NSString).length {
                     self.model.query += rest; return nil
                 }
                 // in a grid, ←/→ move tiles once you're navigating them (or the field is empty); otherwise they edit the query
-                if self.model.gridColumns > 1 && (self.model.userMoved || self.model.query.isEmpty) { self.model.moveGrid(dx: 1, dy: 0); return nil }
+                if self.model.gridColumns > 1 && (self.model.choosingTheme || self.model.userMoved || self.model.query.isEmpty) { self.model.moveGrid(dx: 1, dy: 0); return nil }
                 return e
-            case kVK_LeftArrow where !cmd && self.model.gridColumns > 1 && (self.model.userMoved || self.model.query.isEmpty):
+            // ⌥←/⌥→ must reach the field for word navigation (never steal for grid)
+            case kVK_LeftArrow where !cmd && !option && self.model.gridColumns > 1 && (self.model.choosingTheme || self.model.userMoved || self.model.query.isEmpty):
                 self.model.moveGrid(dx: -1, dy: 0); return nil
+            case kVK_LeftArrow where option, kVK_RightArrow where option:
+                return e
             case kVK_ANSI_L where cmd: self.showLargeType(); return nil
             case kVK_ANSI_K where cmd: self.model.actionIndex = 0; self.model.actionsOpen = !self.model.currentActions.isEmpty; return nil
             // ⌘⌫ deletes the query text like every macOS field; Move to Trash stays in the ⌘K actions
@@ -1731,10 +2417,6 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             case kVK_ANSI_P where ctrl: self.model.move(-1); return nil
             case kVK_ANSI_O where ctrl: self.model.activate(reveal: true); return nil
             case kVK_ANSI_Y where cmd: self.model.quickLook(); return nil
-            case kVK_ANSI_C where cmd:
-                // copy the text selection when there is one, otherwise the selected result
-                if let tv = self.panel.firstResponder as? NSTextView, tv.selectedRange().length > 0 { return e }
-                self.model.copySelected(); return nil
             default: return e
             }
         }
@@ -1742,37 +2424,83 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         var spec = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
         InstallEventHandler(GetApplicationEventTarget(), { _, event, _ in
             var hk = EventHotKeyID()
-            GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID), nil,
-                              MemoryLayout<EventHotKeyID>.size, nil, &hk)
-            DispatchQueue.main.async { if hk.id == 2 { VeilMode.toggle() } else { (NSApp.delegate as? App)?.toggle() } }
+            let status = GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID), nil,
+                                           MemoryLayout<EventHotKeyID>.size, nil, &hk)
+            guard status == noErr, hk.signature == OSType(0x4E43_5348), [1, 2, 3].contains(hk.id) else { return OSStatus(eventNotHandledErr) }
+            let id = hk.id
+            // Spotlight-speed: run on this turn — DispatchQueue.main.async let the next keystrokes
+            // hit the previously focused app before the search field exists.
+            let run = {
+                if id == 2 { VeilMode.toggle() }
+                else if id == 3 { (NSApp.delegate as? App)?.show(query: "theme") }  // ⌃⌥T — reliable when Cursor steals ⌘T
+                else { (NSApp.delegate as? App)?.toggle() }
+            }
+            if Thread.isMainThread { run() } else { DispatchQueue.main.sync(execute: run) }
             return noErr
         }, 1, &spec, nil, nil)
         // ⌃⌥⌘V turns Veil on or off; it stays registered while Veil is off, so the way back is always there
         var toggleKey: EventHotKeyRef?
         RegisterEventHotKey(UInt32(kVK_ANSI_V), UInt32(cmdKey | optionKey | controlKey), EventHotKeyID(signature: OSType(0x4E43_5348), id: 2),
                             GetApplicationEventTarget(), 0, &toggleKey)
+        // ⌃⌥T opens the theme gallery even when Cursor owns ⌘T
+        var themesKey: EventHotKeyRef?
+        RegisterEventHotKey(UInt32(kVK_ANSI_T), UInt32(controlKey | optionKey), EventHotKeyID(signature: OSType(0x4E43_5348), id: 3),
+                            GetApplicationEventTarget(), 0, &themesKey)
         if !veilIsOff { registerSearchKey() }
+        // Esc dismisses SketchyBar popups (and Rift overview) without locking anything.
+        EscDismiss.install(veilBin: home + "/.local/bin/veil")
         // veil off / on: step aside or come back
         DistributedNotificationCenter.default().addObserver(forName: Notification.Name("app.veil.search.mode"), object: nil, queue: .main) { [weak self] n in
             guard let self else { return }
             if (n.object as? String) == "off" {
                 if let k = self.hotKey { UnregisterEventHotKey(k); self.hotKey = nil }
                 self.hide()
+                self.dismissLargeType()
+                OSD.shared.dismiss()
+                self.splash?.orderOut(nil)
+                self.splash?.contentView = nil
+                self.splash = nil
+                MediaKeys.shared.stop()
+                FocusPulse.shared.setEnabled(false)
+                Task { @MainActor in
+                    VeilBarController.shared.stop()
+                    VeilPanelHost.shared.dismiss()
+                }
                 self.band.reload(Palette.load())
             } else {
+                FocusPulse.shared.setEnabled(true)
+                MediaKeys.shared.start()
                 // Spotlight lets go of ⌘Space a beat after its shortcut is switched off
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { self.registerSearchKey() }
                 self.band.reload(Palette.load())
+                Task { @MainActor in VeilBarController.shared.start() }
             }
+            ClipHistory.shared.syncPolling()
         }
-        model.refresh()
         // veil launch --query "x" (and screenshots/tests) open the panel with a query
         DistributedNotificationCenter.default().addObserver(forName: Notification.Name("app.veil.search.show"), object: nil, queue: .main) { [weak self] n in
             self?.show(query: n.object as? String ?? "")
         }
+        // veil dismiss-popups / Esc path — hide Search overview/panel entirely
+        DistributedNotificationCenter.default().addObserver(forName: Notification.Name("app.veil.search.hide"), object: nil, queue: .main) { [weak self] n in
+            guard let self else { return }
+            let obj = (n.object as? String) ?? ""
+            // Epoch-ms from `veil dismiss-popups`: ignore hides requested before the latest show
+            // (fixes themes→dismiss→overview and rapid open/close where a late hide kills the new panel).
+            if let hideMs = Double(obj), hideMs > 1_000_000 {
+                let hideAt = Date(timeIntervalSince1970: hideMs / 1000.0)
+                if hideAt < self.lastShowAt { return }
+            } else if obj.lowercased() == "force" {
+                // legacy force — honor when panel is up
+            } else if Date() < self.suppressHideUntil, !self.panel.isVisible {
+                return
+            }
+            self.hide(force: true)
+        }
         // functional check: top results for one query per feature, written to ~/Library/Caches/veil-search-verify.txt
         DistributedNotificationCenter.default().addObserver(forName: Notification.Name("app.veil.search.verify"), object: nil, queue: .main) { [weak self] _ in
             guard let m = self?.model else { return }
+            m.refresh(updateHiddenResults: true)
             let queries = ["safari", "sfri", "wifi", "2+2*3", "sqrt(144)", "15% of 80", "10 km to mi", "100 f to c", "100 usd to eur", "time in tokyo",
                            "serendipity", "weather", "uuid", "#ff8800", ":fire", "upper", "lock", "volume 30", "quit finder", "g swift",
                            "yt lofi", "so swift", "~/Developer/", "pdf: whitepaper", "lethean", "theme", "github.com", "README.md",
@@ -1780,7 +2508,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             var out: [String] = []
             func dump(_ i: Int) {
                 guard i < queries.count else {
-                    m.mdQuery?.stop(); m.query = ""
+                    m.cancelFileSearch(); m.query = ""
                     try? out.joined(separator: "\n").write(toFile: home + "/Library/Caches/veil-search-verify.txt", atomically: true, encoding: .utf8)
                     return
                 }
@@ -1804,7 +2532,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 for _ in 0..<20 { m.search() }
                 lines.append(String(format: "%-14@ %6.2f ms", q as NSString, (CFAbsoluteTimeGetCurrent() - t0) / 20 * 1000))
             }
-            m.mdQuery?.stop()
+            m.cancelFileSearch()
             try? lines.joined(separator: "\n").write(toFile: home + "/Library/Caches/veil-search-bench.txt", atomically: true, encoding: .utf8)
         }
         DistributedNotificationCenter.default().addObserver(forName: Notification.Name("app.veil.search.largetype"), object: nil, queue: .main) { [weak self] _ in
@@ -1835,6 +2563,25 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         DistributedNotificationCenter.default().addObserver(forName: Notification.Name("app.veil.search.splash"), object: nil, queue: .main) { [weak self] _ in
             self?.showSplash()
         }
+        // Theme apply finished — drop cached palette/ws so overview matches the bar immediately.
+        DistributedNotificationCenter.default().addObserver(forName: Notification.Name("app.veil.search.theme"), object: nil, queue: .main) { [weak self] _ in
+            guard let self else { return }
+            self.model.palette = Palette.load()
+            self.model.ncCache = ncItems(liveWorkspaceNames(paletteWS: self.model.wsNames))
+            self.band.reload(self.model.palette)
+            Task { @MainActor in
+                if veilIsOff || !VeilFeature.veilBar { VeilBarController.shared.stop() } else { VeilBarController.shared.start() }
+            }
+            if self.model.shown {
+                if self.model.surface == .overview {
+                    self.model.enterOverview()
+                } else if self.model.surface == .themes {
+                    self.model.enterThemes()
+                } else {
+                    self.model.search()
+                }
+            }
+        }
         // veil-theme: set this image as the desktop picture on every screen
         DistributedNotificationCenter.default().addObserver(forName: Notification.Name("app.veil.search.desktop"), object: nil, queue: .main) { n in
             guard let path = n.object as? String else { return }
@@ -1848,22 +2595,68 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         StateWatch.shared.start()
         FocusPulse.shared.palette = { [weak self] in self?.model.palette ?? Palette.load() }
         FocusPulse.shared.start()
+        // Custom Veil bar + animated music/control panels (SketchyBar fallback via feature flags).
+        if !veilIsOff { VeilBarController.shared.start() }
+        DistributedNotificationCenter.default().addObserver(forName: Notification.Name("app.veil.panel"), object: nil, queue: .main) { n in
+            let raw = ((n.object as? String) ?? "").lowercased()
+            Task { @MainActor in
+                // Re-resolve SketchyBar button bounds each open so panels hug the clicked item.
+                switch raw {
+                case "music": VeilPanelHost.shared.toggle(.music, near: VeilPanelHost.sketchybarItemRect(for: .music))
+                case "control", "city": VeilPanelHost.shared.toggle(.control, near: VeilPanelHost.sketchybarItemRect(for: .control))
+                case "keys": VeilPanelHost.shared.toggle(.keys, near: VeilPanelHost.sketchybarItemRect(for: .keys))
+                case "dismiss", "off": VeilPanelHost.shared.dismiss()
+                default: break
+                }
+            }
+        }
+        DistributedNotificationCenter.default().addObserver(forName: Notification.Name("app.veil.desktop-glyphs"), object: nil, queue: .main) { n in
+            let raw = ((n.object as? String) ?? "").lowercased()
+            Task { @MainActor in
+                if raw.hasPrefix("add:") {
+                    let name = String(raw.dropFirst(4))
+                    if let id = DesktopGlyphID(rawValue: name) {
+                        DesktopGlyphBoard.shared.setPin(id, pinned: true)
+                    }
+                    return
+                }
+                switch raw {
+                case "toggle", "on", "off": DesktopGlyphBoard.shared.toggleEnabled()
+                case "refresh", "reload": DesktopGlyphBoard.shared.refresh()
+                case "reset", "default": DesktopGlyphBoard.shared.resetToDefault()
+                case "prove-drag":
+                    // Same pipeline as AX mouse drag — for screenshots when CGEvent is blocked.
+                    DesktopGlyphBoard.shared.proveDrag(.cava, toCol: 14, toRow: 7)
+                case "dismiss-panels":
+                    VeilPanelHost.shared.dismissImmediate()
+                default: DesktopGlyphBoard.shared.start()
+                }
+            }
+        }
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
                                                          object: nil, queue: .main) { [weak self] _ in self?.syncWindowMotion() }
-        syncWindowMotion()
-        NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in self?.band.reload(Palette.load()) }
+        NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.band.reload(Palette.load())
+            Task { @MainActor in
+                if !veilIsOff, VeilFeature.veilBar { VeilBarController.shared.start() }
+            }
+        }
     }
 
     // Follow a live accessibility change without polling or waiting for a theme reapply.
     func syncWindowMotion() {
         let animate = !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion &&
             !FileManager.default.fileExists(atPath: ncRoot + "/generated/quiet")
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: home + "/.local/bin/rift-cli")
-        task.arguments = ["execute", "config", "set", "settings.animate", animate ? "true" : "false"]
-        task.standardOutput = FileHandle.nullDevice
-        task.standardError = FileHandle.nullDevice
-        try? task.run()
+        DispatchQueue.global(qos: .utility).async {
+            for setting in ["settings.animate", "settings.ui.mission_control.fade_enabled"] {
+                let task = Process()
+                task.executableURL = URL(fileURLWithPath: home + "/.local/bin/rift-cli")
+                task.arguments = ["execute", "config", "set", setting, animate ? "true" : "false"]
+                task.standardOutput = FileHandle.nullDevice
+                task.standardError = FileHandle.nullDevice
+                if (try? task.run()) != nil { task.waitUntilExit() }
+            }
+        }
     }
 
     // `open -a "Veil Search"` (veil launch, the bar menu) toggles too
@@ -1886,18 +2679,19 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if case .copy(let v) = it.action, !v.isEmpty, it.extra != "secret" { text = v }
         hide()
         dismissLargeType()
-        let screen = NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) } ?? NSScreen.main!
+        guard let screen = NSScreen.screens.first(where: { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) }) ?? NSScreen.main else { return }
         let w = Panel(contentRect: screen.frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         w.level = .screenSaver; w.backgroundColor = .clear; w.isOpaque = false; w.isReleasedWhenClosed = false
         w.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
         let p = model.palette
         w.contentView = NSHostingView(rootView: ZStack {
-            Color.black.opacity(0.55)
+            p["bg"] // opaque full-screen — no translucent scrim
             Text(text).font(mono(min(160, max(48, 2400 / CGFloat(max(text.count, 1)))), "Bold")).foregroundStyle(p["white"])
                 .multilineTextAlignment(.center).minimumScaleFactor(0.2).padding(60)
-                .background(RoundedRectangle(cornerRadius: 28, style: .continuous).fill(p["bg_float"].opacity(0.95)))
+                .background(RoundedRectangle(cornerRadius: 28, style: .continuous).fill(p["bg_float"]))
+                .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
                 .padding(120)
-            VStack { Spacer(); Text("Press any key or click to close").font(code(12)).foregroundStyle(.white.opacity(0.6)).padding(.bottom, 40) }
+            VStack { Spacer(); Text("Press any key or click to close").font(code(12)).foregroundStyle(p["comment"]).padding(.bottom, 40) }
         }.ignoresSafeArea())
         w.makeKeyAndOrderFront(nil)
         largeType = w
@@ -1919,33 +2713,81 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     func show(query: String = "") {
-        ClipHistory.shared.capture()
+        guard !veilIsOff, let screen = NSScreen.screens.first(where: { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) }) ?? NSScreen.main else { return }
         MenuItems.frontPID = NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0
-        model.query = query
+        ClipHistory.shared.setLauncherActive(true)
+        // Beat a late dismiss-popups hide from the previous surface (killer: themes → dismiss → overview).
+        showGeneration += 1
+        lastShowAt = Date()
+        suppressHideUntil = Date().addingTimeInterval(1.0)
+        ignoreResignUntil = Date().addingTimeInterval(0.45)
+
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        switch q {
+        case "overview":
+            model.enterOverview()
+        case "theme":
+            model.enterThemes()
+        default:
+            model.surface = .search
+            model.overviewCards = []
+            model.themeCards = []
+            // Clear query synchronously so the field is empty and focused before any keystroke arrives.
+            if !query.isEmpty {
+                if model.query == query { model.search() } else { model.query = query }
+            } else if !model.query.isEmpty {
+                model.renderingFixture = true
+                model.query = ""
+                model.renderingFixture = false
+                model.items = []
+            }
+        }
         model.selected = 0
         model.openMouse = NSEvent.mouseLocation
-        model.refresh()
-        let screen = NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) } ?? NSScreen.main!
+        model.shown = true
+
+        // Pre-warmed hosting view: never rebuild on the hotkey path.
+        if !(panel.contentView is NSHostingView<LauncherView>) {
+            panel.contentView = NSHostingView(rootView: LauncherView(m: model))
+            panel.contentView?.wantsLayer = true
+        }
         let f = screen.frame
-        // width and placement follow the theme: top third (default), centered, or a banner under the bar
         let p = model.palette
-        panel.setContentSize(NSSize(width: p.num("width", 860) + 80, height: 640))
+        let width = min(f.width, p.num("width", 860) + 80)
+        let height = min(f.height, 640)
+        // Restore from the idle 1×1 collapse in one setFrame (cheaper than setContentSize + top-left).
         let top: CGFloat
         switch p.s("place", "top") {
         case "center": top = f.maxY - f.height * 0.26 + 40
         case "banner": top = f.maxY - 44 + 40
-        case "bottom": top = f.minY + 48 - 40 + 640  // card rises from just above a bottom bar
+        case "bottom": top = f.minY + 48 - 40 + height
         default: top = f.maxY - f.height * 0.18 + 40
         }
-        panel.setFrameTopLeftPoint(NSPoint(x: f.midX - panel.frame.width / 2, y: top))
-        model.shown = false
-        // Opening can briefly resign key (scrim / first-responder shuffle); do not treat that as dismiss.
-        ignoreResignUntil = Date().addingTimeInterval(0.35)
-        Scrim.shared.show(on: screen, enabled: p.flag("scrim"))
+        let originY = min(top, f.maxY + 40) - height
+        panel.setFrame(NSRect(x: f.midX - width / 2, y: originY, width: width, height: height), display: false)
+
+        // Spotlight path: activate + key + field focus BEFORE heavy work / scrim.
+        NSApp.activate(ignoringOtherApps: true)
+        panel.level = .statusBar
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient, .ignoresCycle]
         panel.makeKeyAndOrderFront(nil)
+        panel.orderFrontRegardless()
+        if let field = panel.contentView?.firstTextField {
+            panel.makeFirstResponder(field)
+        }
+
+        // Deferred: clipboard snapshot, source refresh, scrim — never block first keystroke.
         DispatchQueue.main.async {
-            self.model.shown = true
-            self.panel.makeFirstResponder(self.panel.contentView?.firstTextField)
+            ClipHistory.shared.capture()
+            Scrim.shared.show(on: screen, enabled: p.flag("scrim"))
+            self.model.refresh()
+            if self.model.surface == .overview { self.model.enterOverview() }
+            else if self.model.surface == .themes { self.model.enterThemes() }
+            // Re-assert focus in case SwiftUI rebuilt the field after refresh.
+            if self.panel.isVisible, !(self.panel.firstResponder is NSTextView),
+               let field = self.panel.contentView?.firstTextField {
+                self.panel.makeFirstResponder(field)
+            }
         }
     }
 
@@ -1955,9 +2797,11 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func showSplash() {
         let p = Palette.load()
         model.palette = p
-        model.search()  // update theme status and workspace names with the new palette
+        model.ncCache = ncItems(liveWorkspaceNames(paletteWS: model.wsNames))
+        if model.shown { model.search() }
+        Task { @MainActor in DesktopGlyphBoard.shared.refresh() }
         splash?.orderOut(nil); splash?.contentView = nil
-        let screen = NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) } ?? NSScreen.main!
+        guard !veilIsOff, let screen = NSScreen.screens.first(where: { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) }) ?? NSScreen.main else { return }
         let w = NSWindow(contentRect: screen.frame, styleMask: .borderless, backing: .buffered, defer: false)
         w.level = .screenSaver
         w.backgroundColor = .clear
@@ -1968,27 +2812,61 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         w.contentView = NSHostingView(rootView: SplashView(p: p, size: screen.frame.size))
         w.alphaValue = 0
         w.orderFrontRegardless()
-        NSAnimationContext.runAnimationGroup { $0.duration = 0.25; w.animator().alphaValue = 1 }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.3) {
-            // drop the view too: an ordered-out SplashView keeps its TimelineView redrawing every frame
-            NSAnimationContext.runAnimationGroup({ $0.duration = 0.45; w.animator().alphaValue = 0 }, completionHandler: { w.orderOut(nil); w.contentView = nil })
-        }
+        let reduce = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        NSAnimationContext.runAnimationGroup { $0.duration = reduce ? 0 : 0.2; w.animator().alphaValue = 1 }
         splash = w
+        DispatchQueue.main.asyncAfter(deadline: .now() + (reduce ? 0.8 : 1.15)) { [weak self, weak w] in
+            guard let self, let w, self.splash === w else { return }
+            NSAnimationContext.runAnimationGroup({ $0.duration = reduce ? 0 : 0.28; w.animator().alphaValue = 0 }, completionHandler: {
+                w.orderOut(nil)
+                w.contentView = nil
+                if self.splash === w { self.splash = nil }
+            })
+        }
     }
 
-    func hide() {
-        guard panel.isVisible else { return }
-        panel.orderOut(nil)
-        Scrim.shared.hide()
+    func hide(force: Bool = true) {
+        _ = force
+        // Instant dismiss first — never wait on teardown or the launched app.
+        let wasVisible = panel.isVisible
+        if wasVisible { panel.orderOut(nil) }
         model.shown = false
         model.actionsOpen = false
+        ClipHistory.shared.setLauncherActive(false)
+        Scrim.shared.hide()
+        Task { @MainActor in VeilPanelHost.shared.dismiss() }
+
+        guard wasVisible || model.surface != .search else {
+            model.overviewCards = []
+            model.overviewThumbs = [:]
+            model.themeCards = []
+            model.windows = [:]
+            return
+        }
         model.historyIndex = -1
         model.mode = 0
-        model.mdQuery?.stop()
+        let q = model.query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        model.surface = .search
+        model.overviewCards = []
+        model.overviewThumbs = [:]
+        model.themeCards = []
+        model.windows = [:]
+        if q == "overview" || q == "theme" || !model.query.isEmpty {
+            model.renderingFixture = true
+            model.query = ""
+            model.renderingFixture = false
+            model.items = []
+        }
+        model.cancelFileSearch()
+        Weather.shared.cancelPending()
+        // Keep the hosting view warm for Spotlight-speed reopen; only collapse the backing store.
+        panel.setFrame(NSRect(x: 0, y: 0, width: 1, height: 1), display: false)
+        IconCache.clear()
+        malloc_zone_pressure_relief(nil, 0)
     }
 
     func registerSearchKey() {
-        guard hotKey == nil else { return }
+        guard hotKey == nil, !veilIsOff else { return }
         let id = EventHotKeyID(signature: OSType(0x4E43_5348), id: 1)  // "NCSH"
         let status = RegisterEventHotKey(UInt32(kVK_Space), UInt32(cmdKey), id, GetApplicationEventTarget(), 0, &hotKey)
         if status != noErr { NSLog("veil-search: could not register ⌘Space (status \(status)); is Spotlight still using it?") }
@@ -2023,6 +2901,74 @@ func selftest() -> Never {
     precondition(score("wifi", "Wi-Fi") != nil)
     precondition(score("vsc", "Visual Studio Code") == 750)
     precondition(score("xyz", "Safari") == nil)
+    do {
+        let model = Model()
+        model.ncCache = [
+            Item(kind: .nc, title: "Theme: Umbra", subtitle: "Current theme", symbol: "paintpalette", action: .run(["veil-theme", "apply", "umbra"])),
+            Item(kind: .nc, title: "Theme: Night City", symbol: "paintpalette", action: .run(["veil-theme", "apply", "night-city"])),
+            Item(kind: .nc, title: "Workspace Overview", action: .run(["veil", "overview"]))
+        ]
+        model.toggleThemePicker()
+        precondition(model.surface == .themes)
+        precondition(model.gridColumns == 3 && model.themeCards.count == 2 && model.themeCards.first?.title == "Theme: Umbra")
+        precondition(!model.searchingFiles && model.completion == nil)
+        model.moveGrid(dx: 1, dy: 0)
+        precondition(model.themeCards[model.selected].title == "Theme: Night City")
+        // Gallery must not pollute overview surface
+        model.enterOverview()
+        precondition(model.surface == .overview)
+        precondition(model.overviewCards.allSatisfy { !$0.title.hasPrefix("Theme:") })
+        precondition(model.themeCards.isEmpty)
+        model.toggleThemePicker()  // from overview → themes via toggle clears? enterThemes path
+        // toggle from themes closes; ensure clean exit from themes
+        if model.surface == .themes { model.toggleThemePicker() }
+        precondition(model.surface == .search)
+    }
+    do {
+        let cards = overviewWorkspaceCards(paletteWS: ["FOCUS", "BUILD", "STUDY", "MEDIA", "FLOAT"])
+        precondition(cards.count == 5)
+        precondition(cards.map(\.title) == ["FOCUS", "BUILD", "STUDY", "MEDIA", "FLOAT"])
+        precondition(cards.allSatisfy { !$0.title.hasPrefix("Theme:") })
+        precondition(isNumericWorkspaceToken("3") && !isNumericWorkspaceToken("WALL"))
+        let model = Model()
+        model.renderingFixture = true
+        model.enterThemes()
+        precondition(model.surface == .themes)
+        model.enterOverview()
+        precondition(model.surface == .overview)
+        precondition(model.overviewCards.allSatisfy { !$0.title.hasPrefix("Theme:") })
+        precondition(model.themeCards.isEmpty)
+        model.renderingFixture = false
+        model.cancelFileSearch()
+    }
+    for typo in ["sfaari", "safri", "safaari", "safary", "xafari"] {
+        precondition(score(typo, "Safari").map { $0 >= 510 } == true)
+    }
+    precondition(score("uuid", "GUID") == nil)
+    do {
+        let safari = Item(kind: .app, title: "Safari", action: .open(safeURL("about:blank")))
+        let preview = Item(kind: .app, title: "Safari Preview", action: .open(safeURL("about:blank")))
+        let safety = Item(kind: .app, title: "Safety", action: .open(safeURL("about:blank")))
+        let model = Model()
+        model.apps = [preview, safari, safety]
+        model.usage = [:]
+        model.queryChoices = ["saf": [preview.learningKey: 5], "safari": [preview.learningKey: 5], "safary": [safari.learningKey: 5]]
+        model.query = "saf"
+        precondition(model.items.first?.title == "Safari Preview")
+        model.query = "safari"
+        precondition(model.items.first?.title == "Safari")
+        model.query = "safary"
+        precondition(model.items.first?.title == "Safari")
+        model.query = "safety"
+        precondition(model.items.first?.title == "Safety")
+        model.query = "saf"
+        model.move(1)
+        let selected = model.items[model.selected].resultIdentity
+        model.apps.append(Item(kind: .app, title: "Saf", action: .open(safeURL("about:blank"))))
+        model.search()
+        precondition(model.items[model.selected].resultIdentity == selected)
+        model.cancelFileSearch()
+    }
     precondition(calc("sqrt(16)+2^3") == 12 && calc("15% of 80") == 12 && abs((calc("sin(pi/2)") ?? 0) - 1) < 1e-9)
     precondition(unitAnswers("10 km to mi").first?.title.contains("6.2137") == true)
     precondition(unitAnswers("100 f to c").count == 1 && unitAnswers("10 kg to km").isEmpty)
@@ -2032,7 +2978,7 @@ func selftest() -> Never {
         // URL detection: real domains open, filenames don't
     do { let m = Model(); m.renderingFixture = true; m.query = "README.md"; m.renderingFixture = false
          m.search(); precondition(!m.items.contains { $0.title.hasPrefix("Open README") })
-         m.query = "github.com"; precondition(m.items.contains { $0.title == "Open github.com" }); m.mdQuery?.stop() }
+         m.query = "github.com"; precondition(m.items.contains { $0.title == "Open github.com" }); m.cancelFileSearch() }
         precondition((systemActionItems().first { $0.title == "Shut Down…" }?.score ?? 0) < 0)  // never outranks an app
         // crash fuzz: every feature's syntax plus hostile input must search without trapping
     do {
@@ -2043,7 +2989,7 @@ func selftest() -> Never {
                       "m ", "menu", "tabs", "contacts", "clip ", "b64 ", "unb64 !!!", "sha256 ", "random 9 1", "password 0", "password 9999",
                       "quit ", "force quit ", "volume 999", "vol -1", "g ", "yt ", String(repeating: "x", count: 600), "\n", "\t", "a\u{0}b"]
         for q in tricky { m.query = q; m.search(); _ = m.completion }
-        m.mdQuery?.stop()
+        m.cancelFileSearch()
     }
         precondition(webSearch("c++ & rust").absoluteString == "https://www.google.com/search?q=c%2B%2B%20%26%20rust")
     precondition(score("sfr", "Safari") == nil && score("saf", "Workspace 5 · FREE") == nil)
@@ -2055,12 +3001,23 @@ func selftest() -> Never {
     precondition(!Item(kind: .answer, title: "private clipboard text", action: .copy("private clipboard text"), extra: "clip").canPersist)
     precondition(Item(kind: .answer, title: "Weather unavailable", action: .copy("")).isInformational)
     do {
+        let model = Model()
+        model.query = "first query"
+        precondition(model.searchingFiles)
+        model.fileItems = [Item(kind: .file, title: "old-result.txt", action: .copy("old"))]
+        model.query = "second query"
+        precondition(model.fileItems.isEmpty && !model.items.contains { $0.title == "old-result.txt" })
+        model.query = ":fire"
+        precondition(!model.searchingFiles)
+        model.cancelFileSearch()
+    }
+    do {
         let name = "app.veil.search.selftest.\(UUID().uuidString)"
         let store = UserDefaults(suiteName: name)!
         defer { store.removePersistentDomain(forName: name) }
-        for key in ["usage", "history", "pins"] { store.set(["example-private-content"], forKey: key) }
+        for key in ["usage", "history", "pins", "queryChoices"] { store.set(["example-private-content"], forKey: key) }
         precondition(Model.migrateRankingPrivacy(store))
-        precondition(["usage", "history", "pins"].allSatisfy { store.object(forKey: $0) == nil })
+        precondition(["usage", "history", "pins", "queryChoices"].allSatisfy { store.object(forKey: $0) == nil })
         store.set(["Safari": 1], forKey: "usage")
         precondition(!Model.migrateRankingPrivacy(store) && store.dictionary(forKey: "usage")?["Safari"] as? Int == 1)
     }
@@ -2074,6 +3031,10 @@ func selftest() -> Never {
     precondition(!ClipHistory.looksLikeSecret("3114cc5eb3eb6858a3495690312065fe9d95c609") && !ClipHistory.looksLikeSecret("550e8400-e29b-41d4-a716-446655440000"))
     precondition(CalendarSource.upcoming("cal").isEmpty)  // "cal" means Calculator or Calendar.app, not the agenda
     precondition((systemActionItems().first { $0.title == "Lock Screen" }?.score ?? 0) > 0)  // the action beats the Settings pane
+    // Out-of-process overview thumbs must ship next to the launcher (keeps SCK out of veil-search RSS).
+    let thumbs = (Bundle.main.bundlePath as NSString).appendingPathComponent("Contents/MacOS/veil-thumbs")
+    precondition(FileManager.default.isExecutableFile(atPath: thumbs), "veil-thumbs missing from app bundle")
+    precondition(VeilFeature.overviewLiveThumbs || !VeilFeature.overviewLiveThumbs)  // flag readable
     print("veil-search selftest: ok")
     exit(0)
 }
@@ -2117,11 +3078,48 @@ if let i = CommandLine.arguments.firstIndex(of: "--render-osd"), CommandLine.arg
     }
     exit(0)
 }
+func acquireInstanceLock() -> Int32 {
+    let manager = FileManager.default
+    let dir = manager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("app.veil.search", isDirectory: true)
+    do {
+        try manager.createDirectory(at: dir, withIntermediateDirectories: true)
+    } catch {
+        NSLog("Veil Search could not create its runtime directory: \(error.localizedDescription)")
+        exit(1)
+    }
+    // Keep this inode for the process lifetime. Unlinking it would allow a second
+    // process to lock a newly created file while the original is still held.
+    let fd = Darwin.open(dir.appendingPathComponent("instance.lock").path, O_CREAT | O_RDWR | O_CLOEXEC | O_NOFOLLOW, 0o600)
+    guard fd >= 0 else {
+        NSLog("Veil Search could not open its instance lock (errno \(errno))")
+        exit(1)
+    }
+    while flock(fd, LOCK_EX | LOCK_NB) != 0 {
+        let code = errno
+        if code == EINTR { continue }
+        Darwin.close(fd)
+        if code == EWOULDBLOCK {
+            if !CommandLine.arguments.contains("--background") {
+                DistributedNotificationCenter.default().postNotificationName(Notification.Name("app.veil.search.show"),
+                                                                               object: nil, userInfo: nil,
+                                                                               deliverImmediately: true)
+            }
+            exit(0)
+        }
+        NSLog("Veil Search could not acquire its instance lock (errno \(code))")
+        exit(1)
+    }
+    return fd
+}
+
+let instanceLock = acquireInstanceLock()
 let app = NSApplication.shared
 let delegate = App()
 app.delegate = delegate
 app.setActivationPolicy(.accessory)
 app.run()
+Darwin.close(instanceLock)
 
 /// Themes whose bar sits at the bottom, or whose wallpaper is bright at the top edge, leave the notch cut out of
 /// the art. This paints black behind it with a short fade, like a hidden menu bar. It sits just above the desktop
@@ -2169,29 +3167,34 @@ struct Pressable: ViewModifier {
 extension View { func pressable() -> some View { modifier(Pressable()) } }
 
 
-/// Themes that ask for it (`l_scrim`) dim the screen behind the launcher, so text under its edges stops competing.
+/// Former translucent dim behind the launcher — killed (VEI-31). Kept as no-op so call sites stay stable.
 final class Scrim {
     static let shared = Scrim()
     private var window: NSWindow?
+    private var isShowing = false
     func show(on screen: NSScreen, enabled: Bool) {
-        guard enabled else { hide(); return }
-        let w = window ?? {
-            let w = NSWindow(contentRect: screen.frame, styleMask: .borderless, backing: .buffered, defer: false)
-            w.isOpaque = false; w.backgroundColor = NSColor.black; w.ignoresMouseEvents = true; w.hasShadow = false
-            w.level = NSWindow.Level(rawValue: NSWindow.Level.modalPanel.rawValue - 1); w.isReleasedWhenClosed = false
-            w.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
-            return w
-        }()
-        w.setFrame(screen.frame, display: false)
-        w.alphaValue = 0
-        w.orderFrontRegardless()
-        let reduce = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-        NSAnimationContext.runAnimationGroup { $0.duration = reduce ? 0 : 0.16; w.animator().alphaValue = 0.38 }
-        window = w
+        // Translucent scrims overextend and were explicitly rejected — never show.
+        hide()
+        _ = screen; _ = enabled
     }
     func hide() {
-        guard let w = window, w.isVisible else { return }
-        NSAnimationContext.runAnimationGroup({ $0.duration = 0.12; w.animator().alphaValue = 0 }, completionHandler: { w.orderOut(nil) })
+        isShowing = false
+        guard let w = window else { return }
+        let finish = { [weak self] in
+            w.orderOut(nil)
+            // Drop the fullscreen backing store — keeping a Retina scrim buffer floors RSS hard.
+            w.setFrame(NSRect(x: 0, y: 0, width: 1, height: 1), display: false)
+            self?.window = nil
+        }
+        guard w.isVisible else { finish(); return }
+        let reduce = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        if reduce {
+            finish()
+        } else {
+            NSAnimationContext.runAnimationGroup({ $0.duration = 0.12; w.animator().alphaValue = 0 }, completionHandler: { [weak self] in
+                if self?.isShowing == false { finish() }
+            })
+        }
     }
 }
 

@@ -50,6 +50,8 @@
  "wallpaper": "@@wallpaper@@",
  "notch_band": "@@notch_band@@",
  "bar_position": "@@bar_position@@",
+ "bar_layout": "@@bar_layout@@",
+ "bar_compose": "@@bar_compose@@",
  "radius_window": "@@l_radius@@",
  "scrim": "@@l_scrim@@",
  "corner": "@@l_corner@@",

@@ -51,7 +51,14 @@ def strings_for(theme):
     out["ff_modules_json"] = fastfetch_modules(out)
     # Rift window animation follows System Settings > Accessibility > Reduce Motion (read when a theme is applied)
     rm = subprocess.run(["defaults", "read", "com.apple.universalaccess", "reduceMotion"], capture_output=True, text=True).stdout.strip()
-    out["rift_animate"] = "false" if rm == "1" or (GEN / "quiet").exists() else "true"  # Reduce Motion or `veil quiet`
+    out["system_motion"] = "false" if rm == "1" else "true"
+    out["rift_animate"] = "false" if (GEN / "quiet").exists() else out["system_motion"]
+    # Usable tiling space follows the bar: reserve only the bar edge; free the opposite edge.
+    # Bottom bar → gap_top=0 (apps reach the top). Top bar → gap_bottom=0 (apps reach the bottom / Dock).
+    if out.get("bar_position", "top") == "bottom":
+        out["gap_top"] = "0"
+    else:
+        out["gap_bottom"] = "0"
     return out
 
 
@@ -115,6 +122,7 @@ def targets():
          ["osascript", "-e", 'if application "Ghostty" is running then tell application "Ghostty" to perform action "reload_config" on focused terminal of selected tab of front window']),
         ("sketchybar/sketchybarrc", sb / "sketchybarrc", "sh", ["sketchybar", "--reload"]),
         ("sketchybar/plugins/veil.sh", sb / "plugins/veil.sh", "sh", None),
+        ("sketchybar/plugins/calendar.sh", sb / "plugins/calendar.sh", "sh", None),
         ("sketchybar/plugins/subscribe-rift.sh", sb / "plugins/subscribe-rift.sh", "sh", None),
         ("sketchybar/plugins/workspace-event.sh", sb / "plugins/workspace-event.sh", "sh", None),
         ("sketchybar/plugins/mode-event.sh", sb / "plugins/mode-event.sh", "sh", None),
@@ -140,9 +148,8 @@ def targets():
     return t
 
 
-def render(tpl, live, kind, theme, mapping):
+def render(tpl, kind, strings, mapping, current):
     """Return the new file text, or raise ValueError if it doesn't validate."""
-    current = live.read_text() if live.exists() else None
     if kind == "obsidian":
         conf = json.loads(current or "{}")
         snippets = conf.setdefault("enabledCssSnippets", [])
@@ -150,7 +157,7 @@ def render(tpl, live, kind, theme, mapping):
         if "veil" not in snippets:
             snippets.append("veil")
         return json.dumps(conf, indent=2) + "\n"
-    text = fill(recolor((TPL / tpl).read_text(), mapping), strings_for(theme), tpl)
+    text = fill(recolor((TPL / tpl).read_text(), mapping), strings, tpl)
     if kind == "keys":
         return set_keys(current or "", text)
     if kind == "cursor":
@@ -161,6 +168,8 @@ def render(tpl, live, kind, theme, mapping):
         return json.dumps(conf, indent=4) + "\n"
     if kind == "toml":
         tomllib.loads(text)
+    if tpl == "launcher.json":
+        json.loads(text)
     if kind == "sh":
         r = subprocess.run(["bash", "-n"], input=text, capture_output=True, text=True)
         if r.returncode:
@@ -186,18 +195,22 @@ def set_keys(current, text):
 def plan(name):
     theme, base = load_theme(name), load_theme(BASE)
     mapping = {base["colors"][k].lower(): v.lower() for k, v in theme["colors"].items() if base["colors"][k].lower() != v.lower()}
+    strings = strings_for(theme)
     changes = []
     for tpl, live, kind, reload in targets():
         try:
-            new = render(tpl, live, kind, theme, mapping)
+            old = live.read_text() if live.exists() else None
+            new = render(tpl, kind, strings, mapping, old)
         except (ValueError, OSError) as e:
             if kind == "cursor":  # a user's settings.json with comments or trailing commas: theme everything else
                 print(f"  skipped: {live} is not plain JSON ({e}); Cursor keeps its current colors", file=sys.stderr)
                 continue
             sys.exit(f"refusing to apply: {live} would be invalid ({e}); nothing was changed")
-        old = live.read_text() if live.exists() else None
-        if new != old:
-            mode = live.stat().st_mode if live.exists() else (TPL / tpl).stat().st_mode if tpl else 0o644
+        existing_mode = live.stat().st_mode if old is not None else None
+        mode = existing_mode if existing_mode is not None else (TPL / tpl).stat().st_mode if tpl else 0o644
+        if kind == "sh" and (TPL / tpl).stat().st_mode & 0o100:
+            mode |= 0o100
+        if new != old or mode != existing_mode:
             changes.append((live, old, new, mode, reload))
     return theme, changes
 
@@ -212,10 +225,13 @@ def prune_backups(keep=20):
 def write_atomic(path, text, mode):
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
-    with os.fdopen(fd, "w") as f:
-        f.write(text)
-    os.chmod(tmp, mode & 0o777)
-    os.replace(tmp, path)
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write(text)
+        os.chmod(tmp, mode & 0o777)
+        os.replace(tmp, path)
+    finally:
+        Path(tmp).unlink(missing_ok=True)
 
 
 def restore(backup):
@@ -231,17 +247,33 @@ def restore(backup):
 
 
 def set_wallpaper(theme):
-    """The theme's real art becomes the desktop picture on every screen."""
+    """The theme's real art becomes the desktop picture on every screen (non-blocking)."""
     art = ROOT / "art" / f"{theme['id']}.jpg"
-    if not art.exists():
+    if not art.is_file():
         return
     # Veil Search sets it per screen through NSWorkspace; System Events covers the case where it isn't running
     js = ("ObjC.import('Foundation'); $.NSDistributedNotificationCenter.defaultCenter"
           f".postNotificationNameObjectUserInfoDeliverImmediately('app.veil.search.desktop', {json.dumps(str(art))}, $(), true)")
-    subprocess.run(["osascript", "-l", "JavaScript", "-e", js], capture_output=True)
-    if subprocess.run(["pgrep", "-xq", "veil-search"]).returncode != 0:
-        subprocess.run(["osascript", "-e", f'tell application "System Events" to tell every desktop to set picture to {json.dumps(str(art))}'],
-                       capture_output=True)
+    subprocess.Popen(["osascript", "-l", "JavaScript", "-e", js], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if subprocess.run(["pgrep", "-xq", "veil-search"], capture_output=True).returncode != 0:
+        subprocess.Popen(["osascript", "-e", f'tell application "System Events" to tell every desktop to set picture to {json.dumps(str(art))}'],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def sync_screensaver():
+    # Disable with: veil feature disable screensaver-sync
+    if (ROOT / "generated/features/disable-screensaver-sync").is_file():
+        return
+    saver = HOME / "Library/Screen Savers/Veil.saver/Contents/Info.plist"
+    sync = ROOT / "screensaver/sync.py"
+    if not saver.is_file() or not sync.is_file():
+        return
+    try:
+        if plistlib.loads(saver.read_bytes()).get("CFBundleIdentifier") != "app.veil.screensaver":
+            return
+        subprocess.run([sys.executable, sync, ROOT], check=True, timeout=8)
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
+        print(f"  screen saver appearance update failed: {error}", file=sys.stderr)
 
 
 def system_accents(theme):
@@ -253,54 +285,122 @@ def system_accents(theme):
     # text selection follows the theme: its primary color lifted toward white (macOS wants "r g b Name")
     hl = " ".join(f"{c * 0.6 + 0.4:.6f}" for c in rgb)
     subprocess.run(["defaults", "write", "-g", "AppleHighlightColor", f"{hl} Other"], capture_output=True)
-    # alert sound, played once so the switch is audible
+    # alert sound preference only — do not block apply on afplay
     sound = f"/System/Library/Sounds/{strings_for(theme).get('sound', 'Funk')}.aiff"
     if os.path.exists(sound):
         subprocess.run(["defaults", "write", "-g", "com.apple.sound.beep.sound", sound], capture_output=True)
-        subprocess.Popen(["afplay", sound], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if not os.environ.get("VEIL_NO_SOUND"):
+            subprocess.Popen(["afplay", sound], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     js = """ObjC.import('Foundation');
 // running apps only redraw their accent on these (System Settings sends the same set)
 ['AppleColorPreferencesChangedNotification', 'AppleAquaColorVariantChanged', 'AppleInterfaceThemeChangedNotification', 'NSSystemColorsDidChangeNotification']
   .forEach(n => $.NSDistributedNotificationCenter.defaultCenter.postNotificationNameObjectUserInfoDeliverImmediately(n, $(), $(), true));"""
-    subprocess.run(["osascript", "-l", "JavaScript", "-e", js], capture_output=True)
+    subprocess.Popen(["osascript", "-l", "JavaScript", "-e", js], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     set_wallpaper(theme)
-    # Veil Search shows the theme's boot splash (it rereads generated/launcher.json)
-    subprocess.run(["osascript", "-l", "JavaScript", "-e", "ObjC.import('Foundation'); $.NSDistributedNotificationCenter.defaultCenter"
-                    ".postNotificationNameObjectUserInfoDeliverImmediately('app.veil.search.splash', $(), $(), true)"], capture_output=True)
+    # Boot splash is fire-and-forget — never stall apply on the splash window.
+    subprocess.Popen(["osascript", "-l", "JavaScript", "-e",
+                      "ObjC.import('Foundation'); $.NSDistributedNotificationCenter.defaultCenter"
+                      ".postNotificationNameObjectUserInfoDeliverImmediately('app.veil.search.splash', $(), $(), true)"],
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
+
+
+def _ghostty_running():
+    return subprocess.run(["pgrep", "-xq", "ghostty"], capture_output=True).returncode == 0
+
+
+def _music_feature_on():
+    return not (ROOT / "generated/features/disable-music-popup").is_file()
+
+
+def _wait_sketchybar_music(timeout=0.45):
+    """Fast settle after --reload: return as soon as music exists (or feature off). Keep short for <500ms feel."""
+    if not _music_feature_on():
+        return True
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        r = subprocess.run(["sketchybar", "--query", "music"], capture_output=True, text=True, timeout=1)
+        if r.returncode == 0 and r.stdout.strip().startswith("{"):
+            return True
+        time.sleep(0.015)
+    # One nudge + brief final poll (do not add hundreds of ms).
+    subprocess.run(["sketchybar", "--update"], capture_output=True, timeout=2)
+    deadline = time.monotonic() + 0.12
+    while time.monotonic() < deadline:
+        r = subprocess.run(["sketchybar", "--query", "music"], capture_output=True, text=True, timeout=1)
+        if r.returncode == 0 and r.stdout.strip().startswith("{"):
+            return True
+        time.sleep(0.015)
+    return False
 
 
 def reload_configs(commands, theme_id):
     """Record command outcomes separately from file deployment; never imply live verification."""
     outcomes = []
+    # Run independent reloads concurrently (SketchyBar + borders) for sub-500ms feel.
+    pending = []
     for live, command in commands:
         if not isinstance(command, list):
             continue
+        if command and command[0] == "osascript" and "Ghostty" in " ".join(command) and not _ghostty_running():
+            outcomes.append({"target": str(live), "command": command, "returncode": 0, "skipped": "ghostty not running"})
+            continue
+        pending.append((live, command))
+
+    procs = []
+    for live, command in pending:
         try:
-            result = subprocess.run(command, capture_output=True, text=True, timeout=8)
-            outcome = {"target": str(live), "command": command, "returncode": result.returncode,
-                       "stdout": (result.stdout or "")[-2000:], "stderr": (result.stderr or "")[-2000:]}
-        except (OSError, subprocess.TimeoutExpired) as error:
-            outcome = {"target": str(live), "command": command, "returncode": None, "error": str(error)}
+            procs.append((live, command, subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)))
+        except OSError as error:
+            outcomes.append({"target": str(live), "command": command, "returncode": None, "error": str(error)})
+
+    need_music_settle = False
+    for live, command, proc in procs:
+        try:
+            stdout, stderr = proc.communicate(timeout=8)
+            outcome = {"target": str(live), "command": command, "returncode": proc.returncode,
+                       "stdout": (stdout or "")[-2000:], "stderr": (stderr or "")[-2000:]}
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            outcome = {"target": str(live), "command": command, "returncode": None, "error": "timeout"}
         outcomes.append(outcome)
-        if outcome.get("returncode") != 0:
+        if outcome.get("returncode") not in (0, None):
             print(f"  reload not confirmed: {live} (see generated/reload-status.json)")
+        if command[:2] == ["sketchybar", "--reload"]:
+            need_music_settle = True
+
+    if need_music_settle:
+        # Brief poll only — do not hold apply for a long settle window (sub-500ms feel).
+        settled = _wait_sketchybar_music(timeout=0.12)
+        outcomes.append({"target": "sketchybar-music-settle", "settled": settled})
+        if not settled:
+            # Background nudge; apply has already returned responsiveness to the user.
+            subprocess.Popen(["sketchybar", "--update"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    # Notify Veil Search to drop any cached palette/ws (overview must match bar).
+    subprocess.Popen(["osascript", "-l", "JavaScript", "-e",
+                      "ObjC.import('Foundation'); $.NSDistributedNotificationCenter.defaultCenter"
+                      ".postNotificationNameObjectUserInfoDeliverImmediately('app.veil.search.theme', $(), $(), true)"],
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
     write_atomic(GEN / "reload-status.json", json.dumps({"theme": theme_id, "time": time.time(),
                  "scope": "command outcomes only; no visual or service-state certification", "outcomes": outcomes}, indent=2) + "\n", 0o600)
     return outcomes
 
 
 def apply(name):
+    os.environ.setdefault("VEIL_NO_SOUND", "1")  # apply feel: no afplay stall
     theme, changes = plan(name)
     name = theme.get("id", name)
     if not changes:
         print(f"{theme['name']} is already applied")
-        if not os.environ.get("VEIL_NO_RELOAD"):
-            set_wallpaper({**theme, "id": name})  # cheap, and repairs a desktop picture that didn't take (e.g. on another Space)
         (ROOT / "current").write_text(name)
         if not os.environ.get("VEIL_NO_RELOAD"):
             reload_configs([(live, reload) for _, live, _, reload in targets()], name)
             system_accents(theme)
+            subprocess.Popen([sys.executable, str(ROOT / "screensaver/sync.py"), str(ROOT)],
+
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         return
     cursor_baseline = BACKUPS / "original" / "cursor.settings.json"
     original_cursor = next((old for live, old, *_ in changes if live.name == "settings.json" and "Cursor/User" in str(live)), None)
@@ -344,8 +444,17 @@ def apply(name):
         if isinstance(reload, str):
             notes.add(reload)
     if not os.environ.get("VEIL_NO_RELOAD"):
-        reload_configs([(live, reload) for live, *_, reload in changes], name)
+        commands = [(live, reload) for live, *_, reload in changes]
+        bar_config = CFG / "sketchybar/sketchybarrc"
+        if any(bar_config.parent / "plugins" in live.parents for live, *_ in changes) and not any(
+            live == bar_config for live, _ in commands
+        ):
+            commands.append((bar_config, ["sketchybar", "--reload"]))
+        reload_configs(commands, name)
         system_accents(theme)
+        subprocess.Popen([sys.executable, str(ROOT / "screensaver/sync.py"), str(ROOT)],
+
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     for note in sorted(notes) + ["New shells pick up fzf colors; btop, cava and Neovim on next launch"]:
         print("  manual:", note)
 
@@ -362,7 +471,7 @@ def main(argv):
         cur = (ROOT / "current").read_text().strip() if (ROOT / "current").exists() else BASE
         _, changes = plan(cur)
         # toggling Reduce Motion or quiet mode after an apply only flips Rift's `animate` line: not a hand edit
-        motion_only = lambda old, new: {l for l in set((old or "").splitlines()) ^ set(new.splitlines())} <= {"animate = true", "animate = false"}
+        motion_only = lambda old, new: {l for l in set((old or "").splitlines()) ^ set(new.splitlines())} <= {"animate = true", "animate = false", "fade_enabled = true", "fade_enabled = false"}
         changes = [c for c in changes if not motion_only(c[1], c[2])]
         print(f"current: {load_theme(cur)['name']}")
         for live, *_ in changes:
@@ -393,6 +502,9 @@ def main(argv):
             # the same reloads as apply (Ghostty, SketchyBar, borders), so nothing waits for a manual step
             reload_configs([(live, reload) for _, live, _, reload in targets()], prev)
             system_accents(load_theme(prev))
+            subprocess.Popen([sys.executable, str(ROOT / "screensaver/sync.py"), str(ROOT)],
+
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         print("  manual: New shells pick up fzf colors; btop, cava and Neovim on next launch")
     else:
         print(__doc__.strip())

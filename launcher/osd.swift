@@ -21,7 +21,9 @@ final class OSD {
     static let shared = OSD()
     let model = OSDModel()
     private var panel: NSPanel?
-    private var themeID = ""
+    private var theme: [String: String]?
+    private var viewFrame: CGRect?
+    private var generation = 0
     private var hide: DispatchWorkItem?
     var palette: () -> Palette = { Palette.load() }
 
@@ -43,30 +45,48 @@ final class OSD {
         } else {
             frame = NSRect(x: screen.frame.midX - 260, y: screen.frame.maxY - 44, width: 520, height: 34)
         }
-        if panel == nil || themeID != p.s("theme_id", "") {
-            let w = panel ?? NSPanel(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        let w = panel ?? NSPanel(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: true)
+        if panel == nil {
             w.isOpaque = false; w.backgroundColor = .clear; w.hasShadow = false; w.ignoresMouseEvents = true
             w.level = .statusBar + 1; w.isReleasedWhenClosed = false
             w.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary]
-            panel = w; themeID = p.s("theme_id", "")
+            panel = w
         }
-        let notchWidth = OSD.notch(screen).map { $0.maxX - $0.minX } ?? 0
-        panel?.contentView = NSHostingView(rootView: OSDView(m: model, p: p, notchWidth: notchWidth).frame(width: frame.width, height: frame.height))
-        panel?.setFrame(frame, display: false)
+        if theme != p.text || viewFrame != frame {
+            let notchWidth = OSD.notch(screen).map { $0.maxX - $0.minX } ?? 0
+            w.contentView = NSHostingView(rootView: OSDView(m: model, p: p, notchWidth: notchWidth).frame(width: frame.width, height: frame.height))
+            w.setFrame(frame, display: false)
+            viewFrame = frame
+            theme = p.text
+        }
+        generation += 1
+        let current = generation
         let reduce = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         withAnimation(reduce ? nil : .easeOut(duration: 0.18)) {
             model.kind = kind; model.level = level; model.title = title; model.detail = detail
         }
-        panel?.orderFrontRegardless()
+        if !w.isVisible { w.orderFrontRegardless() }
         withAnimation(reduce ? .easeOut(duration: 0.12) : .spring(response: 0.38, dampingFraction: 0.8)) { model.visible = true }
         hide?.cancel()
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
             withAnimation(.easeIn(duration: reduce ? 0.12 : 0.24)) { self.model.visible = false }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.32) { if !self.model.visible { self.panel?.orderOut(nil) } }
+            DispatchQueue.main.asyncAfter(deadline: .now() + (reduce ? 0.14 : 0.28)) { [weak self] in
+                guard let self, self.generation == current else { return }
+                self.panel?.orderOut(nil)
+                self.hide = nil
+            }
         }
         hide = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: work)
+    }
+
+    func dismiss() {
+        generation += 1
+        hide?.cancel()
+        hide = nil
+        model.visible = false
+        panel?.orderOut(nil)
     }
 }
 
@@ -94,7 +114,8 @@ struct OSDView: View {
         }
     }
     var percent: String { m.level.map { "\(Int(($0 * 100).rounded()))" } ?? "" }
-    var accent: Color { p["cyan"] }
+    /// Glyph ideology: one live accent (theme cyan / red) on every theme — not Nothing-only.
+    var accent: Color { theme == "nothing" || theme == "eclipse" ? p["red"] : p["cyan"] }
     var label: String {
         switch theme {
         case "eclipse": return m.title.lowercased()
@@ -170,14 +191,25 @@ struct OSDView: View {
                     Rectangle().fill(accent).frame(width: g.size.width * l)
                 }
             }
+        case "nothing", "umbra", "hallownest", "nyc", "arasaka", "factorio",
+             "elden-ring", "sekiro":
+            // Glyph edge lights (shared ideology): dots + one accent bead in the theme palette.
+            glyphDots(l)
         default:
-            GeometryReader { g in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(Color.white.opacity(0.14))
-                    Capsule().fill(accent).frame(width: g.size.width * l)
-                }
-            }
+            // Future themes inherit Glyph edge language unless they add a bespoke meter above.
+            glyphDots(l)
         }
+    }
+
+    @ViewBuilder private func glyphDots(_ l: Double) -> some View {
+        HStack(spacing: 3) {
+            ForEach(0..<12, id: \.self) { i in
+                let lit = Double(i) < (l * 12).rounded()
+                Circle()
+                    .fill(i == 0 && lit ? accent : (lit ? Color.white : Color.white.opacity(0.18)))
+                    .frame(width: 5, height: 5)
+            }
+        }.frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -187,10 +219,17 @@ struct OSDView: View {
 final class MediaKeys {
     static let shared = MediaKeys()
     private var tap: CFMachPort?
+    private var retry: DispatchWorkItem?
     static let step = 0.05
 
     func start() {
-        guard tap == nil else { return }
+        guard !veilIsOff else { return }
+        if let tap {
+            CGEvent.tapEnable(tap: tap, enable: true)
+            return
+        }
+        retry?.cancel()
+        retry = nil
         let callback: CGEventTapCallBack = { _, type, event, _ in
             if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
                 if let t = MediaKeys.shared.tap { CGEvent.tapEnable(tap: t, enable: true) }
@@ -218,12 +257,20 @@ final class MediaKeys {
         guard let t = CGEvent.tapCreate(tap: .cgSessionEventTap, place: .headInsertEventTap, options: .defaultTap,
                                         eventsOfInterest: CGEventMask(1 << 14), callback: callback, userInfo: nil) else {
             // not trusted yet: keys stay with macOS, and we try again until Accessibility is granted
-            DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in self?.start() }
+            let retry = DispatchWorkItem { [weak self] in self?.start() }
+            self.retry = retry
+            DispatchQueue.main.asyncAfter(deadline: .now() + 30, execute: retry)
             return
         }
         tap = t
         CFRunLoopAddSource(CFRunLoopGetMain(), CFMachPortCreateRunLoopSource(nil, t, 0), .commonModes)
         CGEvent.tapEnable(tap: t, enable: true)
+    }
+
+    func stop() {
+        retry?.cancel()
+        retry = nil
+        if let tap { CGEvent.tapEnable(tap: tap, enable: false) }
     }
 
     /// snap to the 5% grid first, so 47 + up gives 50, not 52
@@ -340,7 +387,7 @@ final class StateWatch {
               let first = list.first,
               let d = IOPSGetPowerSourceDescription(info, first)?.takeUnretainedValue() as? [String: Any] else { return (true, 1, false) }
         let cur = d[kIOPSCurrentCapacityKey] as? Int ?? 100, max = d[kIOPSMaxCapacityKey] as? Int ?? 100
-        return ((d[kIOPSPowerSourceStateKey] as? String) == kIOPSACPowerValue, Double(cur) / Double(max), d[kIOPSIsChargingKey] as? Bool ?? false)
+        return ((d[kIOPSPowerSourceStateKey] as? String) == kIOPSACPowerValue, min(1, Double(Swift.max(0, cur)) / Double(Swift.max(1, max))), d[kIOPSIsChargingKey] as? Bool ?? false)
     }
 
     private func powerChanged() {

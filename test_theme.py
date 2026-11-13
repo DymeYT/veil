@@ -60,9 +60,9 @@ for t in (ROOT / "themes").glob("*.toml"):
     # launcher selected-row subtitle: fg at 82% over the solid selection fill (the most opaque row style)
     sub = mix(palette["fg"], palette["selection"], 0.82)
     assert ratio(sub, palette["selection"]) >= 4.5, f"{t.stem}: selected subtitle below 4.5:1"
-    # wallpapers are bring-your-own (not in git): once any is installed, every theme needs one
-    if any((ROOT / "art").glob("*.jpg")):
-        assert (ROOT / "art" / f"{t.stem}.jpg").is_file(), f"{t.stem}: wallpaper missing"
+    # Umbra includes its credited wallpaper; other themes support optional local artwork.
+    if t.stem == "umbra":
+        assert (ROOT / "art/umbra.jpg").is_file(), "Umbra wallpaper missing"
     assert (ROOT / "art" / f"{t.stem}.notes.md").is_file(), f"{t.stem}: wallpaper notes missing"
 
 # every theme fills every @@placeholder@@ in every template

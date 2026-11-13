@@ -4,13 +4,23 @@ set -euo pipefail
 cd "$(dirname "$0")"
 app="$HOME/Applications/Veil Search.app"
 mkdir -p "$HOME/Applications"
+# Interrupted installs leave .veil-build.* trees; a binary still running from one doubles idle RSS.
+for d in "$HOME/Applications"/.veil-build.*; do
+  [ -e "$d" ] || continue
+  pkill -f "$d/Veil Search.app/Contents/MacOS/veil-search" 2>/dev/null || true
+  rm -rf "$d"
+done
 out=$(mktemp -d "$HOME/Applications/.veil-build.XXXXXX")
 stage="$out/Veil Search.app"
 keep_stage=false
 trap '[ "$keep_stage" = true ] || rm -rf "$out"' EXIT
 mkdir -p "$stage/Contents/MacOS"
-if ! swiftc -O -swift-version 5 -o "$stage/Contents/MacOS/veil-search" main.swift splash.swift extras.swift sources.swift integrations.swift osd.swift focus.swift mode.swift review-render.swift > "$out/build.log" 2>&1; then
+if ! swiftc -O -swift-version 5 -o "$stage/Contents/MacOS/veil-search" main.swift splash.swift extras.swift sources.swift integrations.swift osd.swift focus.swift mode.swift review-render.swift bar.swift glyph.swift desktop-glyphs.swift > "$out/build.log" 2>&1; then
   cat "$out/build.log"; echo "build failed; installed Veil Search preserved"; exit 1
+fi
+# Short-lived SCK helper — keeps ScreenCaptureKit out of the long-lived launcher RSS.
+if ! swiftc -O -swift-version 5 -framework ScreenCaptureKit -parse-as-library -o "$stage/Contents/MacOS/veil-thumbs" thumbs.swift >> "$out/build.log" 2>&1; then
+  cat "$out/build.log"; echo "veil-thumbs build failed; installed Veil Search preserved"; exit 1
 fi
 cat "$out/build.log"
 "$stage/Contents/MacOS/veil-search" --selftest
@@ -28,6 +38,7 @@ cat > "$stage/Contents/Info.plist" <<PLIST
   <key>NSContactsUsageDescription</key><string>Veil Search shows matching contacts when you search a name.</string>
   <key>NSCalendarsFullAccessUsageDescription</key><string>Veil Search shows upcoming events and creates events you type.</string>
   <key>NSRemindersFullAccessUsageDescription</key><string>Veil Search creates reminders you type.</string>
+  <key>NSScreenCaptureUsageDescription</key><string>Veil Search captures live window previews for Workspace Overview.</string>
   <key>LSMinimumSystemVersion</key><string>14.0</string>
 </dict></plist>
 PLIST
@@ -67,4 +78,6 @@ else
     echo "installed successfully; open $app to start it"
   fi
 fi
+mkdir -p "$HOME/.local/bin"
+ln -sfn "$app/Contents/MacOS/veil-thumbs" "$HOME/.local/bin/veil-thumbs"
 echo "installed $app"

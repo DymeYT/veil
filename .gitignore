@@ -9,6 +9,7 @@ __pycache__/
 
 # copyrighted wallpapers and working images: bring your own (see README); notes and symbols are kept
 art/*.jpg
+!art/umbra.jpg
 art/candidates/
 art/ai-generated/
 art/live/
@@ -23,3 +24,6 @@ CLAUDE.md
 CLAUDE-HANDOFF.md
 HANDOFF.md
 REVIEW-START-HERE.md
+
+# graphify AST cache (rebuildable)
+graphify-out/cache/

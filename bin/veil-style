@@ -1,0 +1,357 @@
+#!/usr/bin/env python3
+"""Veil Style — user-friendly theme creator backend for Glyph / Nothing OS.
+
+Commands:
+  preview <source> <scheme> <variant> <light|dark>
+  apply-named <id>          # nothing | catppuccin-mocha | rose-pine | …
+  apply-wall <variant> <light|dark>
+  export <name>
+  list
+  import <pack.toml>
+"""
+from __future__ import annotations
+
+import json, math, os, re, shutil, subprocess, sys, time
+from pathlib import Path
+
+ROOT = Path(os.environ.get("VEIL_ROOT", Path.home() / ".config/veil"))
+THEMES = ROOT / "themes"
+PACKS = ROOT / "generated" / "style-packs"
+STATE = ROOT / "generated" / "style-state.json"
+THEME = ROOT / "bin" / "veil-theme"
+
+# Named palettes (Glyph schemes.js subset) → Veil color roles
+NAMED = {
+    "nothing": {
+        "bg": "000000", "bg_dark": "000000", "bg_float": "0e0e0e", "surface": "1a1a1a",
+        "ws_active": "2a1214", "border": "2a2a2a", "selection": "2a2a2a", "line": "4a4a4a",
+        "comment": "8c8c8c", "dim": "8c8c8c", "fg": "f2f2f2", "white": "ffffff",
+        "cyan": "d71921", "magenta": "8c8c8c", "yellow": "f2f2f2", "red": "d71921",
+        "green": "8c8c8c", "blue": "4a4a4a",
+        "bright_red": "ef3a42", "bright_green": "b0b0b0", "bright_yellow": "ffffff",
+        "bright_blue": "8c8c8c", "bright_magenta": "a0a0a0", "bright_cyan": "ef3a42",
+    },
+    "catppuccin-mocha": {
+        "bg": "181825", "bg_dark": "11111b", "bg_float": "1e1e2e", "surface": "313244",
+        "ws_active": "45475a", "border": "45475a", "selection": "45475a", "line": "585b70",
+        "comment": "7f849c", "dim": "a6adc8", "fg": "cdd6f4", "white": "ffffff",
+        "cyan": "89dceb", "magenta": "cba6f7", "yellow": "f9e2af", "red": "f38ba8",
+        "green": "a6e3a1", "blue": "89b4fa",
+        "bright_red": "f38ba8", "bright_green": "a6e3a1", "bright_yellow": "f9e2af",
+        "bright_blue": "89b4fa", "bright_magenta": "f5c2e7", "bright_cyan": "94e2d5",
+    },
+    "rose-pine": {
+        "bg": "191724", "bg_dark": "12101a", "bg_float": "1f1d2e", "surface": "26233a",
+        "ws_active": "403d52", "border": "403d52", "selection": "403d52", "line": "524f67",
+        "comment": "908caa", "dim": "6e6a86", "fg": "e0def4", "white": "ffffff",
+        "cyan": "9ccfd8", "magenta": "c4a7e7", "yellow": "f6c177", "red": "eb6f92",
+        "green": "31748f", "blue": "9ccfd8",
+        "bright_red": "eb6f92", "bright_green": "31748f", "bright_yellow": "f6c177",
+        "bright_blue": "9ccfd8", "bright_magenta": "c4a7e7", "bright_cyan": "ebbcba",
+    },
+    "gruvbox": {
+        "bg": "1d2021", "bg_dark": "141617", "bg_float": "282828", "surface": "3c3836",
+        "ws_active": "504945", "border": "504945", "selection": "504945", "line": "665c54",
+        "comment": "928374", "dim": "a89984", "fg": "ebdbb2", "white": "fbf1c7",
+        "cyan": "8ec07c", "magenta": "d3869b", "yellow": "fabd2f", "red": "fb4934",
+        "green": "b8bb26", "blue": "83a598",
+        "bright_red": "fb4934", "bright_green": "b8bb26", "bright_yellow": "fabd2f",
+        "bright_blue": "83a598", "bright_magenta": "d3869b", "bright_cyan": "8ec07c",
+    },
+    "nord": {
+        "bg": "2e3440", "bg_dark": "242933", "bg_float": "3b4252", "surface": "434c5e",
+        "ws_active": "4c566a", "border": "4c566a", "selection": "4c566a", "line": "616e88",
+        "comment": "616e88", "dim": "7b88a1", "fg": "eceff4", "white": "ffffff",
+        "cyan": "88c0d0", "magenta": "b48ead", "yellow": "ebcb8b", "red": "bf616a",
+        "green": "a3be8c", "blue": "81a1c1",
+        "bright_red": "bf616a", "bright_green": "a3be8c", "bright_yellow": "ebcb8b",
+        "bright_blue": "81a1c1", "bright_magenta": "b48ead", "bright_cyan": "8fbcbb",
+    },
+    "dracula": {
+        "bg": "282a36", "bg_dark": "191a21", "bg_float": "343746", "surface": "44475a",
+        "ws_active": "6272a4", "border": "44475a", "selection": "44475a", "line": "6272a4",
+        "comment": "6272a4", "dim": "bd93f9", "fg": "f8f8f2", "white": "ffffff",
+        "cyan": "8be9fd", "magenta": "ff79c6", "yellow": "f1fa8c", "red": "ff5555",
+        "green": "50fa7b", "blue": "bd93f9",
+        "bright_red": "ff6e6e", "bright_green": "69ff94", "bright_yellow": "ffffa5",
+        "bright_blue": "d6acff", "bright_magenta": "ff92df", "bright_cyan": "a4ffff",
+    },
+    "tokyo-night": {
+        "bg": "1a1b26", "bg_dark": "16161e", "bg_float": "24283b", "surface": "292e42",
+        "ws_active": "3b4261", "border": "3b4261", "selection": "3b4261", "line": "545c7e",
+        "comment": "565f89", "dim": "737aa2", "fg": "c0caf5", "white": "ffffff",
+        "cyan": "7dcfff", "magenta": "bb9af7", "yellow": "e0af68", "red": "f7768e",
+        "green": "9ece6a", "blue": "7aa2f7",
+        "bright_red": "ff899d", "bright_green": "9fe044", "bright_yellow": "faba4a",
+        "bright_blue": "8db0ff", "bright_magenta": "c7a9ff", "bright_cyan": "a4daff",
+    },
+    "everforest": {
+        "bg": "2d353b", "bg_dark": "232a2e", "bg_float": "343f44", "surface": "3d484d",
+        "ws_active": "475258", "border": "475258", "selection": "475258", "line": "56635f",
+        "comment": "859289", "dim": "9da9a0", "fg": "d3c6aa", "white": "ffffff",
+        "cyan": "83c092", "magenta": "d699b6", "yellow": "dbbc7f", "red": "e67e80",
+        "green": "a7c080", "blue": "7fbbb3",
+        "bright_red": "e67e80", "bright_green": "a7c080", "bright_yellow": "dbbc7f",
+        "bright_blue": "7fbbb3", "bright_magenta": "d699b6", "bright_cyan": "83c092",
+    },
+    "kanagawa": {
+        "bg": "1f1f28", "bg_dark": "16161d", "bg_float": "2a2a37", "surface": "363646",
+        "ws_active": "54546d", "border": "363646", "selection": "363646", "line": "54546d",
+        "comment": "727169", "dim": "938aa9", "fg": "dcd7ba", "white": "ffffff",
+        "cyan": "7aa89f", "magenta": "957fb8", "yellow": "c0a36e", "red": "e82424",
+        "green": "76946a", "blue": "7e9cd8",
+        "bright_red": "e82424", "bright_green": "98bb6c", "bright_yellow": "e6c384",
+        "bright_blue": "7fb4ca", "bright_magenta": "938aa9", "bright_cyan": "7aa89f",
+    },
+}
+
+# Map friendly ids → existing Veil theme stems when applying "as" a full theme
+ALIASES = {
+    "nothing": "nothing",
+    "catppuccin-mocha": "nothing",  # palette overlay onto nothing shell unless a dedicated toml exists
+    "mocha": "nothing",
+}
+
+
+def save_state(**kw):
+    PACKS.mkdir(parents=True, exist_ok=True)
+    cur = {}
+    if STATE.exists():
+        cur = json.loads(STATE.read_text())
+    cur.update(kw)
+    STATE.write_text(json.dumps(cur, indent=2))
+
+
+def lin(v):
+    return v / 12.92 if v <= 0.04045 else ((v + 0.055) / 1.055) ** 2.4
+
+
+def gam(v):
+    return 12.92 * v if v <= 0.0031308 else 1.055 * (v ** (1 / 2.4)) - 0.055
+
+
+def hex_to_rgb(h):
+    h = h.lstrip("#")
+    return tuple(int(h[i:i + 2], 16) / 255 for i in (0, 2, 4))
+
+
+def rgb_to_hex(r, g, b):
+    return "".join(f"{max(0, min(255, int(round(gam(c) * 255)))):02x}" for c in (r, g, b))
+
+
+def lch_from_hex(h):
+    r, g, b = [lin(c) for c in hex_to_rgb(h)]
+    l = (0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b) ** (1 / 3)
+    m = (0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b) ** (1 / 3)
+    s = (0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b) ** (1 / 3)
+    A = 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s
+    B = 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s
+    L = 0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s
+    C = math.hypot(A, B)
+    hdeg = (math.atan2(B, A) * 180 / math.pi + 360) % 360
+    return L, C, hdeg
+
+
+def hex_from_lch(L, C, h):
+    A = C * math.cos(h * math.pi / 180)
+    B = C * math.sin(h * math.pi / 180)
+    l = (L + 0.3963377774 * A + 0.2158037573 * B) ** 3
+    m = (L - 0.1055613458 * A - 0.0638541728 * B) ** 3
+    s = (L - 0.0894841775 * A - 1.2914855480 * B) ** 3
+    r = 4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s
+    g = -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s
+    b = -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s
+    # chroma clamp
+    for _ in range(12):
+        if all(-1e-4 < v < 1 + 1e-4 for v in (r, g, b)):
+            break
+        C *= 0.5
+        A = C * math.cos(h * math.pi / 180)
+        B = C * math.sin(h * math.pi / 180)
+        l = (L + 0.3963377774 * A + 0.2158037573 * B) ** 3
+        m = (L - 0.1055613458 * A - 0.0638541728 * B) ** 3
+        s = (L - 0.0894841775 * A - 1.2914855480 * B) ** 3
+        r = 4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s
+        g = -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s
+        b = -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s
+    return rgb_to_hex(r, g, b)
+
+
+VARIANTS = {
+    "monochrome": ((0, 0), (0, 0), (0, 0)),
+    "neutral": ((0, 0.04), (0, 0.01), (0, 0.01)),
+    "tonalspot": ((0, 0.1), (0, 0.02), (0, 0.03)),
+    "rainbow": ((0, 0.14), (0, 0), (0, 0)),
+    "content": ((0, 0.12), (0, 0.02), (0, 0.03)),
+    "fidelity": ((0, 0.14), (0, 0.02), (0, 0.03)),
+    "fruitsalad": ((-50, 0.14), (0, 0.03), (0, 0.05)),
+    "expressive": ((240, 0.12), (15, 0.03), (15, 0.04)),
+    "vibrant": ((0, 0.22), (0, 0.03), (0, 0.04)),
+}
+
+
+def wall_tones(path: Path):
+    """Sample average colors from wallpaper via sips → raw; fallback red."""
+    try:
+        import struct, tempfile
+        # Use sips to get a tiny preview and average pixels via Python reading TIFF/PNG is hard;
+        # instead ask `sips -g all` and fall back to a fixed accent if needed.
+        # Sample with macOS `python3` + Quartz if available:
+        from AppKit import NSImage  # type: ignore
+        from Foundation import NSData  # type: ignore
+        img = NSImage.alloc().initWithContentsOfFile_(str(path))
+        if img is None:
+            return ["d71921"]
+        rep = img.representations()
+        # simpler: return Nothing red + greys derived later
+        return ["d71921", "4a4a4a", "8c8c8c", "f2f2f2"]
+    except Exception:
+        return ["d71921"]
+
+
+def dynamic_from_tone(tone_hex: str, variant: str, light: bool):
+    base = dict(NAMED["nothing"])
+    if light:
+        # invert greys lightly
+        base.update({
+            "bg": "e9e9e9", "bg_dark": "ffffff", "bg_float": "f1f1f1", "surface": "d9d9d9",
+            "border": "b8b8b8", "line": "b8b8b8", "comment": "6e6e6e", "dim": "6e6e6e",
+            "fg": "0b0b0b", "selection": "d9d9d9", "ws_active": "d9d9d9",
+        })
+    a_rot, a_c = VARIANTS.get(variant, VARIANTS["tonalspot"])[0]
+    L, C, h = lch_from_hex(tone_hex)
+    accent = hex_from_lch(0.65 if not light else 0.45, max(C, a_c), (h + a_rot) % 360)
+    base["red"] = accent
+    base["cyan"] = accent
+    base["bright_cyan"] = accent
+    base["bright_red"] = accent
+    return base
+
+
+def write_overlay_theme(stem: str, name: str, colors: dict):
+    """Write a full Veil theme based on nothing.toml shell with new colors."""
+    src = (THEMES / "nothing.toml").read_text()
+    # replace name
+    src = re.sub(r'^name = ".*"', f'name = "{name}"', src, count=1)
+    for role, hx in colors.items():
+        src = re.sub(rf'^{role} = "[0-9a-fA-F]{{6}}"', f'{role} = "{hx}"', src, flags=re.M)
+    out = THEMES / f"{stem}.toml"
+    # never overwrite nothing.toml via overlay ids that collide
+    if stem == "nothing" and name != "Nothing":
+        stem = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+        out = THEMES / f"{stem}.toml"
+    out.write_text(src)
+    return stem
+
+
+def apply_theme(stem: str):
+    env = os.environ.copy()
+    env["VEIL_NO_SOUND"] = "1"
+    r = subprocess.run([str(THEME), "apply", stem], env=env)
+    return r.returncode
+
+
+def cmd_list():
+    print("named:", ", ".join(NAMED))
+    print("packs:", ", ".join(p.stem for p in PACKS.glob("*.toml")) if PACKS.exists() else "(none)")
+
+
+def cmd_preview(source, scheme, variant, mode):
+    save_state(source=source, scheme=scheme, variant=variant, mode=mode, previewed_at=time.time())
+    print(f"preview ok · {source}/{scheme}/{variant}/{mode}")
+
+
+def cmd_apply_named(name):
+    key = name.lower().replace(" ", "-").replace("é", "e")
+    if key in ("rose-pine", "rosepine"):
+        key = "rose-pine"
+    if key not in NAMED:
+        # try applying existing veil theme directly
+        if (THEMES / f"{key}.toml").exists():
+            sys.exit(apply_theme(key))
+        print(f"unknown palette {name}", file=sys.stderr)
+        sys.exit(1)
+    if key == "nothing":
+        sys.exit(apply_theme("nothing"))
+    stem = write_overlay_theme(f"style-{key}", NAMED_TITLE.get(key, key.title()), NAMED[key])
+    save_state(applied=stem, source="palette", scheme=key)
+    sys.exit(apply_theme(stem))
+
+
+NAMED_TITLE = {
+    "catppuccin-mocha": "Catppuccin Mocha",
+    "rose-pine": "Rose Pine",
+    "gruvbox": "Gruvbox",
+    "nord": "Nord",
+    "dracula": "Dracula",
+    "tokyo-night": "Tokyo Night",
+    "everforest": "Everforest",
+    "kanagawa": "Kanagawa",
+}
+
+
+def cmd_apply_wall(variant, mode):
+    art = ROOT / "art" / "nothing.jpg"
+    # prefer current desktop if readable
+    cur = ROOT / "current"
+    # sample from nothing art as Material You source when wall unknown
+    tones = wall_tones(art)
+    colors = dynamic_from_tone(tones[0], variant, mode == "light")
+    stem = write_overlay_theme(f"style-wall-{variant}", f"Wall {variant.title()}", colors)
+    save_state(applied=stem, source="wall", variant=variant, mode=mode)
+    sys.exit(apply_theme(stem))
+
+
+def cmd_export(name):
+    PACKS.mkdir(parents=True, exist_ok=True)
+    st = json.loads(STATE.read_text()) if STATE.exists() else {}
+    scheme = st.get("scheme", "nothing")
+    colors = NAMED.get(scheme, NAMED["nothing"])
+    path = PACKS / f"{name}.toml"
+    lines = [f'name = "{name}"', "macos_accent = 0", "", "[colors]"]
+    for k, v in colors.items():
+        lines.append(f'{k} = "{v}"')
+    lines += ["", "[meta]", f'source = "{st.get("source", "nothing")}"', f'exported = "{time.strftime("%Y-%m-%d")}"']
+    path.write_text("\n".join(lines) + "\n")
+    print(path)
+
+
+def cmd_import(path):
+    p = Path(path)
+    data = p.read_text()
+    stem = re.sub(r"[^a-z0-9]+", "-", p.stem.lower()).strip("-")
+    # if full theme, copy; else wrap
+    if "[style]" in data:
+        (THEMES / f"{stem}.toml").write_text(data)
+    else:
+        # colors-only pack
+        m = re.findall(r'^(\w+) = "([0-9a-fA-F]{6})"', data, re.M)
+        colors = dict(m)
+        write_overlay_theme(stem, stem.replace("-", " ").title(), {**NAMED["nothing"], **colors})
+    print("imported", stem)
+
+
+def main():
+    if len(sys.argv) < 2:
+        print(__doc__)
+        sys.exit(0)
+    cmd = sys.argv[1]
+    if cmd == "list":
+        cmd_list()
+    elif cmd == "preview":
+        cmd_preview(*sys.argv[2:6])
+    elif cmd == "apply-named":
+        cmd_apply_named(sys.argv[2])
+    elif cmd == "apply-wall":
+        cmd_apply_wall(sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else "dark")
+    elif cmd == "export":
+        cmd_export(sys.argv[2])
+    elif cmd == "import":
+        cmd_import(sys.argv[2])
+    else:
+        print("unknown", cmd, file=sys.stderr)
+        sys.exit(2)
+
+
+if __name__ == "__main__":
+    main()

@@ -155,8 +155,8 @@ enum SafariTabs {
     nonisolated(unsafe) static var tabs: [Item] = []
     static var enabled: Bool { UserDefaults.standard.bool(forKey: "safariTabs") }
 
-    static func load() {
-        guard enabled, NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.Safari").first != nil else { tabs = []; return }
+    static func load() -> [Item] {
+        guard enabled, NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.Safari").first != nil else { return [] }
         let src = """
         set out to ""
         tell application "Safari"
@@ -169,8 +169,8 @@ enum SafariTabs {
         return out
         """
         var err: NSDictionary?
-        guard let s = NSAppleScript(source: src)?.executeAndReturnError(&err).stringValue else { tabs = []; return }
-        tabs = s.split(separator: "\n").compactMap { line in
+        guard let s = NSAppleScript(source: src)?.executeAndReturnError(&err).stringValue else { return [] }
+        return s.split(separator: "\n").compactMap { line in
             let f = line.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
             guard f.count == 4 else { return nil }
             let host = URL(string: f[3])?.host ?? f[3]

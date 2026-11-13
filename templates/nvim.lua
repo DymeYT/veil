@@ -72,7 +72,7 @@ return {
         directive = { comp = { left = "│", right = "│" }, sections = {  -- Arasaka: terse operations line
           lualine_a = { { "mode", fmt = string.upper } }, lualine_b = { { "filename", path = 1 } }, lualine_c = {},
           lualine_x = { "diagnostics" }, lualine_y = { "location" }, lualine_z = { clock } } },
-        thread = { comp = { left = "·", right = "·" }, sections = {  -- Pharloom: one quiet thread, no blocks
+        thread = { comp = { left = "·", right = "·" }, sections = {  -- quiet thread (no blocks); unused after Pharloom removal
           lualine_a = {}, lualine_b = {}, lualine_c = { { "mode", fmt = string.lower }, "filename", "diff" },
           lualine_x = { "filetype" }, lualine_y = {}, lualine_z = { "progress" } } },
         quiet = { sections = {  -- Hallownest: the page and where you are, nothing else
@@ -95,6 +95,10 @@ return {
         ember = { comp = { left = "·", right = "·" }, sections = {  -- Cinder: line of the whole, like a bonfire count
           lualine_a = { "mode" }, lualine_b = {}, lualine_c = { "filename" }, lualine_x = { "diff" }, lualine_y = {},
           lualine_z = { function() return vim.fn.line(".") .. " ⁄ " .. vim.fn.line("$") end } } },
+        umbra = { icons = false, comp = { left = "·", right = "·" }, sections = {
+          lualine_a = { { "mode", fmt = string.lower } }, lualine_b = {},
+          lualine_c = { { "filename", path = 1 } }, lualine_x = { "diagnostics" },
+          lualine_y = { "encoding" }, lualine_z = { "location" } } },
         kanji = { sections = {  -- Ashina: the mode as a single kanji tag
           lualine_a = { { "mode", fmt = function(s) return kanji[s] or s end } }, lualine_b = { "branch" },
           lualine_c = { "filename" }, lualine_x = {}, lualine_y = {}, lualine_z = { "location" } } },
