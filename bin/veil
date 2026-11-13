@@ -55,8 +55,8 @@ case "${1:-help}" in
   theme=$(cat "$V/current" 2>/dev/null || echo night-city)
   mb=$(defaults read NSGlobalDomain _HIHideMenuBar 2>/dev/null || echo 0)
   printf 'theme=%s\nmenubar=%s\n' "$theme" "$mb" > "$V/generated/off"
-  agent kill sketchybar; agent kill borders   # the flag above keeps launchd from restarting them
-  # Veil Search releases ⌘Space and hides its band and overlays
+  agent kill sketchybar; agent kill borders 2>/dev/null || true
+  # Veil Search releases ⌘Space / bar / supervised borders (Rift tiling stays)
   notify off
   [ -f "$O/wallpaper.json" ] && [ -x "$V/bin/veil-wallpaper" ] && "$V/bin/veil-baseline" restore-wallpaper --wallpaper-helper "$V/bin/veil-wallpaper" >/dev/null 2>&1 || true
   if [ -f "$O/appearance.json" ]; then
@@ -77,55 +77,56 @@ case "${1:-help}" in
   spotlight_key false
   notify on   # Veil Search takes ⌘Space back once Spotlight has let go
   [ "$mb" = 1 ] && menubar true
-  agent kick sketchybar; agent kick borders
-  rift service start >/dev/null 2>&1 || true   # normally already running; covers a Rift that was quit
+  # Single agent: veil-search supervises borders + Rift; do not revive SketchyBar zoo.
+  launchctl kickstart -k "gui/$(id -u)/app.veil.search" 2>/dev/null || true
   # the theme puts back wallpaper, accents, Ghostty and every config
   veil-theme apply "${theme:-night-city}" ;;
- # (re)install the SketchyBar and borders LaunchAgents; replaces Homebrew's services for both (run by install.sh)
+ # Unify: only `app.veil.search` at login. Boot out SketchyBar/borders/Rift agents (host owns them).
  agents)
   la="$HOME/Library/LaunchAgents"; mkdir -p "$la" /opt/homebrew/var/log/veil 2>/dev/null || true
+  brew services stop sketchybar >/dev/null 2>&1 || true
+  brew services stop borders >/dev/null 2>&1 || true
   for name in sketchybar borders; do
-   brew services stop "$name" >/dev/null 2>&1 || true   # one-time handover; brew deletes its own plist
-   bin="/opt/homebrew/opt/$name/bin/$name"; plist="$la/app.veil.$name.plist"
-   # borders: start via bordersrc so theme colors + ax_focus=on always load (bare `borders` skips Rift-safe focus).
-   if [ "$name" = borders ]; then
-     prog_args="<string>/bin/bash</string><string>$HOME/.config/borders/bordersrc</string>"
-   else
-     prog_args="<string>$bin</string>"
-   fi
-   cat > "$plist.new" <<PLIST
+   launchctl bootout "gui/$(id -u)/app.veil.$name" 2>/dev/null || true
+  done
+  # Rift: prefer supervised child of veil-search over its own LaunchAgent.
+  rift service uninstall 2>/dev/null || true
+  launchctl bootout "gui/$(id -u)/git.acsandmann.rift" 2>/dev/null || true
+  # Ensure the one host agent exists.
+  search="$la/app.veil.search.plist"
+  if [ ! -f "$search" ]; then
+   cat > "$search" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>Label</key><string>app.veil.$name</string>
-	<key>ProgramArguments</key><array>$prog_args</array>
-	<key>EnvironmentVariables</key><dict>
-		<key>LANG</key><string>en_US.UTF-8</string>
-		<key>PATH</key><string>$HOME/.local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/bin:/bin:/usr/sbin:/sbin</string>
-	</dict>
-	<key>KeepAlive</key><dict>
-		<key>PathState</key><dict><key>$HOME/.config/veil/generated/off</key><false/></dict>
-	</dict>
+	<key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>
+	<key>Label</key><string>app.veil.search</string>
 	<key>ProcessType</key><string>Interactive</string>
-	<key>StandardErrorPath</key><string>/opt/homebrew/var/log/veil/$name.err.log</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>$HOME/Applications/Veil Search.app/Contents/MacOS/veil-search</string>
+		<string>--background</string>
+	</array>
+	<key>RunAtLoad</key><true/>
 </dict>
 </plist>
 PLIST
-   # only touch the file when it changed: every rewrite is a fresh "Background Items Added" notice
-   if cmp -s "$plist.new" "$plist"; then rm -f "$plist.new"; else mv -f "$plist.new" "$plist"; fi
-   launchctl bootstrap "gui/$(id -u)" "$plist" 2>/dev/null || true
-   [ -f "$HOME/.config/veil/generated/off" ] || agent kick "$name"
-  done ;;
+  fi
+  launchctl bootstrap "gui/$(id -u)" "$search" 2>/dev/null || true
+  [ -f "$HOME/.config/veil/generated/off" ] || launchctl kickstart -k "gui/$(id -u)/app.veil.search" 2>/dev/null || true
+  echo "Veil agents: app.veil.search only (borders+Rift supervised in-process; SketchyBar retired)" ;;
  toggle) if [ -f "$HOME/.config/veil/generated/off" ]; then "$0" on; else "$0" off; fi ;;
  pause) rift-cli execute space toggle-activated ;;
- reload) rift-cli execute config reload; sketchybar --reload ;;
- # recover brings back everything selftest checks; `start` re-enables Rift if it was quit
+ reload) rift-cli execute config reload; pgrep -xq sketchybar && sketchybar --reload || true ;;
+ # recover: restart the single host (respawns borders + Rift children)
  recover)
-  rift service start 2>/dev/null || true; rift service restart 2>/dev/null || true
-  agent kick sketchybar; agent kick borders
+  "$0" agents
   launchctl kickstart -k "gui/$(id -u)/app.veil.search" 2>/dev/null || true ;;
- quit) rift service stop ;;  # also stops Rift starting at login; `veil recover` turns it back on
+ quit)
+  # Stop supervised Rift via host notification; fall back to pkill.
+  osascript -l JavaScript -e "ObjC.import('Foundation'); \$.NSDistributedNotificationCenter.defaultCenter.postNotificationNameObjectUserInfoDeliverImmediately('app.veil.host', 'quit-rift', \$(), true)" >/dev/null 2>&1 || true
+  pkill -x rift 2>/dev/null || true ;;
  keys)
   sed -n '/^\[keys\]/,/^\[binding_modes/p' "$HOME/.config/rift/config.toml" | grep '^"' \
     | sed -E 's/^"([^"]+)" = (.*)$/\1\t\2/; s/Alt/⌥/g; s/Shift/⇧/g; s/Ctrl/⌃/g; s/ \+ //g' | column -t -s $'\t' ;;
@@ -195,45 +196,30 @@ PLIST
   done ;;
  status)
   rift-cli query workspaces
-  sketchybar --query bar
+  echo "--- host ---"
+  pgrep -lf 'veil-search|borders|rift|sketchybar' || true
+  launchctl list | grep -E 'veil|rift' || true
+  pgrep -xq sketchybar && sketchybar --query bar || echo "sketchybar: retired (veil-bar)"
   ;;
  selftest)
   [ -f "$HOME/.config/veil/generated/off" ] && { echo "Veil is off (stock macOS); nothing to check. Turn it on with: veil on"; exit 0; }
   set +e; fail=0
   check() { if eval "$2" >/dev/null 2>&1; then echo "PASS  $1"; else echo "FAIL  $1"; fail=1; fi; }
-  VEIL_BAR=0; [ -f "$HOME/.config/veil/generated/features/enable-veil-bar" ] && VEIL_BAR=1
+  VEIL_BAR=1; [ -f "$HOME/.config/veil/generated/features/disable-veil-bar" ] && VEIL_BAR=0
   check "rift running" "pgrep -x rift"
   check "borders running" "pgrep -x borders"
-  if [ "$VEIL_BAR" = 1 ]; then
-    check "sketchybar stopped (veil-bar)" "! pgrep -x sketchybar"
-  else
-    check "sketchybar running" "pgrep -x sketchybar"
-  fi
   check "launcher running" "pgrep -xq veil-search"
-  for a in git.acsandmann.rift app.veil.borders app.veil.search; do check "$a starts at login" "launchctl print gui/$(id -u)/$a"; done
   if [ "$VEIL_BAR" = 1 ]; then
-    check "veil-bar feature on" "true"
+    check "sketchybar stopped (unified bar)" "! pgrep -x sketchybar"
+    check "in-process bar (veil-bar default)" "true"
   else
-    check "app.veil.sketchybar starts at login" "launchctl print gui/$(id -u)/app.veil.sketchybar"
+    check "sketchybar running (veil-bar disabled)" "pgrep -x sketchybar"
   fi
+  check "app.veil.search starts at login" "launchctl print gui/$(id -u)/app.veil.search"
+  check "sketchybar agent retired" "! launchctl print gui/$(id -u)/app.veil.sketchybar >/dev/null 2>&1"
+  check "borders agent retired" "! launchctl print gui/$(id -u)/app.veil.borders >/dev/null 2>&1"
+  check "rift agent retired" "! launchctl print gui/$(id -u)/git.acsandmann.rift >/dev/null 2>&1"
   check "rift answers queries" "perl -e 'alarm 5; exec @ARGV' rift-cli query workspaces"
-  bar_ready() {
-   local attempt
-   # --reload schedules a fresh configuration asynchronously. Give it time
-   # to finish and check the actual required items rather than a total count.
-   for attempt in 1 2 3 4 5 6; do
-    if sketchybar --query bar | jq -e '["city", "clock", "ws.0", "ws.4", "menu.status", "workspace.refresh"] - .items == []' >/dev/null; then
-     return 0
-    fi
-    [ "$attempt" = 6 ] || sleep 0.2
-   done
-   return 1
-  }
-  if [ "$VEIL_BAR" = 1 ]; then
-    check "in-process bar window present" "pgrep -xq veil-search"
-  else
-    check "bar has all items" bar_ready
-  fi
   check "theme files match templates" "veil-theme status | grep -q 'all files match'"
   # Spotlight keeps ⌘Space unless its shortcut (symbolic hot key 64) is off; then Veil Search can't open with it
   check "Spotlight has released ⌘Space" "[ \"\$(defaults export com.apple.symbolichotkeys - | plutil -extract AppleSymbolicHotKeys.64.enabled raw -)\" = false ]"
@@ -249,31 +235,30 @@ PLIST
   if [ "$n" = 0 ]; then msg="All checks passed"; else msg="$n failed: $(grep '^FAIL' <<<"$out" | cut -c7- | paste -sd, -)"; fi
   osascript -e "display notification \"$msg\" with title \"Veil self-test\"" ;;
  feature)
-  # Default-on additions: disable via generated/features/disable-<name>
-  # Default-off (incl. SIP-gated): enable via generated/features/enable-<name>
-  # SIP-gated features may be fully implemented now; they stay off overnight and
-  # activate after wake when SIP is off — see tools/sip-nowplaying/README.md
+  # Default-on: disable via generated/features/disable-<name>
+  # Default-off (SIP-gated / fallbacks): enable via generated/features/enable-<name>
   V="$HOME/.config/veil"; F="$V/generated/features"; mkdir -p "$F"
-  # veil-bar: rewritten SketchyBar-scale strip (below Dock). Still opt-in until defaulted
-  # after live proof; enabling unloads the SketchyBar LaunchAgent to cut process tax.
-  on_by_default='music-popup clock-calendar cider-bridge screensaver-sync animated-panels overview-live-thumbs'
-  off_by_default='sip-nowplaying sketchybar-popups veil-bar force-reduce-motion'
+  # veil-bar is default-on (thin host strip). Migrate phase-1 enable flag away.
+  on_by_default='music-popup clock-calendar cider-bridge screensaver-sync animated-panels overview-live-thumbs veil-bar'
+  off_by_default='sip-nowplaying sketchybar-popups force-reduce-motion'
   known="$on_by_default $off_by_default"
   is_known() { echo " $known " | grep -q " $1 "; }
   is_opt_in() { echo " $off_by_default " | grep -q " $1 "; }
+  rm -f "$F/enable-veil-bar"
   case "${2:-}" in
    list|"")
     echo "Veil features (veil feature enable|disable NAME)"
     for name in $on_by_default; do
       if [ -f "$F/disable-$name" ]; then state=off; else state=on; fi
-      printf '  %-20s %s\n' "$name" "$state"
+      printf '  %-20s %s' "$name" "$state"
+      [ "$name" = veil-bar ] && printf '  (default thin host strip; disable → SketchyBar)'
+      printf '\n'
     done
     for name in $off_by_default; do
       if [ -f "$F/enable-$name" ]; then state=on; else state=off; fi
       printf '  %-20s %s  (opt-in' "$name" "$state"
       [ "$name" = sip-nowplaying ] && printf '; SIP-gated — see tools/sip-nowplaying/README.md'
       [ "$name" = sketchybar-popups ] && printf '; SketchyBar popup menus (skips animated panels)'
-      [ "$name" = veil-bar ] && printf '; in-process thin strip (unloads SketchyBar); was rejected when fat'
       [ "$name" = force-reduce-motion ] && printf '; panels use still-path without system Reduce Motion'
       printf ')\n'
     done ;;
@@ -286,19 +271,17 @@ PLIST
         sketchybar --bar hidden=off 2>/dev/null || true
         osascript -l JavaScript -e "ObjC.import('Foundation'); \$.NSDistributedNotificationCenter.defaultCenter.postNotificationNameObjectUserInfoDeliverImmediately('app.veil.search.theme', \$(), \$(), true)" >/dev/null 2>&1 || true
         ;;
-       veil-bar)
-        # Restore SketchyBar LaunchAgent as chrome fallback.
-        launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/app.veil.sketchybar.plist" 2>/dev/null || true
-        agent kick sketchybar
-        sketchybar --bar hidden=off 2>/dev/null || true
-        osascript -l JavaScript -e "ObjC.import('Foundation'); \$.NSDistributedNotificationCenter.defaultCenter.postNotificationNameObjectUserInfoDeliverImmediately('app.veil.search.theme', \$(), \$(), true)" >/dev/null 2>&1 || true
-        ;;
       esac
     else
       touch "$F/disable-$name"
       case "$name" in
        music-popup|clock-calendar) veil-theme apply "$(cat "$V/current")" ;;
        screensaver-sync) python3 "$V/screensaver/sync.py" "$V" --remove 2>/dev/null || true ;;
+       veil-bar)
+        launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/app.veil.sketchybar.plist" 2>/dev/null || true
+        agent kick sketchybar
+        osascript -l JavaScript -e "ObjC.import('Foundation'); \$.NSDistributedNotificationCenter.defaultCenter.postNotificationNameObjectUserInfoDeliverImmediately('app.veil.search.theme', \$(), \$(), true)" >/dev/null 2>&1 || true
+        ;;
       esac
     fi
     echo "disabled $name" ;;
@@ -307,29 +290,30 @@ PLIST
     if is_opt_in "$name"; then
       touch "$F/enable-$name"
       if [ "$name" = sip-nowplaying ]; then
+        rm -f "$F/.sip-nowplaying-amfi-blocked"
         if [ ! -x "$V/bin/veil-nowplaying-sip" ]; then
           "$V/tools/sip-nowplaying/build.sh" "$V/bin/veil-nowplaying-sip" || true
         fi
         if /usr/bin/csrutil status 2>/dev/null | /usr/bin/grep -qi 'enabled'; then
           echo "enabled sip-nowplaying (flag on). SIP is still enabled — helper stays fallback until SIP is off after wake; music dropdown keeps media-control."
         else
-          echo "enabled sip-nowplaying (SIP disabled — helper preferred when it returns data)"
+          if "$V/bin/veil-nowplaying-sip" status >/dev/null 2>&1; then
+            echo "enabled sip-nowplaying (SIP disabled — helper preferred when it returns data)"
+          else
+            printf 'amfi_sigkill on enable ts=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$F/.sip-nowplaying-amfi-blocked" 2>/dev/null || true
+            echo "enabled sip-nowplaying (flag on). SIP is off but AMFI still kills the helper (exit 137) — music keeps media-control. Needs AMFI boot-arg with explicit consent; see docs/sip-preflight.md"
+          fi
         fi
       elif [ "$name" = sketchybar-popups ]; then
         sketchybar --bar hidden=off 2>/dev/null || true
         echo "enabled sketchybar-popups (SketchyBar strip + popups; animated Veil panels step aside)"
-      elif [ "$name" = veil-bar ]; then
-        # Cut SketchyBar process tax — in-process strip owns chrome.
-        agent kill sketchybar
-        launchctl bootout "gui/$(id -u)/app.veil.sketchybar" 2>/dev/null || true
-        osascript -l JavaScript -e "ObjC.import('Foundation'); \$.NSDistributedNotificationCenter.defaultCenter.postNotificationNameObjectUserInfoDeliverImmediately('app.veil.search.theme', \$(), \$(), true)" >/dev/null 2>&1 || true
-        echo "enabled veil-bar (thin in-process strip; SketchyBar LaunchAgent unloaded)"
       fi
     else
       rm -f "$F/disable-$name"
       case "$name" in
        music-popup|clock-calendar|screensaver-sync) veil-theme apply "$(cat "$V/current")" ;;
-       animated-panels)
+       animated-panels|veil-bar)
+        [ "$name" = veil-bar ] && { launchctl bootout "gui/$(id -u)/app.veil.sketchybar" 2>/dev/null || true; pkill -x sketchybar 2>/dev/null || true; }
         osascript -l JavaScript -e "ObjC.import('Foundation'); \$.NSDistributedNotificationCenter.defaultCenter.postNotificationNameObjectUserInfoDeliverImmediately('app.veil.search.theme', \$(), \$(), true)" >/dev/null 2>&1 || true
         ;;
       esac

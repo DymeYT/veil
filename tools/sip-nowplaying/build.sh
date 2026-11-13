@@ -23,9 +23,15 @@ fi
 "${SWIFTC[@]}"
 codesign --force --sign - --entitlements "$ENT" "$OUT"
 echo "built $OUT"
-# Under SIP, AMFI SIGKILLs this binary (exit 137) — expected; do not treat as build failure.
+# Under SIP (or SIP-off but AMFI still hard), private entitlements → SIGKILL.
+# Never fail the build; clear any prior AMFI stamp so the next enable can re-probe.
+rm -f "$ROOT/generated/features/.sip-nowplaying-amfi-blocked"
 if /usr/bin/csrutil status 2>/dev/null | /usr/bin/grep -qi 'enabled'; then
   echo "sip=enabled — skip status smoke (AMFI would Killed: 9). After csrutil disable, re-run and expect: sip=disabled mediaremote=ok"
 else
-  "$OUT" status || true
+  if "$OUT" status 2>/dev/null; then
+    :
+  else
+    echo "sip=disabled but helper still SIGKILL'd (AMFI). Music path falls back until AMFI boot-arg — see docs/sip-preflight.md (consent required)."
+  fi
 fi

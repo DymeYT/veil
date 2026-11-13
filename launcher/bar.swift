@@ -16,10 +16,9 @@ enum VeilFeature {
             || !animatedPanels
     }
 
-    /// Opt-in in-process status strip. Stays **off** until screenshot-proven thin + clickable + Dock-safe
-    /// (Big Dawg rejected the prior fat/unclickable strip). Default chrome remains SketchyBar.
-    /// Enable: `veil feature enable veil-bar` — then unload SketchyBar only after live proof.
-    static var veilBar: Bool { FileManager.default.fileExists(atPath: root + "/enable-veil-bar") }
+    /// Default-on thin in-process strip. Disable → SketchyBar: `veil feature disable veil-bar`.
+    /// Matches bin/veil (`disable-veil-bar`); unify retires the SketchyBar LaunchAgent.
+    static var veilBar: Bool { !FileManager.default.fileExists(atPath: root + "/disable-veil-bar") }
 
     /// Default-on live window thumbs for the selected Overview card (out-of-process SCK).
     static var overviewLiveThumbs: Bool { !FileManager.default.fileExists(atPath: root + "/disable-overview-live-thumbs") }

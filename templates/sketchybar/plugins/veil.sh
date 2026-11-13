@@ -39,14 +39,25 @@ music_sip_nowplaying() {
   [ -f "$HOME/.config/veil/generated/features/enable-sip-nowplaying" ] || return 1
   # SIP+AMFI SIGKILLs the helper — skip entirely so music never pays a kill tax.
   /usr/bin/csrutil status 2>/dev/null | /usr/bin/grep -qi 'enabled' && return 1
-  local bin="$HOME/.config/veil/bin/veil-nowplaying-sip" action="${1:-}" raw
+  # After SIP off, AMFI may still SIGKILL (private entitlements). Cache that once.
+  local amfi_block="$HOME/.config/veil/generated/features/.sip-nowplaying-amfi-blocked"
+  [ -f "$amfi_block" ] && return 1
+  local bin="$HOME/.config/veil/bin/veil-nowplaying-sip" action="${1:-}" raw ec
   [ -x "$bin" ] || return 1
   case "$action" in
     previous) "$bin" previous >/dev/null 2>&1 || true ;;
     next) "$bin" next >/dev/null 2>&1 || true ;;
     playpause) "$bin" toggle >/dev/null 2>&1 || true ;;
   esac
-  raw=$("$bin" get 2>/dev/null) || return 1
+  raw=$("$bin" get 2>/dev/null); ec=$?
+  if [ "$ec" -ne 0 ]; then
+    # 137 = 128+SIGKILL — AMFI; stamp so we never re-kill on every poll.
+    if [ "$ec" -eq 137 ] || [ "$ec" -gt 128 ]; then
+      mkdir -p "$(dirname "$amfi_block")"
+      printf 'amfi_sigkill exit=%s ts=%s\n' "$ec" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$amfi_block" 2>/dev/null || true
+    fi
+    return 1
+  fi
   [ -n "$raw" ] && [ "$raw" != '{}' ] || return 1
   local bundle source playing title artist album
   bundle=$(jq -r '.bundleIdentifier // empty' <<<"$raw" 2>/dev/null) || return 1
