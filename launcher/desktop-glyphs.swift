@@ -23,6 +23,7 @@ enum DesktopGlyphID: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .clock, .quick: return (4, 3)
         case .media: return (4, 2)
+        case .battery: return (4, 3) // large → multi-device board
         default: return (3, 2)
         }
     }
@@ -496,13 +497,14 @@ final class DesktopGlyphBoard: ObservableObject {
 
     func refresh() {
         guard enabled, !veilIsOff else { stop(); return }
-        var rebuild = false
-        if loadedTheme != themeId { load(); loadedTheme = themeId; rebuild = true }
-        ensureWindow(force: rebuild)
+        // Always re-read layout so external edits / proof tooling stick.
+        load()
+        loadedTheme = themeId
+        ensureWindow(force: true)
         if mouseMonitors.isEmpty { installMouseMonitors() }
         syncTick()
         refreshMetaOnly()
-        if rebuild { objectWillChange.send() }
+        objectWillChange.send()
     }
 
     private func refreshMetaOnly() {
@@ -663,9 +665,9 @@ struct DesktopGlyphCanvas: View {
                             .padding(5)
                     }
                     .frame(width: frame.width, height: frame.height)
-                    .scaleEffect((board.dragging == pin.id || board.resizing == pin.id) && !reduceMotion ? 1.03 : 1)
-                    .shadow(color: (board.dragging == pin.id || board.resizing == pin.id) ? .black.opacity(0.4) : .clear,
-                            radius: 12, y: 5)
+                    .clipShape(RoundedRectangle(cornerRadius: tileRadius, style: .circular))
+                    .compositingGroup() // flatten so AA fringe doesn't read as frost
+                    .scaleEffect((board.dragging == pin.id || board.resizing == pin.id) && !reduceMotion ? 1.02 : 1)
                     .offset(offset)
                     .frame(width: frame.width, height: frame.height)
                     .position(x: frame.midX, y: frame.midY)
@@ -703,10 +705,56 @@ struct DesktopGlyphCanvas: View {
         case .cpu: metricWidget(.cpu, "CPU", VeilPanelHost.shared.cpuText)
         case .mem: metricWidget(.mem, "MEM", VeilPanelHost.shared.memText)
         case .gpu: metricWidget(.gpu, "GPU", VeilPanelHost.shared.gpuText)
-        case .battery: metricWidget(.battery, "BAT", VeilPanelHost.shared.batteryText)
+        case .battery: batteryWidget(pin)
         case .net: metricWidget(.net, "NET", VeilPanelHost.shared.netText)
         case .volume: metricWidget(.volume, "VOL", VeilPanelHost.shared.volumeText)
         case .sys: sysWidget
+        }
+    }
+
+    /// Small = Mac-only; ≥2 cells → Continuity/BT multi-device board (VEI-32).
+    @ViewBuilder
+    private func batteryWidget(_ pin: DesktopGlyphPin) -> some View {
+        let large = pin.spanCols >= 2 || pin.spanRows >= 2
+        Group {
+            if large {
+                let devices = Array(VeilPanelHost.shared.batteryDevices.prefix(max(4, pin.spanCols * pin.spanRows)))
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("BATTERY").font(mono(7)).foregroundStyle(p["comment"])
+                    if devices.isEmpty {
+                        Text(VeilPanelHost.shared.batteryText).font(display(16)).foregroundStyle(p["fg"])
+                    } else {
+                        ForEach(devices) { d in
+                            HStack(spacing: 6) {
+                                Image(systemName: d.kind.symbol)
+                                    .font(.system(size: 9, weight: .semibold))
+                                    .foregroundStyle(p["cyan"])
+                                    .frame(width: 12)
+                                Text(d.name).font(mono(7)).foregroundStyle(p["fg"]).lineLimit(1)
+                                Spacer(minLength: 0)
+                                if let detail = d.detail {
+                                    Text(detail).font(mono(6)).foregroundStyle(p["comment"]).lineLimit(1)
+                                } else if let level = d.level {
+                                    Text("\(level)%").font(mono(8)).foregroundStyle(p["fg"])
+                                } else {
+                                    Text("—").font(mono(8)).foregroundStyle(p["dim"])
+                                }
+                            }
+                        }
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(8)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .background(tileBG)
+                .onAppear {
+                    VeilPanelHost.shared.ensureStatusMeta()
+                    VeilPanelHost.shared.refreshBatteryDevices(force: true)
+                }
+                .contextMenu { pinMenu(.battery) }
+            } else {
+                metricWidget(.battery, "BAT", VeilPanelHost.shared.batteryText)
+            }
         }
     }
 
@@ -810,12 +858,16 @@ struct DesktopGlyphCanvas: View {
         .contextMenu { pinMenu(.sys) }
     }
 
+    /// Circular corners clip cleaner than continuous (less soft AA “frost” fringe on black walls).
+    private var tileRadius: CGFloat { max(8, p.num("l_radius", 16) * 0.45) }
+
+    /// Opaque theme fill clipped to the tile — no frosted/translucent overshoot.
     private var tileBG: some View {
-        let r = max(8, p.num("l_radius", 16) * 0.45)
-        return RoundedRectangle(cornerRadius: r, style: .continuous)
-            .fill(p["bg_float"].opacity(0.92))
-            .overlay(RoundedRectangle(cornerRadius: r, style: .continuous)
-                .strokeBorder(p["border"].opacity(0.55), lineWidth: 1))
+        let r = tileRadius
+        return RoundedRectangle(cornerRadius: r, style: .circular)
+            .fill(p["surface"]) // opaque solid card (1a1a1a) — never .opacity()
+            .overlay(RoundedRectangle(cornerRadius: r, style: .circular)
+                .strokeBorder(p["border"], lineWidth: 1))
     }
 
     private func chip(_ t: String, _ sym: String) -> some View {

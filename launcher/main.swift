@@ -1248,7 +1248,7 @@ struct GroupHeader: View {
             }.padding(.leading, 12)
         case "strip":
             t.foregroundStyle(p["dim"]).padding(.leading, 12).frame(maxWidth: .infinity, alignment: .leading).frame(height: 20)
-                .background(p["bg_dark"].opacity(0.7)).overlay(alignment: .bottom) { p["border"].frame(height: 1) }
+                .background(p["bg_dark"]).overlay(alignment: .bottom) { p["border"].frame(height: 1) }
         case "ornament":
             HStack(spacing: 8) {
                 Text("❦").font(.system(size: 11)).foregroundStyle(p["yellow"])
@@ -1348,7 +1348,7 @@ struct Detail: View {
                 actionButton.frame(width: 110)
             }
             .padding(.horizontal, 16).padding(.vertical, 10).frame(maxWidth: .infinity).frame(height: 92)
-            .background(p["bg_dark"].opacity(0.45))
+            .background(p["bg_dark"])
             .task(id: m.shown ? item.id : nil) { if m.shown { await loadThumb() } else { thumb = nil } }
         } else { fullBody }
     }
@@ -1370,7 +1370,7 @@ struct Detail: View {
         .padding(18)
         .frame(width: asCard ? 278 : 300)
         .frame(maxHeight: .infinity)
-        .background(asCard ? .clear : p["bg_dark"].opacity(0.35))
+        .background(asCard ? .clear : p["bg_dark"])
         .overlay(alignment: .leading) { if !asCard { Rectangle().fill(p["border"]).frame(width: 1) } }
         .task(id: m.shown ? item.id : nil) { if m.shown { await loadThumb() } else { thumb = nil } }
     }
@@ -1433,7 +1433,7 @@ struct Detail: View {
         } else if let t = thumb {
             Image(nsImage: t).resizable().aspectRatio(contentMode: .fit).frame(maxWidth: 220, maxHeight: 120)
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .shadow(color: .black.opacity(0.5), radius: 10, y: 4)
+                
         } else if let path = item.path {
             Image(nsImage: IconCache.icon(path)).resizable().interpolation(.high).frame(width: 96, height: 96)
                 .shadow(color: p["cyan"].opacity(0.18), radius: 18)
@@ -1482,7 +1482,7 @@ struct Detail: View {
                 ScrollView { Text(text).font(code(11)).foregroundStyle(p["fg"].opacity(0.85)).lineSpacing(2)
                     .frame(maxWidth: .infinity, alignment: .leading).textSelection(.enabled) }
                     .frame(maxHeight: 150).padding(8)
-                    .background(RoundedRectangle(cornerRadius: 6).fill(p["bg_dark"].opacity(0.6)))
+                    .background(RoundedRectangle(cornerRadius: 6).fill(p["bg_dark"]))
                     .padding(.bottom, 10)
                 let facts = fileFacts(path).filter { $0.0 != "WHERE" }
                 ForEach(facts, id: \.0) { fact($0.0, $0.1) }
@@ -1686,11 +1686,13 @@ struct OverviewCard: View {
         .padding(12)
         .frame(maxWidth: .infinity, minHeight: 168, alignment: .topLeading)
         .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: 12, style: .circular)
                 .fill(selected ? palette["selection"] : palette["surface"])
         )
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .circular))
+        .compositingGroup()
         .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: 12, style: .circular)
                 .strokeBorder(selected ? palette["cyan"] : palette["border"], lineWidth: selected ? 2 : 1)
         )
         .accessibilityElement(children: .combine)
@@ -1734,7 +1736,7 @@ struct ThemePreview: View {
                     }
                 }
                 .padding(6)
-                .background(.black.opacity(0.65), in: Capsule())
+                .background(palette["bg_dark"], in: Capsule())
                 .padding(8)
             }
             .frame(height: 84)
@@ -1847,20 +1849,21 @@ struct LauncherView: View {
                     Text(p.cased("\(p.s("brand", "VEIL")) // search")).font(mono(11, "Bold")).tracking(1.4).foregroundStyle(p["comment"]).lineLimit(1).fixedSize()
                 }
                 .padding(.horizontal, 18).frame(height: 32)
-                .background(p["bg_dark"].opacity(0.55))
+                .background(p["bg_dark"]) // opaque footer — no frosted strip
                 .overlay(alignment: .top) { Rectangle().fill(p["border"]).frame(height: 1) }
             }
         }
         .frame(width: p.num("width", 860))
         .background(
             ZStack(alignment: .top) {
-                if !reduceTransparency { VisualEffect() }
-                p["bg_float"].opacity(reduceTransparency ? 1 : p.num("opacity", 0.88))
+                // Opaque theme fill only — VisualEffect / translucency killed (VEI-31).
+                p["bg_float"]
                 Texture(kind: p.s("texture", "scanlines"), p: p)
                 accentLine(p)
             }
         )
         .clipShape(PanelShape(chamfer: p.s("corner", "round") == "chamfer", radius: p.num("radius", 16)))
+        .compositingGroup() // flatten opaque chrome — no soft AA frost fringe
         .overlay(PanelShape(chamfer: p.s("corner", "round") == "chamfer", radius: p.num("radius", 16)).stroke(p["border"], lineWidth: p.num("border_width", 1)))
         .overlay { Frame(kind: p.s("frame", "none"), radius: p.num("radius", 16), p: p) }
         .overlay(alignment: .bottomTrailing) { if m.actionsOpen { ActionPanel(m: m, p: p).padding(.trailing, 16).padding(.bottom, 44) } }
@@ -1874,8 +1877,7 @@ struct LauncherView: View {
         }
         .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: m.toast)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: m.actionsOpen)
-        .shadow(color: p["cyan"].opacity(p.flag("glow") ? 0.16 : 0), radius: 16, y: 4)  // tight neon, so it never smears the text behind
-        .shadow(color: .black.opacity(0.55), radius: 24, y: 14)
+        // No soft outer shadow — bled past opaque chrome like a frosted husk.
         .scaleEffect(m.shown || reduceMotion ? 1 : 0.97, anchor: p.s("place", "top") == "bottom" ? .bottom : .top)
         .opacity(m.shown ? 1 : 0)
         .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: m.shown)
@@ -1906,7 +1908,7 @@ struct LauncherView: View {
                         .offset(x: 100, y: -158)
                         .accessibilityHidden(true)
                 }
-                .background(p["bg_dark"].opacity(0.52))
+                .background(p["bg_dark"])
                 .clipped()
             }
         case "ops":
@@ -1918,7 +1920,7 @@ struct LauncherView: View {
                     Text("NETWORK DIRECTORY").font(mono(11, "Bold")).tracking(2.4).foregroundStyle(p["fg"])
                     Spacer()
                 }
-                .padding(.horizontal, 20).frame(height: 34).background(p["bg_dark"].opacity(0.7))
+                .padding(.horizontal, 20).frame(height: 34).background(p["bg_dark"])
                 p["cyan"].opacity(0.6).frame(height: 1)
                 resultList(p).padding(.horizontal, 10)
                 p["border"].frame(height: 1)
@@ -1941,7 +1943,7 @@ struct LauncherView: View {
         case "archive":
             HStack(spacing: 0) {
                 resultList(p).padding(.trailing, 4)
-                preview(p).frame(width: 300).background(p["bg_dark"].opacity(0.35))
+                preview(p).frame(width: 300).background(p["bg_dark"])
             }
         case "field":
             HStack(spacing: 0) {
@@ -1951,7 +1953,7 @@ struct LauncherView: View {
                     Text("\(m.items.count)\nRESULTS").font(code(11, "Bold")).foregroundStyle(p["dim"])
                     Spacer()
                     Text("\(Image(systemName: "command")) SPACE").font(code(11)).foregroundStyle(p["comment"])
-                }.padding(18).frame(width: 124).background(p["bg_dark"].opacity(0.5))
+                }.padding(18).frame(width: 124).background(p["bg_dark"])
                 VStack(spacing: 0) { resultList(p); preview(p, compact: true) }
             }
         case "ink":
@@ -1970,7 +1972,7 @@ struct LauncherView: View {
                     Spacer()
                     Text("↵  OPEN").font(code(11, "Bold")).foregroundStyle(p["dim"])
                 }
-                .padding(16).frame(width: 106).background(p["bg_dark"].opacity(0.72))
+                .padding(16).frame(width: 106).background(p["bg_dark"])
                 Rectangle().fill(p["yellow"].opacity(0.3)).frame(width: 1)
                 VStack(spacing: 0) { sectionTitle("SITES OF GRACE", p); resultList(p) }
                 preview(p)
@@ -1984,7 +1986,7 @@ struct LauncherView: View {
                     }.padding(.leading, 18)
                     Spacer(minLength: 8)
                     preview(p, compact: true).frame(width: 330)
-                }.frame(height: 104).background(p["bg_dark"].opacity(0.56))
+                }.frame(height: 104).background(p["bg_dark"])
                 p["yellow"].opacity(0.42).frame(height: 1)
                 resultList(p, grid: true).padding(6)
             }
@@ -2000,7 +2002,7 @@ struct LauncherView: View {
                     Text(String(format: "%02d", min(m.selected + 1, m.items.count)))
                         .font(code(11, "Bold")).foregroundStyle(p["dim"])
                 }
-                .frame(width: 42).background(p["bg_dark"].opacity(0.64))
+                .frame(width: 42).background(p["bg_dark"])
                 Rectangle().fill(p["red"].opacity(0.35)).frame(width: 1)
                 preview(p)
             }
@@ -2091,7 +2093,7 @@ struct LauncherView: View {
                     LazyVGrid(columns: [GridItem(.flexible(), spacing: 6), GridItem(.flexible(), spacing: 6)], spacing: 6) {
                         ForEach(Array(m.items.enumerated()), id: \.element.id) { i, item in
                             result(item, index: i, p: p)
-                                .background(RoundedRectangle(cornerRadius: max(p.num("chip_radius", 4), 3), style: .continuous).fill(p["surface"].opacity(0.7)))
+                                .background(RoundedRectangle(cornerRadius: max(p.num("chip_radius", 4), 3), style: .continuous).fill(p["surface"]))
                         }
                     }.padding(6)
                 } else {
@@ -2225,22 +2227,17 @@ struct ActionPanel: View {
             }
         }
         .padding(6).frame(width: 300)
-        .background(RoundedRectangle(cornerRadius: min(p.num("radius", 16), 12), style: .continuous).fill(p["bg_float"]))
+        .background(RoundedRectangle(cornerRadius: min(p.num("radius", 16), 12), style: .circular).fill(p["surface"]))
+        .clipShape(RoundedRectangle(cornerRadius: min(p.num("radius", 16), 12), style: .circular))
+        .compositingGroup()
         .overlay(RoundedRectangle(cornerRadius: min(p.num("radius", 16), 12), style: .continuous).stroke(p["border"], lineWidth: 1))
-        .shadow(color: .black.opacity(0.5), radius: 18, y: 8)
+        
     }
 }
 
-struct VisualEffect: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSVisualEffectView {
-        let v = NSVisualEffectView()
-        v.material = .hudWindow
-        v.blendingMode = .behindWindow
-        v.state = .active
-        v.appearance = NSAppearance(named: .darkAqua)
-        return v
-    }
-    func updateNSView(_ v: NSVisualEffectView, context: Context) {}
+/// Former frosted material — VEI-31: solid opaque fill only (never NSVisualEffectView).
+struct VisualEffect: View {
+    var body: some View { Palette.load()["bg_float"] }
 }
 
 /// Esc → `veil dismiss-popups` (SketchyBar music/calendar/control/keys + Rift overview).
@@ -2688,12 +2685,13 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         w.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
         let p = model.palette
         w.contentView = NSHostingView(rootView: ZStack {
-            Color.black.opacity(0.55)
+            p["bg"] // opaque full-screen — no translucent scrim
             Text(text).font(mono(min(160, max(48, 2400 / CGFloat(max(text.count, 1)))), "Bold")).foregroundStyle(p["white"])
                 .multilineTextAlignment(.center).minimumScaleFactor(0.2).padding(60)
-                .background(RoundedRectangle(cornerRadius: 28, style: .continuous).fill(p["bg_float"].opacity(0.95)))
+                .background(RoundedRectangle(cornerRadius: 28, style: .continuous).fill(p["bg_float"]))
+                .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
                 .padding(120)
-            VStack { Spacer(); Text("Press any key or click to close").font(code(12)).foregroundStyle(.white.opacity(0.6)).padding(.bottom, 40) }
+            VStack { Spacer(); Text("Press any key or click to close").font(code(12)).foregroundStyle(p["comment"]).padding(.bottom, 40) }
         }.ignoresSafeArea())
         w.makeKeyAndOrderFront(nil)
         largeType = w
@@ -3169,27 +3167,15 @@ struct Pressable: ViewModifier {
 extension View { func pressable() -> some View { modifier(Pressable()) } }
 
 
-/// Themes that ask for it (`l_scrim`) dim the screen behind the launcher, so text under its edges stops competing.
+/// Former translucent dim behind the launcher — killed (VEI-31). Kept as no-op so call sites stay stable.
 final class Scrim {
     static let shared = Scrim()
     private var window: NSWindow?
     private var isShowing = false
     func show(on screen: NSScreen, enabled: Bool) {
-        guard enabled else { hide(); return }
-        let w = window ?? {
-            let w = NSWindow(contentRect: screen.frame, styleMask: .borderless, backing: .buffered, defer: false)
-            w.isOpaque = false; w.backgroundColor = NSColor.black; w.ignoresMouseEvents = true; w.hasShadow = false
-            w.level = NSWindow.Level(rawValue: NSWindow.Level.modalPanel.rawValue - 1); w.isReleasedWhenClosed = false
-            w.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
-            return w
-        }()
-        isShowing = true
-        w.setFrame(screen.frame, display: false)
-        if !w.isVisible { w.alphaValue = 0 }
-        w.orderFrontRegardless()
-        let reduce = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-        NSAnimationContext.runAnimationGroup { $0.duration = reduce ? 0 : 0.16; w.animator().alphaValue = 0.38 }
-        window = w
+        // Translucent scrims overextend and were explicitly rejected — never show.
+        hide()
+        _ = screen; _ = enabled
     }
     func hide() {
         isShowing = false

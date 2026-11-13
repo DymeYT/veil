@@ -91,7 +91,7 @@ final class GlyphShell: ObservableObject {
                             backing: .buffered, defer: false)
             w.isOpaque = false
             w.backgroundColor = .clear
-            w.hasShadow = true
+            w.hasShadow = false // window shadow bled past Glyph chrome like frosted overshoot
             w.level = .statusBar + 2
             w.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient, .ignoresCycle]
             w.isReleasedWhenClosed = false
@@ -253,8 +253,18 @@ struct GlyphRoot: View {
     var red: Color { p["red"] }
     var fg: Color { p["fg"] }
     var muted: Color { p["comment"] }
-    var panel: Color { p["bg_float"] }
+    /// Opaque panel chrome (never translucent — frosted fills overshot the Glyph bounds).
+    var panel: Color { p["surface"] }
     var bg: Color { p["bg"] }
+    var panelRadius: CGFloat { max(16, p.num("l_radius", 20)) }
+
+    func opaquePanel(_ radius: CGFloat? = nil) -> some View {
+        let r = radius ?? panelRadius
+        // Circular + compositingGroup: tight opaque clip, no soft AA “frost” fringe.
+        return RoundedRectangle(cornerRadius: r, style: .circular)
+            .fill(panel)
+            .overlay(RoundedRectangle(cornerRadius: r, style: .circular).strokeBorder(p["border"], lineWidth: 1))
+    }
 
     func ui(_ size: CGFloat, _ w: Font.Weight = .medium) -> Font {
         let n = p.s("ui_font", "")
@@ -295,35 +305,34 @@ struct GlyphRoot: View {
     // MARK: Quick (right edge)
 
     var quick: some View {
-        ZStack(alignment: .bottomTrailing) {
-            Color.black.opacity(0.35).ignoresSafeArea().onTapGesture { shell.dismiss() }
-            VStack(alignment: .leading, spacing: 16) {
-                HStack {
-                    Text(Date(), style: .time).font(doto(42)).foregroundStyle(fg)
-                    Spacer()
-                    Text("QUICK").font(mono(11)).foregroundStyle(muted).tracking(2)
-                }
-                HStack(spacing: 10) {
-                    pill("Wi‑Fi", "wifi"); pill("Bluetooth", "wave.3.right"); pill("Focus", "moon.fill")
-                }
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                    tile("Dark", "circle.lefthalf.filled") { shell.applyStylePack(id: "nothing") }
-                    tile("Theme", "paintpalette") { shell.present(.style) }
-                    tile("Shot", "camera") { shell.present(.shot) }
-                    tile("VPN", "lock.shield") { shell.present(.vpn) }
-                    tile("Buds", "earbuds") { shell.present(.buds) }
-                    tile("Power", "power") { shell.present(.power) }
-                }
-                sliderRow("VOLUME")
-                sliderRow("BRIGHTNESS")
-                mediaStrip
-                Text("Notifications · empty").font(ui(12)).foregroundStyle(muted)
+        // Opaque card only — no in-window scrim (that painted a translucent/solid husk past the Glyph).
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Text(Date(), style: .time).font(doto(42)).foregroundStyle(fg)
+                Spacer()
+                Text("QUICK").font(mono(11)).foregroundStyle(muted).tracking(2)
             }
-            .padding(22)
-            .frame(width: 470)
-            .background(RoundedRectangle(cornerRadius: 36, style: .continuous).fill(panel))
-            .padding(14)
+            HStack(spacing: 10) {
+                pill("Wi‑Fi", "wifi"); pill("Bluetooth", "wave.3.right"); pill("Focus", "moon.fill")
+            }
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                tile("Dark", "circle.lefthalf.filled") { shell.applyStylePack(id: "nothing") }
+                tile("Theme", "paintpalette") { shell.present(.style) }
+                tile("Shot", "camera") { shell.present(.shot) }
+                tile("VPN", "lock.shield") { shell.present(.vpn) }
+                tile("Buds", "earbuds") { shell.present(.buds) }
+                tile("Power", "power") { shell.present(.power) }
+            }
+            sliderRow("VOLUME")
+            sliderRow("BRIGHTNESS")
+            mediaStrip
+            Text("Notifications · empty").font(ui(12)).foregroundStyle(muted)
         }
+        .padding(22)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(opaquePanel(28))
+        .clipShape(RoundedRectangle(cornerRadius: 28, style: .circular))
+            .compositingGroup()
     }
 
     func pill(_ t: String, _ sym: String) -> some View {
@@ -394,7 +403,6 @@ struct GlyphRoot: View {
 
     var deck: some View {
         ZStack(alignment: .bottom) {
-            Color.black.opacity(0.4).ignoresSafeArea().onTapGesture { shell.dismiss() }
             HStack(spacing: 14) {
                 deckCard("CPU", sys("cpu"))
                 deckCard("MEM", sys("mem"))
@@ -411,7 +419,9 @@ struct GlyphRoot: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(18)
-                .background(RoundedRectangle(cornerRadius: 28, style: .continuous).fill(panel))
+                .background(opaquePanel(28))
+            .clipShape(RoundedRectangle(cornerRadius: 28, style: .circular))
+            .compositingGroup()
             }
             .padding(.horizontal, 20).padding(.bottom, 18)
         }
@@ -423,7 +433,9 @@ struct GlyphRoot: View {
             Text(value).font(doto(28)).foregroundStyle(fg)
         }
         .frame(width: 110, height: 110)
-        .background(RoundedRectangle(cornerRadius: 28, style: .continuous).fill(panel))
+        .background(opaquePanel(28))
+            .clipShape(RoundedRectangle(cornerRadius: 28, style: .circular))
+            .compositingGroup()
     }
 
     func sys(_ k: String) -> String {
@@ -448,7 +460,6 @@ struct GlyphRoot: View {
 
     var prefs: some View {
         ZStack {
-            Color.black.opacity(0.5).ignoresSafeArea().onTapGesture { shell.dismiss() }
             VStack(alignment: .leading, spacing: 18) {
                 Text("PREFS").font(doto(36)).foregroundStyle(fg)
                 Text("Bar · Home · Audio · Style").font(mono(11)).foregroundStyle(muted).tracking(2)
@@ -467,7 +478,9 @@ struct GlyphRoot: View {
             }
             .padding(28)
             .frame(width: 520)
-            .background(RoundedRectangle(cornerRadius: 32, style: .continuous).fill(panel))
+            .background(opaquePanel(32))
+            .clipShape(RoundedRectangle(cornerRadius: 32, style: .circular))
+            .compositingGroup()
         }
     }
 
@@ -486,7 +499,7 @@ struct GlyphRoot: View {
     var power: some View {
         let items = ["LOCK", "SLEEP", "SHUT DOWN", "REBOOT", "LOG OUT"]
         return ZStack {
-            bg.opacity(0.96).ignoresSafeArea().onTapGesture { shell.dismiss() }
+            bg.ignoresSafeArea().onTapGesture { shell.dismiss() } // opaque scrim, not frosted
             HStack(alignment: .center, spacing: 80) {
                 VStack(alignment: .leading, spacing: 22) {
                     ForEach(items.indices, id: \.self) { i in
@@ -564,7 +577,9 @@ struct GlyphRoot: View {
             content.foregroundStyle(fg)
         }
         .frame(width: 150, height: 150)
-        .background(RoundedRectangle(cornerRadius: 28, style: .continuous).fill(panel))
+        .background(opaquePanel(28))
+            .clipShape(RoundedRectangle(cornerRadius: 28, style: .circular))
+            .compositingGroup()
     }
 
     func dateLine() -> String {
@@ -580,7 +595,6 @@ struct GlyphRoot: View {
             .filter { ["jpg", "jpeg", "png"].contains($0.pathExtension.lowercased()) }
             .sorted { $0.lastPathComponent < $1.lastPathComponent } ?? []
         return ZStack {
-            Color.black.opacity(0.55).ignoresSafeArea().onTapGesture { shell.dismiss() }
             VStack(alignment: .leading, spacing: 16) {
                 Text("WALLS").font(doto(32)).foregroundStyle(fg)
                 Text("Wallpapers as dots · pick to apply").font(mono(10)).foregroundStyle(muted)
@@ -609,7 +623,9 @@ struct GlyphRoot: View {
             }
             .padding(24)
             .frame(width: 520)
-            .background(RoundedRectangle(cornerRadius: 28, style: .continuous).fill(panel))
+            .background(opaquePanel(28))
+            .clipShape(RoundedRectangle(cornerRadius: 28, style: .circular))
+            .compositingGroup()
         }
     }
 
@@ -625,7 +641,6 @@ struct GlyphRoot: View {
         let clash = FileManager.default.fileExists(atPath: "/Applications/Clash Verge.app")
             || FileManager.default.fileExists(atPath: NSString("~/Applications/Clash Verge.app").expandingTildeInPath)
         return ZStack {
-            Color.black.opacity(0.5).ignoresSafeArea().onTapGesture { shell.dismiss() }
             VStack(alignment: .leading, spacing: 14) {
                 Text("VPN").font(doto(32)).foregroundStyle(fg)
                 Text(clash ? "Clash Verge detected" : "No Clash Verge · macOS VPN stubs").font(mono(10)).foregroundStyle(muted)
@@ -643,7 +658,9 @@ struct GlyphRoot: View {
             }
             .padding(28)
             .frame(width: 420)
-            .background(RoundedRectangle(cornerRadius: 28, style: .continuous).fill(panel))
+            .background(opaquePanel(28))
+            .clipShape(RoundedRectangle(cornerRadius: 28, style: .circular))
+            .compositingGroup()
         }
     }
 
@@ -652,7 +669,6 @@ struct GlyphRoot: View {
     var cal: some View {
         let day = Calendar.current.component(.day, from: Date())
         return ZStack {
-            Color.black.opacity(0.5).ignoresSafeArea().onTapGesture { shell.dismiss() }
             VStack(alignment: .leading, spacing: 16) {
                 Text("CAL").font(doto(32)).foregroundStyle(fg)
                 HStack(alignment: .top, spacing: 24) {
@@ -674,7 +690,9 @@ struct GlyphRoot: View {
             }
             .padding(28)
             .frame(width: 480)
-            .background(RoundedRectangle(cornerRadius: 28, style: .continuous).fill(panel))
+            .background(opaquePanel(28))
+            .clipShape(RoundedRectangle(cornerRadius: 28, style: .circular))
+            .compositingGroup()
         }
     }
 
@@ -682,7 +700,6 @@ struct GlyphRoot: View {
 
     var buds: some View {
         ZStack {
-            Color.black.opacity(0.5).ignoresSafeArea().onTapGesture { shell.dismiss() }
             VStack(alignment: .leading, spacing: 14) {
                 Text("BUDS").font(doto(32)).foregroundStyle(fg)
                 Text("Nothing / CMF · stub until BLE bridge").font(mono(10)).foregroundStyle(muted)
@@ -695,7 +712,9 @@ struct GlyphRoot: View {
             }
             .padding(28)
             .frame(width: 420)
-            .background(RoundedRectangle(cornerRadius: 28, style: .continuous).fill(panel))
+            .background(opaquePanel(28))
+            .clipShape(RoundedRectangle(cornerRadius: 28, style: .circular))
+            .compositingGroup()
         }
     }
 
@@ -712,7 +731,6 @@ struct GlyphRoot: View {
 
     var shot: some View {
         ZStack {
-            Color.black.opacity(0.5).ignoresSafeArea().onTapGesture { shell.dismiss() }
             VStack(alignment: .leading, spacing: 14) {
                 Text("SHOT").font(doto(32)).foregroundStyle(fg)
                 Text("Screenshots · recording").font(mono(10)).foregroundStyle(muted)
@@ -730,7 +748,9 @@ struct GlyphRoot: View {
             }
             .padding(28)
             .frame(width: 480)
-            .background(RoundedRectangle(cornerRadius: 28, style: .continuous).fill(panel))
+            .background(opaquePanel(28))
+            .clipShape(RoundedRectangle(cornerRadius: 28, style: .circular))
+            .compositingGroup()
         }
     }
 
@@ -752,7 +772,6 @@ struct GlyphRoot: View {
             ("(╯°□°）╯︵ ┻━┻", "flip"), ("¯\\_(ツ)_/¯", "shrug"), ("→", "arrow"), ("·", "dot")
         ]
         return ZStack {
-            Color.black.opacity(0.5).ignoresSafeArea().onTapGesture { shell.dismiss() }
             VStack(alignment: .leading, spacing: 14) {
                 Text("CHARMS").font(doto(32)).foregroundStyle(fg)
                 Text("Emoji · kaomoji · symbols · also :emoji in launcher").font(mono(10)).foregroundStyle(muted)
@@ -772,7 +791,9 @@ struct GlyphRoot: View {
             }
             .padding(28)
             .frame(width: 480)
-            .background(RoundedRectangle(cornerRadius: 28, style: .continuous).fill(panel))
+            .background(opaquePanel(28))
+            .clipShape(RoundedRectangle(cornerRadius: 28, style: .circular))
+            .compositingGroup()
         }
     }
 
@@ -786,7 +807,7 @@ struct GlyphRoot: View {
         ]
         let variants = ["monochrome", "neutral", "tonalspot", "rainbow", "content", "fidelity", "fruitsalad", "expressive", "vibrant"]
         return ZStack {
-            Color.black.opacity(0.55).ignoresSafeArea().onTapGesture { shell.dismiss() }
+            bg.ignoresSafeArea().onTapGesture { shell.dismiss() }
             HStack(alignment: .top, spacing: 20) {
                 VStack(alignment: .leading, spacing: 14) {
                     Text("STYLE").font(doto(36)).foregroundStyle(fg)
@@ -869,7 +890,9 @@ struct GlyphRoot: View {
                 }
             }
             .padding(28)
-            .background(RoundedRectangle(cornerRadius: 32, style: .continuous).fill(panel))
+            .background(opaquePanel(32))
+            .clipShape(RoundedRectangle(cornerRadius: 32, style: .circular))
+            .compositingGroup()
         }
     }
 

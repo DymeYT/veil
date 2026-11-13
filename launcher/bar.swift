@@ -126,7 +126,7 @@ struct OverviewWindowStrip: View {
             if thumbs.isEmpty {
                 ZStack {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(palette["bg_dark"].opacity(0.55))
+                        .fill(palette["bg_dark"])
                     Text("Empty")
                         .font(.system(size: 11, weight: .medium, design: .monospaced))
                         .foregroundStyle(palette["dim"])
@@ -214,12 +214,15 @@ final class VeilPanelHost: ObservableObject {
     @Published var batteryText = "—"
     @Published var netText = "Wi‑Fi"
     @Published var volumeText = "—"
+    /// Continuity / Bluetooth accessories for large Battery Glyph (VEI-32).
+    @Published var batteryDevices: [BatteryDevice] = []
     /// AppKit screen rect of the bar button that opened the panel (nil → resolve from SketchyBar).
     var anchorRect: NSRect?
     private var window: NSWindow?
     private var dismissGeneration = 0
     private var lastMusicFetch = Date.distantPast
     private var lastStatusFetch = Date.distantPast
+    private var lastBatteryDevicesFetch = Date.distantPast
     private var lastMusicKey = ""
     private var reduceMotion: Bool {
         VeilFeature.forceReduceMotion || NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
@@ -374,7 +377,7 @@ final class VeilPanelHost: ObservableObject {
         let w = NSPanel(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         w.isOpaque = false
         w.backgroundColor = .clear
-        w.hasShadow = true
+        w.hasShadow = false // no soft shadow bleed past opaque Glyph panel
         w.level = .statusBar
         w.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
         w.isReleasedWhenClosed = false
@@ -582,10 +585,138 @@ final class VeilPanelHost: ObservableObject {
                 batteryText = "—"
             }
         }
+        refreshBatteryDevices(force: false)
         var parts = ["CPU \(cpuText)", "MEM \(memText)", "VOL \(volumeText)"]
         if quiet { parts.append("QUIET") }
         if motionOff { parts.append("MOTION OFF") }
         statusLine = parts.joined(separator: "  ·  ")
+    }
+
+    /// Mac + BT/Continuity accessories (AirPods, Watch, iPhone when levels exist).
+    func refreshBatteryDevices(force: Bool = false) {
+        if !force, Date().timeIntervalSince(lastBatteryDevicesFetch) < 45 { return }
+        lastBatteryDevicesFetch = Date()
+        let macLevel = Int(batteryText.filter(\.isNumber))
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            var devices: [BatteryDevice] = [
+                BatteryDevice(id: "mac", name: Host.current().localizedName ?? "Mac",
+                              kind: .mac, level: macLevel, detail: nil)
+            ]
+            devices.append(contentsOf: Self.parseBluetoothBatteries())
+            // Prefer devices with a known level; keep a few named peers without levels last.
+            devices.sort { a, b in
+                switch (a.level != nil, b.level != nil) {
+                case (true, false): return true
+                case (false, true): return false
+                default:
+                    if a.kind.sortRank != b.kind.sortRank { return a.kind.sortRank < b.kind.sortRank }
+                    return a.name.localizedCaseInsensitiveCompare(b.name) == .orderedAscending
+                }
+            }
+            DispatchQueue.main.async { self?.batteryDevices = devices }
+        }
+    }
+
+    nonisolated private static func parseBluetoothBatteries() -> [BatteryDevice] {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/sbin/system_profiler")
+        p.arguments = ["SPBluetoothDataType", "-xml"]
+        let pipe = Pipe()
+        p.standardOutput = pipe
+        p.standardError = FileHandle.nullDevice
+        guard (try? p.run()) != nil else { return [] }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        p.waitUntilExit()
+        guard let root = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [[String: Any]],
+              let first = root.first,
+              let items = first["_items"] as? [[String: Any]] else { return [] }
+
+        var out: [BatteryDevice] = []
+        var seen = Set<String>()
+
+        func ingest(dict: [String: Any], nameFallback: String) {
+            let name = (dict["device_name"] as? String)
+                ?? (dict["device_minorType"] as? String)
+                ?? nameFallback
+            let addr = (dict["device_address"] as? String) ?? name
+            guard !seen.contains(addr) else { return }
+
+            let left = Self.percent(dict["device_batteryLevelLeft"] ?? dict["BatteryPercentLeft"])
+            let right = Self.percent(dict["device_batteryLevelRight"] ?? dict["BatteryPercentRight"])
+            let caseLvl = Self.percent(dict["device_batteryLevelCase"] ?? dict["BatteryPercentCase"])
+            let single = Self.percent(dict["device_batteryLevel"] ?? dict["device_batteryLevelMain"]
+                                      ?? dict["BatteryPercent"] ?? dict["Battery"])
+
+            var level = single
+            var detail: String?
+            if left != nil || right != nil || caseLvl != nil {
+                var parts: [String] = []
+                if let left { parts.append("L\(left)") }
+                if let right { parts.append("R\(right)") }
+                if let caseLvl { parts.append("C\(caseLvl)") }
+                detail = parts.isEmpty ? nil : parts.joined(separator: " ")
+                let vals = [left, right].compactMap { $0 }
+                if level == nil, !vals.isEmpty { level = vals.min() }
+            }
+
+            let lower = name.lowercased()
+            let kind: BatteryDevice.Kind
+            if lower.contains("airpods") || lower.contains("buds") || lower.contains("headphone") {
+                kind = .buds
+            } else if lower.contains("watch") {
+                kind = .watch
+            } else if lower.contains("iphone") || lower.contains("ipad") {
+                kind = .phone
+            } else if level == nil && detail == nil {
+                return // skip nameless peers with no battery telemetry
+            } else {
+                kind = .other
+            }
+
+            // Skip Find-My ghost buds with no levels.
+            if kind == .buds, level == nil, detail == nil { return }
+            if kind == .phone, level == nil { return } // Continuity often lists phones without %
+
+            seen.insert(addr)
+            out.append(BatteryDevice(id: addr, name: Self.shortName(name), kind: kind, level: level, detail: detail))
+        }
+
+        for block in items {
+            for key in ["device_connected", "device_not_connected"] {
+                // macOS shape: [ { "Device Name": { device_address, device_batteryLevel… } }, … ]
+                if let list = block[key] as? [[String: Any]] {
+                    for entry in list {
+                        for (name, raw) in entry {
+                            guard var dict = raw as? [String: Any] else { continue }
+                            dict["device_name"] = name
+                            ingest(dict: dict, nameFallback: name)
+                        }
+                    }
+                } else if let map = block[key] as? [String: [String: Any]] {
+                    for (name, dict) in map { ingest(dict: dict, nameFallback: name) }
+                }
+            }
+        }
+        return out
+    }
+
+    nonisolated private static func percent(_ raw: Any?) -> Int? {
+        if let i = raw as? Int { return min(100, max(0, i)) }
+        if let d = raw as? Double { return min(100, max(0, Int(d.rounded()))) }
+        if let s = raw as? String {
+            let digits = s.filter(\.isNumber)
+            if let i = Int(digits) { return min(100, max(0, i)) }
+        }
+        return nil
+    }
+
+    nonisolated private static func shortName(_ name: String) -> String {
+        var n = name
+        for prefix in ["Mario’s ", "Mario's ", "Aryan’s ", "Aryan's ", "daniel’s ", "daniel's "] {
+            if n.hasPrefix(prefix) { n = String(n.dropFirst(prefix.count)); break }
+        }
+        if n.count > 18 { return String(n.prefix(16)) + "…" }
+        return n
     }
 
     func musicAction(_ action: String) {
@@ -606,6 +737,34 @@ final class VeilPanelHost: ObservableObject {
         try? p.run()
         dismiss()
     }
+}
+
+struct BatteryDevice: Identifiable, Equatable {
+    enum Kind: String { case mac, buds, watch, phone, other
+        var sortRank: Int {
+            switch self {
+            case .mac: return 0
+            case .buds: return 1
+            case .watch: return 2
+            case .phone: return 3
+            case .other: return 4
+            }
+        }
+        var symbol: String {
+            switch self {
+            case .mac: return "laptopcomputer"
+            case .buds: return "earbuds"
+            case .watch: return "applewatch"
+            case .phone: return "iphone"
+            case .other: return "battery.100"
+            }
+        }
+    }
+    var id: String
+    var name: String
+    var kind: Kind
+    var level: Int?
+    var detail: String?
 }
 
 private extension String {
@@ -631,11 +790,12 @@ struct VeilPanelView: View {
                 .padding(14)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .background(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(p["bg_float"].opacity(0.96))
-                        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(p["border"], lineWidth: 1))
-                        .shadow(color: .black.opacity(0.45), radius: reduceMotion ? 0 : 18, y: 8)
+                    RoundedRectangle(cornerRadius: 14, style: .circular)
+                        .fill(p["surface"]) // opaque solid — no frosted bleed
+                        .overlay(RoundedRectangle(cornerRadius: 14, style: .circular).strokeBorder(p["border"], lineWidth: 1))
                 )
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .circular))
+                .compositingGroup()
                 .pressable()
             }
         }
@@ -787,7 +947,7 @@ struct VeilPanelView: View {
             }
             .padding(.vertical, 6)
             .padding(.horizontal, 8)
-            .background(RoundedRectangle(cornerRadius: 8).fill(p["surface"].opacity(0.65)))
+            .background(RoundedRectangle(cornerRadius: 8).fill(p["surface"]))
         }
         .buttonStyle(.plain)
         .pressable()
@@ -1086,7 +1246,7 @@ struct VeilBarView: View {
         }
         .padding(.horizontal, islands ? 14 : 20)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-        .background(islands ? Color.clear : p["bg_dark"].opacity(0.96))
+        .background(islands ? Color.clear : p["bg_dark"])
     }
 
     private var chipButton: some View {
