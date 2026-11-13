@@ -132,19 +132,33 @@ struct OSDView: View {
             HStack(spacing: 8) {
                 Spacer(minLength: 0)
                 Image(systemName: symbol).font(.system(size: 13, weight: .semibold)).foregroundStyle(accent)
+                    .layoutPriority(1)
+                // VEI-38: long titles (Battery low, input source names as title) ellipsize —
+                // never spill into the notch or crush the icon.
                 Text(label).font(ui(14, .semibold)).tracking(theme == "eclipse" || theme == "dark-souls-3" ? 0 : 1.4)
-                    .foregroundStyle(Color.white.opacity(0.92)).lineLimit(1)
+                    .foregroundStyle(Color.white.opacity(0.92))
+                    .lineLimit(1).truncationMode(.tail).minimumScaleFactor(0.75)
+                    .layoutPriority(0)
             }
+            .frame(maxWidth: .infinity)
             .padding(.trailing, 14)
             Spacer().frame(width: notchWidth)
             // right wing: the reading
             HStack(spacing: 10) {
-                if let l = m.level { meter(l).frame(width: 96, height: 8) }
-                // the reading never truncates: the meter gives way, not the number
+                if let l = m.level {
+                    meter(l).frame(width: 96, height: 8).layoutPriority(-1)
+                }
+                // Percent stays fixed-size; long detail (input source / "Set on the device") yields.
                 Text(m.level == nil ? m.detail : percent).font(ui(13, .bold).monospacedDigit())
-                    .foregroundStyle(Color.white.opacity(0.92)).lineLimit(1).fixedSize()
+                    .foregroundStyle(Color.white.opacity(0.92))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .minimumScaleFactor(m.level == nil ? 0.7 : 1)
+                    .fixedSize(horizontal: m.level != nil, vertical: false)
+                    .layoutPriority(1)
                 Spacer(minLength: 0)
             }
+            .frame(maxWidth: .infinity)
             .padding(.leading, 14)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

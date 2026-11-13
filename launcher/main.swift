@@ -1454,9 +1454,10 @@ struct Detail: View {
             }
             .padding(.bottom, 14)
             HStack {
-                Text(p.cased("STATUS")).font(mono(11, "Bold")).tracking(1.4).foregroundStyle(p["comment"])
-                Spacer()
+                Text(p.cased("STATUS")).font(mono(11, "Bold")).tracking(1.4).foregroundStyle(p["comment"]).lineLimit(1)
+                Spacer(minLength: 8)
                 Text(item.subtitle).font(mono(11, "Bold")).foregroundStyle(item.subtitle == "Current theme" ? p["green"] : p["fg"])
+                    .lineLimit(1).truncationMode(.tail)
             }
         } else if item.symbol == "square.grid.2x2", let i = Int(item.extra) {
             let wins = m.windows[i] ?? []
@@ -1465,7 +1466,8 @@ struct Detail: View {
                 ForEach(wins.prefix(6), id: \.self) { w in
                     HStack(spacing: 8) {
                         if let icon = IconCache.app(w.bundle) { Image(nsImage: icon).resizable().frame(width: 18, height: 18) }
-                        Text(w.title.isEmpty ? w.app : w.title).font(mono(10.5, "Regular")).foregroundStyle(p["fg"]).lineLimit(1)
+                        Text(w.title.isEmpty ? w.app : w.title).font(mono(10.5, "Regular")).foregroundStyle(p["fg"])
+                            .lineLimit(1).truncationMode(.tail).frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
             }.padding(.top, 4)
@@ -1675,13 +1677,15 @@ struct OverviewCard: View {
             Text(item.title)
                 .font(.system(size: 18, weight: .bold, design: .monospaced))
                 .foregroundStyle(palette["fg"])
-                .lineLimit(1)
+                .lineLimit(1).truncationMode(.tail)
+                .minimumScaleFactor(0.7)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityLabel(item.title)
             Text(item.subtitle)
                 .font(.system(size: 11, weight: .medium, design: .monospaced))
                 .foregroundStyle(palette["dim"])
-                .lineLimit(1)
+                .lineLimit(1).truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(12)
         .frame(maxWidth: .infinity, minHeight: 168, alignment: .topLeading)
@@ -1740,13 +1744,15 @@ struct ThemePreview: View {
                 .padding(8)
             }
             .frame(height: 84)
-            HStack {
+            HStack(spacing: 6) {
                 Text(item.title.replacingOccurrences(of: "Theme: ", with: ""))
-                    .font(.system(size: 13, weight: .medium)).lineLimit(1)
-                Spacer()
+                    .font(.system(size: 13, weight: .medium))
+                    .lineLimit(1).truncationMode(.tail)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 if item.subtitle == "Current theme" {
                     Image(systemName: "checkmark.circle.fill").foregroundStyle(palette["cyan"])
                         .accessibilityLabel("Current theme")
+                        .layoutPriority(1)
                 }
             }
             .padding(.horizontal, 10)
@@ -1784,22 +1790,28 @@ struct LauncherView: View {
         let p = m.palette
         VStack(spacing: 0) {
             HStack(spacing: 12) {
-                chip(p)
+                chip(p).layoutPriority(1)
                 if m.mode != 0 {
                     Text(p.cased(Model.modeNames[m.mode])).font(mono(11, "Bold")).tracking(0.8).foregroundStyle(p["bg_dark"])
-                        .padding(.horizontal, 9).padding(.vertical, 4)
+                        .lineLimit(1).padding(.horizontal, 9).padding(.vertical, 4)
                         .background(Capsule().fill(p["cyan"]))
+                        .layoutPriority(1)
                 }
                 TextField("", text: $m.query, prompt: Text(p.s("prompt", "Search apps, files, settings, math…")).foregroundStyle(p["comment"]))
                     .textFieldStyle(.plain).font(mono(21, "Medium")).foregroundStyle(p["white"])
                     .focused($focused).tint(p["cyan"]).onSubmit { m.activate() }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .layoutPriority(0)
                     .background(alignment: .leading) {
                         // ghost completion of the selected result; → accepts
                         if let rest = m.completion {
                             Text("\(Text(m.query).foregroundColor(.clear))\(Text(rest).foregroundColor(p["comment"].opacity(0.75)))")
-                                .font(mono(21, "Medium")).lineLimit(1).allowsHitTesting(false)
+                                .font(mono(21, "Medium")).lineLimit(1).truncationMode(.tail)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .allowsHitTesting(false)
                         }
                     }
+                    .clipped()
                 if layout == "umbra" {
                     Button { m.toggleThemePicker() } label: {
                         Image(systemName: "paintpalette")
@@ -1810,17 +1822,19 @@ struct LauncherView: View {
                     .buttonStyle(.plain)
                     .help("Browse themes (⌃⌥T · ⌘T in launcher · Search “theme”)")
                     .accessibilityLabel("Browse themes")
+                    .layoutPriority(1)
                 }
                 if m.searchingFiles {
-                    ProgressView().controlSize(.small).tint(p["cyan"])
+                    ProgressView().controlSize(.small).tint(p["cyan"]).layoutPriority(1)
                 } else if m.query.isEmpty && p.s("frame", "none") == "hud" {
-                    // HUD readout while idle
+                    // HUD readout while idle — drop when the field needs the room
                     Text("SYS ONLINE  //  \(Date().formatted(date: .omitted, time: .shortened))").font(code(11, "Bold")).tracking(1.4)
-                        .foregroundStyle(p["cyan"].opacity(0.8))
+                        .foregroundStyle(p["cyan"].opacity(0.8)).lineLimit(1).layoutPriority(-1)
                 } else if !m.query.isEmpty {
                     Text(p.cased("\(m.items.count) result\(m.items.count == 1 ? "" : "s")")).font(mono(11, "Bold")).tracking(1.2).foregroundStyle(p["comment"])
-                        .padding(.horizontal, 8).padding(.vertical, 4)
+                        .lineLimit(1).padding(.horizontal, 8).padding(.vertical, 4)
                         .background(RoundedRectangle(cornerRadius: p.num("chip_radius", 5)).stroke(p["border"], lineWidth: 1))
+                        .layoutPriority(-1)
                 }
             }
             .padding(.horizontal, 18).frame(height: 62)
@@ -1870,8 +1884,10 @@ struct LauncherView: View {
         .overlay(alignment: .bottom) {
             if !m.toast.isEmpty {
                 Text(p.cased(m.toast)).font(mono(12, "Bold")).tracking(1).foregroundStyle(p["bg_dark"])
+                    .lineLimit(1).truncationMode(.tail).minimumScaleFactor(0.75)
                     .padding(.horizontal, 16).padding(.vertical, 8)
                     .background(Capsule().fill(p["cyan"])).padding(.bottom, 46)
+                    .padding(.horizontal, 24)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
@@ -1918,7 +1934,8 @@ struct LauncherView: View {
                     Text("荒坂").font(.system(size: 15, weight: .semibold)).foregroundStyle(p["cyan"])
                     Rectangle().fill(p["cyan"]).frame(width: 18, height: 2)
                     Text("NETWORK DIRECTORY").font(mono(11, "Bold")).tracking(2.4).foregroundStyle(p["fg"])
-                    Spacer()
+                        .lineLimit(1).truncationMode(.tail)
+                    Spacer(minLength: 0)
                 }
                 .padding(.horizontal, 20).frame(height: 34).background(p["bg_dark"])
                 p["cyan"].opacity(0.6).frame(height: 1)
@@ -1983,6 +2000,7 @@ struct LauncherView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("BOREAL VALLEY").font(mono(11, "Bold")).tracking(2).foregroundStyle(p["yellow"])
                         Text("\(m.items.count) traces in the archive").font(mono(11)).foregroundStyle(p["comment"])
+                            .lineLimit(1).truncationMode(.tail)
                     }.padding(.leading, 18)
                     Spacer(minLength: 8)
                     preview(p, compact: true).frame(width: 330)
@@ -2041,11 +2059,14 @@ struct LauncherView: View {
             HStack(spacing: 10) {
                 Text(p.cased("Workspace Overview"))
                     .font(mono(13, "Bold")).tracking(1.6).foregroundStyle(p["yellow"])
+                    .lineLimit(1).layoutPriority(1)
                 Text(p.cased("⌃⌥M · Esc dismisses"))
                     .font(mono(11, "Bold")).tracking(0.8).foregroundStyle(p["dim"])
+                    .lineLimit(1).layoutPriority(-1)
                 Spacer(minLength: 8)
                 Text(p.cased("\(cards.count) spaces"))
                     .font(mono(11, "Bold")).tracking(1.2).foregroundStyle(p["comment"])
+                    .lineLimit(1).layoutPriority(1)
             }
             .padding(.horizontal, 16).frame(height: 36)
             .overlay(alignment: .bottom) { p["border"].frame(height: 1) }
@@ -2150,7 +2171,8 @@ struct LauncherView: View {
     // brand chip: filled plate, outline, or plain colored text
     @ViewBuilder func chip(_ p: Palette) -> some View {
         let shape = RoundedRectangle(cornerRadius: p.num("chip_radius", 5), style: .continuous)
-        let t = Text(p.s("symbol", "").isEmpty ? p.s("chip", "NC//") : p.s("brand", "Search")).font(mono(13, "ExtraBold"))
+        let t = Text(p.s("symbol", "").isEmpty ? p.s("chip", "NC//") : p.s("brand", "Search"))
+            .font(mono(13, "ExtraBold")).lineLimit(1).truncationMode(.tail)
         if SourceSymbol.load(p.s("symbol", "")) != nil {
             let mark = SourceSymbol(name: p.s("symbol", ""))
             // fit the mark in a 30pt square-ish slot at its own proportions
@@ -2212,9 +2234,11 @@ struct ActionPanel: View {
                     Image(systemName: a.symbol).font(.system(size: 12, weight: .semibold)).frame(width: 18)
                         .foregroundStyle(i == m.actionIndex ? p["bg_dark"] : p["cyan"])
                     Text(a.title).font(mono(12.5, "Medium")).foregroundStyle(i == m.actionIndex ? p["bg_dark"] : p["fg"])
-                    Spacer(minLength: 12)
+                        .lineLimit(1).truncationMode(.tail)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     if !a.keys.isEmpty {
                         Text(a.keys).font(code(10.5, "Bold")).foregroundStyle(i == m.actionIndex ? p["bg_dark"].opacity(0.7) : p["comment"])
+                            .lineLimit(1).layoutPriority(1)
                     }
                 }
                 .padding(.horizontal, 12).frame(height: 30)
@@ -2715,7 +2739,8 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         w.contentView = NSHostingView(rootView: ZStack {
             p["bg"] // opaque full-screen — no translucent scrim
             Text(text).font(mono(min(160, max(48, 2400 / CGFloat(max(text.count, 1)))), "Bold")).foregroundStyle(p["white"])
-                .multilineTextAlignment(.center).minimumScaleFactor(0.2).padding(60)
+                .multilineTextAlignment(.center).lineLimit(6).minimumScaleFactor(0.15)
+                .frame(maxWidth: .infinity).padding(60)
                 .background(RoundedRectangle(cornerRadius: 28, style: .continuous).fill(p["bg_float"]))
                 .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
                 .padding(120)
