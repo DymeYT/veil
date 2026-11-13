@@ -50,7 +50,7 @@ func riftWindowsDetailed(_ list: [[String: Any]]) -> [Int: [WinThumb]] {
 }
 
 enum WindowCapture {
-    static func image(for windowID: CGWindowID, maxSide: CGFloat = 320) async -> NSImage? {
+    static func image(for windowID: CGWindowID, maxSide: CGFloat = 200) async -> NSImage? {
         do {
             let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
             guard let window = content.windows.first(where: { $0.windowID == windowID }) else { return nil }
@@ -208,17 +208,19 @@ final class VeilPanelHost: ObservableObject {
 
     func dismiss() {
         guard let window, window.isVisible else { kind = nil; return }
-        let done = { [weak self] in
-            window.orderOut(nil)
-            self?.kind = nil
-        }
         if reduceMotion {
-            done()
+            window.orderOut(nil)
+            kind = nil
         } else {
             NSAnimationContext.runAnimationGroup({ ctx in
                 ctx.duration = 0.14
                 window.animator().alphaValue = 0
-            }, completionHandler: done)
+            }, completionHandler: { [weak self] in
+                Task { @MainActor in
+                    window.orderOut(nil)
+                    self?.kind = nil
+                }
+            })
         }
     }
 
@@ -396,6 +398,10 @@ struct VeilPanelView: View {
             controlRow("Launcher", "magnifyingglass") { host.runVeil(["launch"]) }
             controlRow("Terminal", "terminal") { host.runVeil(["term"]) }
             controlRow("Monitor", "waveform.path.ecg") { host.runVeil(["btop"]) }
+            controlRow("Show menu bar", "menubar.rectangle") {
+                VeilBarController.shared.revealMenuBar()
+                host.dismiss()
+            }
             controlRow("Quiet mode", "leaf") { host.runVeil(["toggle-quiet"]) }
             controlRow("Reload", "arrow.clockwise") { host.runVeil(["reload"]) }
             Spacer(minLength: 0)
@@ -461,6 +467,16 @@ struct VeilPanelView: View {
     }
 }
 
+/// NSHostingView that ignores hits on fully transparent pixels so the Dock / desktop stay clickable between islands.
+final class PassThroughHost<Content: View>: NSHostingView<Content> {
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard let hit = super.hitTest(point) else { return nil }
+        // Only swallow events that land on a real subview (buttons), not empty root chrome.
+        if hit === self { return nil }
+        return hit
+    }
+}
+
 // MARK: - Custom Veil status bar (replaces SketchyBar when enabled)
 
 @MainActor
@@ -471,68 +487,142 @@ final class VeilBarController: ObservableObject {
     @Published var clock = ""
     @Published var musicGlyphPlaying = false
     private var window: NSWindow?
-    private var timer: Timer?
+    private var clockTimer: Timer?
+    private var workspaceTimer: Timer?
+    private var lastWSSignature = ""
+    private var barOnBottom = false
+    private let clockFmt: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "EEEE h:mm a"
+        return f
+    }()
 
     func start() {
         guard VeilFeature.veilBar, !veilIsOff else { stop(); return }
-        reload()
-        ensureWindow()
-        timer?.invalidate()
-        timer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.reload() }
+        reload(forceLayout: true)
+        clockTimer?.invalidate()
+        workspaceTimer?.invalidate()
+        // Clock only needs minute resolution — avoid 2Hz Process storms.
+        clockTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.tickClock() }
         }
-        // Hide SketchyBar strip while VeilBar owns the top edge (agent stays alive for fallback).
+        workspaceTimer = Timer.scheduledTimer(withTimeInterval: 4, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.refreshWorkspaces() }
+        }
+        // Hide SketchyBar strip while VeilBar owns the chrome (agent stays alive for fallback).
         if !VeilFeature.sketchybarPopups {
-            let p = Process()
-            p.executableURL = URL(fileURLWithPath: "/opt/homebrew/bin/sketchybar")
-            p.arguments = ["--bar", "hidden=on"]
-            try? p.run()
+            sketchybarHidden(true)
         }
     }
 
     func stop() {
-        timer?.invalidate(); timer = nil
+        clockTimer?.invalidate(); clockTimer = nil
+        workspaceTimer?.invalidate(); workspaceTimer = nil
         window?.orderOut(nil); window = nil
+        lastWSSignature = ""
+        sketchybarHidden(false)
+    }
+
+    private func sketchybarHidden(_ hidden: Bool) {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/opt/homebrew/bin/sketchybar")
-        p.arguments = ["--bar", "hidden=off"]
+        p.arguments = ["--bar", hidden ? "hidden=on" : "hidden=off"]
         try? p.run()
     }
 
-    func reload() {
+    func reload(forceLayout: Bool = false) {
         let p = Palette.load()
-        chip = p.s("chip_label", "VEIL")
-        let paletteWS = p.s("ws", "NET CODE COMMS MEDIA FREE").split(separator: " ").map(String.init)
-        let names = liveWorkspaceNames(paletteWS: paletteWS)
-        let list = riftWorkspaces()
-        let active = list.first(where: { ($0["is_active"] as? Bool) == true })?["index"] as? Int ?? 0
-        workspaces = names.enumerated().map { i, n in (i, n, i == active) }
-        let f = DateFormatter()
-        f.dateFormat = "EEEE h:mm a"
-        clock = f.string(from: Date())
-        if let window {
-            window.contentView = NSHostingView(rootView: VeilBarView(bar: self).environmentObject(self))
-        }
+        let nextChip = p.s("chip_label", "VEIL")
+        if chip != nextChip { chip = nextChip }
+        barOnBottom = p.s("bar_position", "top") == "bottom"
+        tickClock()
+        refreshWorkspaces()
+        ensureWindow(force: forceLayout)
     }
 
-    private func ensureWindow() {
+    private func tickClock() {
+        let next = clockFmt.string(from: Date())
+        if clock != next { clock = next }
+    }
+
+    private func refreshWorkspaces() {
+        let p = Palette.load()
+        let paletteWS = p.s("ws", "NET CODE COMMS MEDIA FREE").split(separator: " ").map(String.init)
+        // Prefer theme.toml / launcher.json — skip SketchyBar queries while its strip is hidden.
+        let fromTheme = themeTomlWorkspaceNames()
+        let names: [String]
+        if fromTheme.count >= 5 {
+            names = Array(fromTheme.prefix(5))
+        } else {
+            let fromLauncher = p.s("ws", "").split(separator: " ").map(String.init).filter { !$0.isEmpty }
+            names = fromLauncher.count >= 5 ? Array(fromLauncher.prefix(5)) : liveWorkspaceNames(paletteWS: paletteWS)
+        }
+        let list = riftWorkspaces()
+        let active = list.first(where: { ($0["is_active"] as? Bool) == true })?["index"] as? Int ?? 0
+        let sig = names.joined(separator: "|") + "#\(active)"
+        guard sig != lastWSSignature else { return }
+        lastWSSignature = sig
+        workspaces = names.enumerated().map { i, n in (i, n, i == active) }
+    }
+
+    /// Below the macOS menu bar so autohide reveal + Apple/app menus stay usable (statusWindow is above the menu).
+    private static var barLevel: NSWindow.Level {
+        NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.mainMenuWindow)) - 1)
+    }
+
+    private func ensureWindow(force: Bool = false) {
         let screen = NSScreen.main ?? NSScreen.screens[0]
         let h: CGFloat = 34
-        let frame = NSRect(x: screen.frame.minX, y: screen.frame.maxY - h, width: screen.frame.width, height: h)
+        // Bottom themes (Umbra): above the Dock via visibleFrame (tracks Dock height +
+        // autohide), plus a small air gap so floating Dock icons aren't clipped.
+        // Top themes keep the screen edge under menu-bar level so mouse→top still
+        // reveals Apple/app menus above us.
+        // Clear the Dock shelf plus icon heads (visibleFrame alone sits flush on the shelf).
+        let dockGap: CGFloat = barOnBottom ? 22 : 0
+        let frame: NSRect = barOnBottom
+            ? NSRect(x: screen.visibleFrame.minX,
+                     y: screen.visibleFrame.minY + dockGap,
+                     width: screen.visibleFrame.width, height: h)
+            : NSRect(x: screen.frame.minX, y: screen.frame.maxY - h, width: screen.frame.width, height: h)
         if window == nil {
             let w = NSPanel(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
             w.isOpaque = false
             w.backgroundColor = .clear
             w.hasShadow = false
-            w.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.statusWindow)))
+            w.level = Self.barLevel
             w.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenNone]
             w.isReleasedWhenClosed = false
             w.hidesOnDeactivate = false
+            // Pass clicks through clear gaps between islands (SketchyBar-style).
+            w.contentView = PassThroughHost(rootView: VeilBarView(bar: self))
             window = w
+            w.setFrame(frame, display: true)
+            w.orderFrontRegardless()
+            return
         }
-        window?.setFrame(frame, display: true)
-        window?.contentView = NSHostingView(rootView: VeilBarView(bar: self).environmentObject(self))
+        window?.level = Self.barLevel
+        if force || window?.frame != frame {
+            window?.setFrame(frame, display: true)
+        }
         window?.orderFrontRegardless()
+    }
+
+    /// Temporarily show the stock macOS menu bar (autohide off), then restore Veil's preference.
+    func revealMenuBar(seconds: TimeInterval = 12) {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        p.arguments = ["-e", "tell application \"System Events\" to tell dock preferences to set autohide menu bar to false"]
+        try? p.run()
+        if let screen = NSScreen.main {
+            CGWarpMouseCursorPosition(CGPoint(x: screen.frame.midX, y: 0))
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + seconds) {
+            guard !veilIsOff else { return }
+            let restore = Process()
+            restore.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+            restore.arguments = ["-e", "tell application \"System Events\" to tell dock preferences to set autohide menu bar to true"]
+            try? restore.run()
+        }
     }
 }
 
@@ -540,74 +630,106 @@ struct VeilBarView: View {
     @ObservedObject var bar: VeilBarController
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private var p: Palette { Palette.load() }
+    /// Match SketchyBar: Umbra uses floating islands over a clear bar, not a full-bleed strip.
+    private var islands: Bool { p.s("bar_layout", "strip") == "islands" }
 
     var body: some View {
-        HStack(spacing: 8) {
-            Button {
-                animateClick { VeilPanelHost.shared.toggle(.control) }
-            } label: {
-                Text(bar.chip)
-                    .font(.system(size: 11, weight: .bold, design: .monospaced))
-                    .padding(.horizontal, 10).padding(.vertical, 4)
-                    .background(RoundedRectangle(cornerRadius: 6).strokeBorder(p["cyan"].opacity(0.7), lineWidth: 1))
+        HStack(spacing: 10) {
+            island {
+                chipButton
             }
-            .buttonStyle(.plain)
-            .pressable()
-
-            ForEach(bar.workspaces, id: \.index) { ws in
-                Button {
-                    animateClick {
-                        let proc = Process()
-                        proc.executableURL = URL(fileURLWithPath: home + "/.local/bin/rift-cli")
-                        proc.arguments = ["execute", "workspace", "switch", "\(ws.index)"]
-                        try? proc.run()
-                    }
-                } label: {
-                    Text(ws.name)
-                        .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                        .padding(.horizontal, 8).padding(.vertical, 4)
-                        .background(
-                            RoundedRectangle(cornerRadius: 5)
-                                .strokeBorder(ws.active ? p["cyan"] : p["border"].opacity(0.5), lineWidth: ws.active ? 1.5 : 1)
-                        )
-                        .foregroundStyle(ws.active ? p["fg"] : p["dim"])
+            if islands { Spacer(minLength: 8) }
+            island {
+                HStack(spacing: 6) {
+                    ForEach(bar.workspaces, id: \.index) { ws in workspaceButton(ws) }
                 }
-                .buttonStyle(.plain)
-                .pressable()
             }
-
             Spacer(minLength: 8)
-
-            Button {
-                animateClick { VeilPanelHost.shared.toggle(.music) }
-            } label: {
-                Image(systemName: "music.note")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(p["fg"])
-                    .frame(width: 28, height: 24)
+            island {
+                HStack(spacing: 6) {
+                    Button { animateClick { VeilPanelHost.shared.toggle(.music) } } label: {
+                        Image(systemName: "music.note")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(p["fg"])
+                            .frame(width: 28, height: 24)
+                    }
+                    .buttonStyle(.plain).pressable()
+                    Button { animateClick { VeilPanelHost.shared.toggle(.keys) } } label: {
+                        Image(systemName: "keyboard")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(p["dim"])
+                            .frame(width: 28, height: 24)
+                    }
+                    .buttonStyle(.plain).pressable()
+                    Text(bar.clock)
+                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .foregroundStyle(p["fg"])
+                        .padding(.trailing, 4)
+                }
             }
-            .buttonStyle(.plain)
-            .pressable()
-
-            Button {
-                animateClick { VeilPanelHost.shared.toggle(.keys) }
-            } label: {
-                Image(systemName: "keyboard")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(p["dim"])
-                    .frame(width: 28, height: 24)
-            }
-            .buttonStyle(.plain)
-            .pressable()
-
-            Text(bar.clock)
-                .font(.system(size: 11, weight: .medium, design: .monospaced))
-                .foregroundStyle(p["fg"])
-                .padding(.trailing, 10)
         }
-        .padding(.horizontal, 10)
+        .padding(.horizontal, islands ? 12 : 10)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(p["bg_dark"].opacity(0.92))
+        .background(islands ? Color.clear : p["bg_dark"].opacity(0.92))
+    }
+
+    private var chipButton: some View {
+        Button {
+            animateClick {
+                if NSEvent.modifierFlags.contains(.option) {
+                    bar.revealMenuBar()
+                } else {
+                    VeilPanelHost.shared.toggle(.control)
+                }
+            }
+        } label: {
+            Text(bar.chip)
+                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                .padding(.horizontal, 10).padding(.vertical, 4)
+                .background(RoundedRectangle(cornerRadius: 6).strokeBorder(p["cyan"].opacity(0.7), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .pressable()
+        .help("Control panel · ⌥-click shows the macOS menu bar")
+    }
+
+    private func workspaceButton(_ ws: (index: Int, name: String, active: Bool)) -> some View {
+        Button {
+            animateClick {
+                let proc = Process()
+                proc.executableURL = URL(fileURLWithPath: home + "/.local/bin/rift-cli")
+                proc.arguments = ["execute", "workspace", "switch", "\(ws.index)"]
+                try? proc.run()
+            }
+        } label: {
+            Text(ws.name)
+                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                .padding(.horizontal, 8).padding(.vertical, 4)
+                .background(
+                    RoundedRectangle(cornerRadius: 5)
+                        .strokeBorder(ws.active ? p["cyan"] : p["border"].opacity(0.5), lineWidth: ws.active ? 1.5 : 1)
+                )
+                .foregroundStyle(ws.active ? p["fg"] : p["dim"])
+        }
+        .buttonStyle(.plain)
+        .pressable()
+    }
+
+    @ViewBuilder
+    private func island<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        if islands {
+            content()
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(p["bg_dark"].opacity(0.88))
+                        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .strokeBorder(p["border"].opacity(0.55), lineWidth: 1))
+                )
+        } else {
+            content()
+        }
     }
 
     private func animateClick(_ action: @escaping () -> Void) {

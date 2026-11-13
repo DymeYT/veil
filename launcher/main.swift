@@ -394,8 +394,11 @@ func liveWorkspaceNames(paletteWS: [String] = []) -> [String] {
 }
 
 /// Overview cards only — never Theme: gallery rows. Titles are bare ws names for OCR/product sync.
+/// Explicit `paletteWS` (≥5) wins — fixtures/selftest must not be overridden by live bar names.
 func overviewWorkspaceCards(paletteWS: [String] = []) -> [Item] {
-    let names = liveWorkspaceNames(paletteWS: paletteWS)
+    let names = paletteWS.count >= 5
+        ? Array(paletteWS.prefix(5))
+        : liveWorkspaceNames(paletteWS: paletteWS)
     let rift = home + "/.local/bin/rift-cli"
     return names.enumerated().map { i, name in
         Item(kind: .nc,
@@ -2433,8 +2436,10 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 self.splash = nil
                 MediaKeys.shared.stop()
                 FocusPulse.shared.setEnabled(false)
-                VeilBarController.shared.stop()
-                VeilPanelHost.shared.dismiss()
+                Task { @MainActor in
+                    VeilBarController.shared.stop()
+                    VeilPanelHost.shared.dismiss()
+                }
                 self.band.reload(Palette.load())
             } else {
                 FocusPulse.shared.setEnabled(true)
@@ -2442,7 +2447,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 // Spotlight lets go of ⌘Space a beat after its shortcut is switched off
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { self.registerSearchKey() }
                 self.band.reload(Palette.load())
-                VeilBarController.shared.start()
+                Task { @MainActor in VeilBarController.shared.start() }
             }
             ClipHistory.shared.syncPolling()
         }
@@ -2538,7 +2543,9 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             self.model.palette = Palette.load()
             self.model.ncCache = ncItems(liveWorkspaceNames(paletteWS: self.model.wsNames))
             self.band.reload(self.model.palette)
-            if veilIsOff || !VeilFeature.veilBar { VeilBarController.shared.stop() } else { VeilBarController.shared.start() }
+            Task { @MainActor in
+                if veilIsOff || !VeilFeature.veilBar { VeilBarController.shared.stop() } else { VeilBarController.shared.start() }
+            }
             if self.model.shown {
                 if self.model.surface == .overview {
                     self.model.enterOverview()
@@ -2566,19 +2573,23 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if !veilIsOff { VeilBarController.shared.start() }
         DistributedNotificationCenter.default().addObserver(forName: Notification.Name("app.veil.panel"), object: nil, queue: .main) { n in
             let raw = ((n.object as? String) ?? "").lowercased()
-            switch raw {
-            case "music": VeilPanelHost.shared.toggle(.music)
-            case "control", "city": VeilPanelHost.shared.toggle(.control)
-            case "keys": VeilPanelHost.shared.toggle(.keys)
-            case "dismiss", "off": VeilPanelHost.shared.dismiss()
-            default: break
+            Task { @MainActor in
+                switch raw {
+                case "music": VeilPanelHost.shared.toggle(.music)
+                case "control", "city": VeilPanelHost.shared.toggle(.control)
+                case "keys": VeilPanelHost.shared.toggle(.keys)
+                case "dismiss", "off": VeilPanelHost.shared.dismiss()
+                default: break
+                }
             }
         }
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
                                                          object: nil, queue: .main) { [weak self] _ in self?.syncWindowMotion() }
         NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
             self?.band.reload(Palette.load())
-            if !veilIsOff, VeilFeature.veilBar { VeilBarController.shared.start() }
+            Task { @MainActor in
+                if !veilIsOff, VeilFeature.veilBar { VeilBarController.shared.start() }
+            }
         }
     }
 
@@ -2759,6 +2770,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         guard panel.isVisible else {
             model.surface = .search
             model.overviewCards = []
+            model.overviewThumbs = [:]
             model.themeCards = []
             return
         }
@@ -2770,6 +2782,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         model.mode = 0
         model.surface = .search
         model.overviewCards = []
+        model.overviewThumbs = [:]
         model.themeCards = []
         let q = model.query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if q == "overview" || q == "theme" {
