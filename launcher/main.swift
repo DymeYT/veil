@@ -2399,8 +2399,10 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
             switch Int(e.keyCode) {
             case kVK_Escape:  // Always bury sibling overlays; never leave Control/Quick stacked.
-                GlyphShell.shared.dismiss()
-                VeilPanelHost.shared.dismissImmediate()
+                MainActor.assumeIsolated {
+                    GlyphShell.shared.dismiss()
+                    VeilPanelHost.shared.dismissImmediate()
+                }
                 if self.model.surface == .overview {
                     self.hide(force: true); return nil
                 }
@@ -2479,9 +2481,10 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 if id == 2 { VeilMode.toggle() }
                 else if id == 3 { (NSApp.delegate as? App)?.show(query: "theme") }  // ⌃⌥T — reliable when Cursor steals ⌘T
                 else if id == 4 {  // ⌃⌥O — Control panel (Quick already owns ⌃⌥A in GlyphShell)
-                    GlyphShell.shared.dismiss()
                     if let app = NSApp.delegate as? App, app.panel.isVisible {
                         app.hide(force: true)
+                    } else {
+                        MainActor.assumeIsolated { GlyphShell.shared.dismiss() }
                     }
                     Task { @MainActor in
                         VeilPanelHost.shared.toggle(.control, near: VeilPanelHost.sketchybarItemRect(for: .control))
@@ -2509,8 +2512,12 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         EscDismiss.install(veilBin: home + "/.local/bin/veil")
         // Shared dismiss registry — Lane C should also wire panel outside-click → dismissAll.
         OutsideClick.register("launcher") { [weak self] in self?.hide(force: true) }
-        OutsideClick.register("glyph") { GlyphShell.shared.dismiss() }
-        OutsideClick.register("veil-panel") { VeilPanelHost.shared.dismissImmediate() }
+        OutsideClick.register("glyph") {
+            MainActor.assumeIsolated { GlyphShell.shared.dismiss() }
+        }
+        OutsideClick.register("veil-panel") {
+            MainActor.assumeIsolated { VeilPanelHost.shared.dismissImmediate() }
+        }
         // veil off / on: step aside or come back
         DistributedNotificationCenter.default().addObserver(forName: Notification.Name("app.veil.search.mode"), object: nil, queue: .main) { [weak self] n in
             guard let self else { return }
@@ -2808,8 +2815,19 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         MenuItems.frontPID = NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0
         ClipHistory.shared.setLauncherActive(true)
         // Never stack: bury Control / Quick / music / Glyph before search owns the keyboard.
-        GlyphShell.shared.dismiss()
-        VeilPanelHost.shared.dismissImmediate()
+        if Thread.isMainThread {
+            MainActor.assumeIsolated {
+                GlyphShell.shared.dismiss()
+                VeilPanelHost.shared.dismissImmediate()
+            }
+        } else {
+            DispatchQueue.main.sync {
+                MainActor.assumeIsolated {
+                    GlyphShell.shared.dismiss()
+                    VeilPanelHost.shared.dismissImmediate()
+                }
+            }
+        }
         // Beat a late dismiss-popups hide from the previous surface (killer: themes → dismiss → overview).
         showGeneration += 1
         lastShowAt = Date()
@@ -2871,7 +2889,9 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             ignoreUntil: Date().addingTimeInterval(0.35),
             extraSafeFrames: {
                 var frames: [NSRect] = []
-                if let bar = VeilBarController.shared.barWindowFrame { frames.append(bar) }
+                MainActor.assumeIsolated {
+                    if let bar = VeilBarController.shared.barWindowFrame { frames.append(bar) }
+                }
                 return frames
             },
             onOutside: { OutsideClick.dismissAll() }
@@ -2989,8 +3009,19 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         ClipHistory.shared.setLauncherActive(false)
         Scrim.shared.hide()
         // Sync sibling kill — async Task left Control/music stuck over real work.
-        GlyphShell.shared.dismiss()
-        VeilPanelHost.shared.dismissImmediate()
+        if Thread.isMainThread {
+            MainActor.assumeIsolated {
+                GlyphShell.shared.dismiss()
+                VeilPanelHost.shared.dismissImmediate()
+            }
+        } else {
+            DispatchQueue.main.sync {
+                MainActor.assumeIsolated {
+                    GlyphShell.shared.dismiss()
+                    VeilPanelHost.shared.dismissImmediate()
+                }
+            }
+        }
 
         guard wasVisible || model.surface != .search else {
             model.overviewCards = []

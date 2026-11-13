@@ -1,10 +1,10 @@
 import AppKit
 
 /// Outside-click monitors + shared overlay dismiss registry (VEI-53).
-/// Global monitors are required for `.nonactivatingPanel` hosts that never become key.
+/// Main-thread only (AppKit). Not @MainActor so App.show/hide can call sync without
+/// isolation walls — hosts are hopped via MainActor.assumeIsolated.
 /// `dismissAll` is the one-shot path: Esc / outside-click / `dismiss-popups` must bury
 /// launcher + Control + Quick + music + Glyph — never leave stuck chrome.
-@MainActor
 enum OutsideClick {
     private static var registry: [String: () -> Void] = [:]
     private static var dismissing = false
@@ -19,16 +19,26 @@ enum OutsideClick {
         registry.removeValue(forKey: id)
     }
 
+    private static func onMain(_ body: @MainActor () -> Void) {
+        if Thread.isMainThread {
+            MainActor.assumeIsolated(body)
+        } else {
+            DispatchQueue.main.sync { MainActor.assumeIsolated(body) }
+        }
+    }
+
     /// Kill every registered overlay in one shot. Re-entrant calls are no-ops.
     /// Hard-falls back to Glyph + VeilPanelHost so a missed registration cannot stick UI.
     static func dismissAll() {
-        guard !dismissing else { return }
-        dismissing = true
-        defer { dismissing = false }
-        let handlers = Array(registry.values)
-        for h in handlers { h() }
-        GlyphShell.shared.dismiss()
-        VeilPanelHost.shared.dismissImmediate()
+        onMain {
+            guard !dismissing else { return }
+            dismissing = true
+            defer { dismissing = false }
+            let handlers = Array(registry.values)
+            for h in handlers { h() }
+            GlyphShell.shared.dismiss()
+            VeilPanelHost.shared.dismissImmediate()
+        }
     }
 
     /// Install global (+ local) mouse-down monitors. Caller must `remove` on dismiss.
