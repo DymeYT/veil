@@ -84,9 +84,9 @@
     "semantic_hash": ""
   },
   "bin/veil-theme": {
-    "mtime": 1794555912.9747517,
-    "seen": 1794570665.7332249,
-    "ast_hash": "a7fdfb6a952d9d66f37b7457221ab5f1",
+    "mtime": 1794586125.3623598,
+    "seen": 1794586950.1367831,
+    "ast_hash": "feff2ab71e10152cd63f43bb55f5ffcd",
     "semantic_hash": ""
   },
   "install.sh": {
@@ -108,15 +108,15 @@
     "semantic_hash": ""
   },
   "launcher/build.sh": {
-    "mtime": 1794573037.41881,
-    "seen": 1794573519.7496698,
-    "ast_hash": "a7a6699aa66353f1d56ef1fef2cf691f",
+    "mtime": 1794586611.76976,
+    "seen": 1794586950.1367848,
+    "ast_hash": "6e553562ee945ef5dbbbaa5f9cdacf5f",
     "semantic_hash": ""
   },
   "launcher/extras.swift": {
-    "mtime": 1794546374.9591427,
-    "seen": 1794570665.733226,
-    "ast_hash": "f363d7d75d8673e2ece2ec9650d5bb36",
+    "mtime": 1794586812.3409543,
+    "seen": 1794586950.136786,
+    "ast_hash": "30880ec4da6eea6dc9c34a2a3cd953d9",
     "semantic_hash": ""
   },
   "launcher/focus.swift": {
@@ -132,9 +132,9 @@
     "semantic_hash": ""
   },
   "launcher/main.swift": {
-    "mtime": 1794573719.9260893,
-    "seen": 1794573817.396009,
-    "ast_hash": "c3c9b3cbb6eba4654705cce7d8c5dbe4",
+    "mtime": 1794586815.2899654,
+    "seen": 1794586950.136788,
+    "ast_hash": "db0b083ec2ac59bbcde7eae02a8e1537",
     "semantic_hash": ""
   },
   "launcher/make-signing-identity.sh": {
@@ -150,9 +150,9 @@
     "semantic_hash": ""
   },
   "launcher/osd.swift": {
-    "mtime": 1794546300.8390677,
-    "seen": 1794570665.7332292,
-    "ast_hash": "29466f607d7007b1ced0b2cba6f57997",
+    "mtime": 1794586621.292796,
+    "seen": 1794586950.136789,
+    "ast_hash": "328a0b55d2017ee1705f63773c63ebdd",
     "semantic_hash": ""
   },
   "launcher/review-render.swift": {
@@ -543,6 +543,36 @@
     "mtime": 1794573127.0410423,
     "seen": 1794573519.749676,
     "ast_hash": "1756719fbd1e9e292b24c42adff8922f",
+    "semantic_hash": ""
+  },
+  "bin/veil-style": {
+    "mtime": 1794586697.6223283,
+    "seen": 1794586950.1367822,
+    "ast_hash": "37892c2c7949a9308e0f45386b9b14b2",
+    "semantic_hash": ""
+  },
+  "launcher/glyph.swift": {
+    "mtime": 1794586850.6705716,
+    "seen": 1794586950.136787,
+    "ast_hash": "b20b088735fe9e72198ffe084630c31d",
+    "semantic_hash": ""
+  },
+  "tools/make-nothing-wall.py": {
+    "mtime": 1794586404.21336,
+    "seen": 1794586950.1367989,
+    "ast_hash": "87b19f220a0f6235a410489e99a18215",
+    "semantic_hash": ""
+  },
+  "art/nothing.notes.md": {
+    "mtime": 1794586400.2752492,
+    "seen": 1794586950.1368058,
+    "ast_hash": "573e5a5d287d341400bd53bec58ab312",
+    "semantic_hash": ""
+  },
+  "fonts/glyph/OFL.txt": {
+    "mtime": 1794586392.638689,
+    "seen": 1794586950.1368132,
+    "ast_hash": "6e95c5bf77beff0122db61c629f08d5c",
     "semantic_hash": ""
   }
 }

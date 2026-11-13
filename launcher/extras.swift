@@ -218,7 +218,9 @@ let systemActions: [(String, String, String, [String])] = [
     ("Empty Trash…", "Asks before permanently deleting", "trash", ["/usr/bin/osascript", "-e",
         "display dialog \"Permanently erase the items in the Trash?\" buttons {\"Cancel\", \"Empty Trash\"} default button \"Cancel\" with icon caution", "-e",
         "tell application \"Finder\" to empty trash"]),
-    ("Screen Saver", "Starts the screen saver", "sparkles.tv", ["/usr/bin/open", "-a", "ScreenSaverEngine"]),
+    // ScreenSaverEngine is forbidden on Veil Mac builds (Big Dawg / Nothing rice). Mock notice only.
+    ("Screen Saver (mock)", "Inert on Veil — ScreenSaverEngine never launched", "sparkles.tv",
+     ["/usr/bin/osascript", "-e", "display notification \"Screen saver is mock-only on Veil (no ScreenSaverEngine).\" with title \"Veil\""]),
 ]
 
 func systemActionItems() -> [Item] {
@@ -226,6 +228,39 @@ func systemActionItems() -> [Item] {
     // Lock Screen ranks above the System Settings pane of the same name: typing "lock" means lock
     systemActions.map { Item(kind: .action, title: $0.0, subtitle: $0.1, symbol: $0.2, action: .run($0.3),
                              score: $0.0 == "Lock Screen" ? 120 : $0.0.hasSuffix("…") ? -250 : -120) }
+}
+
+/// Glyph / Nothing OS surfaces — searchable; open via DistributedNotification (no SSE).
+func glyphSurfaceItems() -> [Item] {
+    let surfaces: [(String, String, String, String)] = [
+        ("Glyph Quick", "Quick settings · ⌃⌥A", "switch.2", "quick"),
+        ("Glyph Deck", "Bottom dashboard · ⌃⌥Space", "rectangle.bottomthird.inset.filled", "deck"),
+        ("Glyph Prefs", "Settings · ⌃⌥I", "gearshape", "prefs"),
+        ("Glyph Power", "Power menu · ⌃⌥Esc", "power", "power"),
+        ("Glyph Home", "Home widgets · ⌃⌥H", "house", "home"),
+        ("Glyph Walls", "Wallpapers as dots · ⌃⌥W", "photo", "walls"),
+        ("Glyph VPN", "VPN panel · ⌃⌥P", "lock.shield", "vpn"),
+        ("Glyph Cal", "Calendar + focus · ⌃⌥C", "calendar", "cal"),
+        ("Glyph Buds", "Earbuds stub · ⌃⌥B", "earbuds", "buds"),
+        ("Glyph Shot", "Screenshots · ⌃⌥S", "camera", "shot"),
+        ("Glyph Charms", "Emoji / symbols · ⌃⌥.", "face.smiling", "charms"),
+        ("Glyph Style", "Theme creator · ⌃⌥Y", "paintpalette", "style"),
+        ("Glyph Lock (mock)", "Inert lock UI", "lock", "lockMock"),
+        ("Glyph Login (mock)", "SDDM analog mock", "person.crop.circle", "loginMock"),
+        ("Rice: Nothing", "Apply Nothing OS theme", "circle.fill", "APPLY:nothing"),
+    ]
+    return surfaces.map { title, sub, sym, kind in
+        if kind.hasPrefix("APPLY:") {
+            let id = String(kind.dropFirst(6))
+            let bin = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".config/veil/bin/veil-theme").path
+            return Item(kind: .action, title: title, subtitle: sub, symbol: sym,
+                        action: .run([bin, "apply", id]), score: 80)
+        }
+        return Item(kind: .action, title: title, subtitle: sub, symbol: sym,
+                    action: .run(["/usr/bin/osascript", "-l", "JavaScript", "-e",
+                                  "ObjC.import('Foundation'); $.NSDistributedNotificationCenter.defaultCenter.postNotificationNameObjectUserInfoDeliverImmediately('app.veil.glyph.show', '\(kind)', $(), true)"]),
+                    score: 90)
+    }
 }
 
 // "quit safari", "hide music": act on running apps

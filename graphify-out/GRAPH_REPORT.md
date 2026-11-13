@@ -1,40 +1,39 @@
 # Graph Report - veil  (2026-11-13)
 
 ## Corpus Check
-- 80 files · ~87,466 words
+- 84 files · ~94,070 words
 - Verdict: corpus is large enough that graph structure adds value.
-- Unclassified: 27 file(s) not represented in the graph (top: .toml 13, (none) 4, .patch 1)
+- Unclassified: 36 file(s) not represented in the graph (top: .toml 14, .otf 5, (none) 4)
 
 ## Summary
-- 947 nodes · 2225 edges · 66 communities (44 shown, 22 thin omitted)
-- Extraction: 93% EXTRACTED · 7% INFERRED · 0% AMBIGUOUS · INFERRED: 148 edges (avg confidence: 0.85)
+- 1064 nodes · 2571 edges · 83 communities (46 shown, 37 thin omitted)
+- Extraction: 94% EXTRACTED · 6% INFERRED · 0% AMBIGUOUS · INFERRED: 158 edges (avg confidence: 0.85)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `43e8e9b9`
+- Built from commit: `434f642d`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
-- veil-theme
-- main.swift
+- Palette
 - VeilBarController
 - OSDView
 - FocusPulse
-- AppKit
+- DriftView
 - .fill
-- Bool
+- .refresh
 - Model
-- String
+- Int
 - .search
 - Snapshot
 - Veil
 - Item
 - metrics.c
-- selftest
-- .activate
+- extras.swift
+- GlyphRoot
 - RecoveryTests
-- ClipHistory
+- String
 - Weather
 - veil.sh
 - Kind
@@ -52,7 +51,7 @@
 - wings-of-freedom (Paradis / Attack on Titan)
 - SIP-gated Now Playing helper
 - Paradis: The Wall, seen from inside
-- Rates
+- main.swift
 - install.sh script
 - Action
 - dark-souls-3 wallpaper ("Cinder"): Irithyll of the Boreal Valley and Anor Londo under a moonlit storm
@@ -79,18 +78,30 @@
 - sip-nowplaying/build.sh
 - uninstall.sh
 - .run
+- test_theme.py
+- test_baseline.py
+- .load
+- AppKit
+- Theme
+- VeilScreenSaverView
+- .icon
+- VisualEffect
+- thumbs.swift
+- NSView
+- Snapshot
+- nothing.notes.md
 
 ## God Nodes (most connected - your core abstractions)
-1. `Item` - 78 edges
+1. `Item` - 79 edges
 2. `Model` - 66 edges
-3. `Palette` - 57 edges
-4. `selftest()` - 27 edges
-5. `.p` - 25 edges
-6. `.body` - 24 edges
-7. `mono()` - 23 edges
-8. `App` - 22 edges
-9. `FocusPulse` - 21 edges
-10. `VeilBarController` - 20 edges
+3. `Palette` - 64 edges
+4. `GlyphRoot` - 48 edges
+5. `selftest()` - 27 edges
+6. `.p` - 25 edges
+7. `.body` - 24 edges
+8. `GlyphKind` - 22 edges
+9. `GlyphShell` - 22 edges
+10. `mono()` - 22 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `Snapshot` --references--> `String`  [EXTRACTED]
@@ -107,51 +118,43 @@
 ## Import Cycles
 - None detected.
 
-## Communities (66 total, 22 thin omitted)
+## Communities (83 total, 37 thin omitted)
 
-### Community 0 - "veil-theme"
-Cohesion: 0.05
-Nodes (5): main(), sync(), luminance(), ratio(), compare()
-
-### Community 1 - "main.swift"
-Cohesion: 0.06
-Nodes (55): Carbon.HIToolbox, Darwin, ImageIO, acquireInstanceLock(), ActionPanel, .body, code(), Detail (+47 more)
+### Community 1 - "Palette"
+Cohesion: 0.10
+Nodes (38): ActionPanel, .body, code(), Detail, .actionButton, .body, .content, .fullBody (+30 more)
 
 ### Community 2 - "VeilBarController"
 Cohesion: 0.06
-Nodes (34): Combine, OverviewWindowStrip, .body, .maxThumbs, PassThroughHost, riftWindowsDetailed(), VeilBarController, .barLevel (+26 more)
+Nodes (33): OverviewWindowStrip, .body, .maxThumbs, PassThroughHost, riftWindowsDetailed(), VeilBarController, .barLevel, VeilBarView (+25 more)
 
 ### Community 3 - "OSDView"
 Cohesion: 0.06
 Nodes (24): Carbon, IOKit.ps, Brightness, .available, MediaKeys, OSD, OSDKind, battery (+16 more)
 
 ### Community 4 - "FocusPulse"
-Cohesion: 0.10
-Nodes (7): ApplicationServices, CoreText, FocusPulse, FocusPulseModel, FocusPulseView, .body, SwiftUI
+Cohesion: 0.11
+Nodes (5): ApplicationServices, FocusPulse, FocusPulseModel, FocusPulseView, .body
 
-### Community 5 - "AppKit"
-Cohesion: 0.06
-Nodes (12): AppKit, NSView, .firstTextField, SymbolContours, VeilMode, QuartzCore, ScreenSaver, Snapshot (+4 more)
+### Community 5 - "DriftView"
+Cohesion: 0.25
+Nodes (3): QuartzCore, DriftView, SaverPreview
 
 ### Community 6 - ".fill"
 Cohesion: 0.20
 Nodes (9): .lit, RNG, SceneArt, SplashView, .body, TitleBlock, .body, WallpaperView (+1 more)
 
-### Community 7 - "Bool"
-Cohesion: 0.11
-Nodes (7): App, NotchBand, Panel, .canBecomeKey, .canBecomeMain, riftWorkspaces(), Scrim
+### Community 7 - ".refresh"
+Cohesion: 0.13
+Nodes (10): shortcutItems(), NotchBand, Panel, .canBecomeKey, .canBecomeMain, riftWorkspaces(), scanApps(), Scrim (+2 more)
 
 ### Community 8 - "Model"
-Cohesion: 0.10
-Nodes (11): canRememberQuery(), Model, .choosingOverview, .choosingTheme, .overviewActive, riftWindows(), riftWorkspaceNames(), themeTomlWorkspaceNames() (+3 more)
-
-### Community 9 - "String"
-Cohesion: 0.17
-Nodes (9): String, .nilIfEmpty, MenuItems, .trusted, calc(), formatNumber(), score(), SearchTerm (+1 more)
+Cohesion: 0.12
+Nodes (9): kindFilter(), canRememberQuery(), Model, .choosingOverview, .choosingTheme, .gridColumns, .overviewActive, .wsNames (+1 more)
 
 ### Community 10 - ".search"
-Cohesion: 0.16
-Nodes (18): CryptoKit, definitionAnswer(), runningAppActions(), .query, aliasItems(), dictURL(), emojiItems(), finderSearchItem() (+10 more)
+Cohesion: 0.18
+Nodes (17): CryptoKit, definitionAnswer(), .query, aliasItems(), dictURL(), emojiItems(), finderSearchItem(), folderItems() (+9 more)
 
 ### Community 11 - "Snapshot"
 Cohesion: 0.18
@@ -163,26 +166,26 @@ Nodes (16): Umbra wallpaper, Battery, Credits, Daily use, How theming works, Ins
 
 ### Community 13 - "Item"
 Cohesion: 0.11
-Nodes (16): shortcutItems(), contactActions(), SafariTabs, .enabled, Item, .canPersist, .id, .isInformational (+8 more)
+Nodes (13): contactActions(), SafariTabs, .enabled, Item, .canPersist, .id, .isInformational, .key (+5 more)
 
 ### Community 14 - "metrics.c"
-Cohesion: 0.15
+Cohesion: 0.17
 Nodes (5): cpu_usage(), delta_is_valid(), die_temp(), main(), sample_cpu()
 
-### Community 15 - "selftest"
-Cohesion: 0.21
-Nodes (9): CoreServices, add(), defaultTargets(), kindFilter(), prefixSearch(), systemActionItems(), timeAnswer(), unitAnswers() (+1 more)
+### Community 15 - "extras.swift"
+Cohesion: 0.14
+Nodes (12): CoreServices, add(), currencyAnswers(), defaultTargets(), glyphSurfaceItems(), prefixSearch(), Rates, .stale (+4 more)
 
-### Community 16 - ".activate"
-Cohesion: 0.31
-Nodes (3): pasteIntoFrontApp(), .completion, copyText()
+### Community 16 - "GlyphRoot"
+Cohesion: 0.06
+Nodes (46): Combine, DateFormatter, DotField, .body, DotRing, .body, GlyphBtn, GlyphKind (+38 more)
 
-### Community 18 - "ClipHistory"
-Cohesion: 0.17
-Nodes (4): Clip, ClipHistory, .enabled, utilityAnswers()
+### Community 18 - "String"
+Cohesion: 0.19
+Nodes (8): String, .nilIfEmpty, Clip, ClipHistory, .enabled, copyText(), utilityAnswers(), withinOneEdit()
 
 ### Community 19 - "Weather"
-Cohesion: 0.24
+Cohesion: 0.18
 Nodes (5): SecondaryAction, .id, secondaryActions(), shell(), Weather
 
 ### Community 20 - "veil.sh"
@@ -198,8 +201,8 @@ Cohesion: 0.25
 Nodes (3): CalendarSource, .events, .reminders
 
 ### Community 24 - ".applicationDidFinishLaunching"
-Cohesion: 0.30
-Nodes (3): liveWorkspaceNames(), ncItems(), overviewWorkspaceCards()
+Cohesion: 0.17
+Nodes (4): App, liveWorkspaceNames(), ncItems(), overviewWorkspaceCards()
 
 ### Community 25 - "Darksign — Cinder (dark-souls-3)"
 Cohesion: 0.25
@@ -210,8 +213,8 @@ Cohesion: 0.25
 Nodes (7): Construction (/tmp/marks/elden_ring.py), Elden Ring sigil — Guidance (elden-ring), Geometry, measured from the official PNG with a circle Hough transform, residual maps and line probes (reference px), Simplifications, Sources inspected (local copies in research/references/elden-ring/), Verification, Why the logo sigil and not a Site of Grace
 
 ### Community 27 - "Command"
-Cohesion: 0.10
-Nodes (13): Foundation, VeilThumbs, ScreenCaptureKit, Command, next, pause, play, previous (+5 more)
+Cohesion: 0.13
+Nodes (10): Command, next, pause, play, previous, stop, toggle, loadMediaRemote() (+2 more)
 
 ### Community 28 - "arasaka-logo: Arasaka Corporation insignia (Cyberpunk 2077)"
 Cohesion: 0.29
@@ -249,17 +252,17 @@ Nodes (6): After wake — enable, Commands, Disable / stay usable, Overnight (SI
 Cohesion: 0.33
 Nodes (5): Palette (from palettegen, 12 colors), Paradis: The Wall, seen from inside, Style notes for UI, Visual weight, Why this one
 
-### Community 37 - "Rates"
-Cohesion: 0.33
-Nodes (3): currencyAnswers(), Rates, .stale
+### Community 37 - "main.swift"
+Cohesion: 0.11
+Nodes (18): Carbon.HIToolbox, Darwin, ImageIO, acquireInstanceLock(), calc(), formatNumber(), isNumericWorkspaceToken(), riftWindows() (+10 more)
 
 ### Community 38 - "install.sh script"
 Cohesion: 0.33
 Nodes (3): install.sh script, build.sh script, build.sh script
 
 ### Community 39 - "Action"
-Cohesion: 0.33
-Nodes (5): Action, copy, open, run, webSearch()
+Cohesion: 0.40
+Nodes (4): Action, copy, open, run
 
 ### Community 40 - "dark-souls-3 wallpaper ("Cinder"): Irithyll of the Boreal Valley and Anor Londo under a moonlit storm"
 Cohesion: 0.40
@@ -282,28 +285,44 @@ Cohesion: 0.50
 Nodes (3): Eclipse — Guts beneath the moon, Palette and layout, Status (2026-10-28)
 
 ### Community 45 - "integrations.swift"
+Cohesion: 0.12
+Nodes (8): Contacts, EventKit, ContactSource, .status, MenuItems, .trusted, pasteIntoFrontApp(), .completion
+
+### Community 67 - "test_theme.py"
+Cohesion: 0.15
+Nodes (4): main(), sync(), luminance(), ratio()
+
+### Community 70 - ".load"
 Cohesion: 0.29
-Nodes (4): Contacts, EventKit, ContactSource, .status
+Nodes (4): SourceSymbol, .aspect, .brand, SymbolContours
+
+### Community 71 - "AppKit"
+Cohesion: 0.22
+Nodes (5): AppKit, CoreText, VeilMode, ScreenSaver, SwiftUI
+
+### Community 78 - "thumbs.swift"
+Cohesion: 0.40
+Nodes (3): Foundation, VeilThumbs, ScreenCaptureKit
 
 ## Knowledge Gaps
-- **85 isolated node(s):** `Combine`, `.root`, `.animatedPanels`, `.sketchybarPopups`, `.veilBar` (+80 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 351 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
-- **22 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **106 isolated node(s):** `.root`, `.animatedPanels`, `.sketchybarPopups`, `.veilBar`, `.overviewLiveThumbs` (+101 more)
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 385 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+- **37 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `String` connect `String` to `main.swift`, `VeilBarController`, `OSDView`, `FocusPulse`, `AppKit`, `.fill`, `Bool`, `Model`, `.search`, `Snapshot`, `Item`, `selftest`, `.activate`, `ClipHistory`, `Weather`, `Kind`, `CalendarSource`, `.applicationDidFinishLaunching`, `Command`, `Rates`, `Action`, `integrations.swift`, `.run`?**
-  _High betweenness centrality (0.229) - this node is a cross-community bridge._
+- **Why does `String` connect `String` to `Palette`, `VeilBarController`, `OSDView`, `FocusPulse`, `.fill`, `.refresh`, `Model`, `Int`, `.search`, `Snapshot`, `Item`, `extras.swift`, `GlyphRoot`, `Weather`, `Kind`, `CalendarSource`, `.applicationDidFinishLaunching`, `Command`, `main.swift`, `Action`, `integrations.swift`, `.run`, `.load`, `Theme`, `VeilScreenSaverView`, `.icon`, `Snapshot`?**
+  _High betweenness centrality (0.244) - this node is a cross-community bridge._
 - **Are the 14 inferred relationships involving `Item` (e.g. with `.content` and `.hero`) actually correct?**
   _`Item` has 14 INFERRED edges - model-reasoned connections that need verification._
-- **What connects `Combine`, `.root`, `.animatedPanels` to the rest of the system?**
-  _85 weakly-connected nodes found - possible documentation gaps or missing edges._
-- **Should `veil-theme` be split into smaller, more focused modules?**
-  _Cohesion score 0.054136874361593465 - nodes in this community are weakly interconnected._
-- **Why does `Palette` connect `main.swift` to `VeilBarController`, `OSDView`, `FocusPulse`, `.fill`, `Bool`, `String`, `.activate`?**
-  _High betweenness centrality (0.050) - this node is a cross-community bridge._
+- **What connects `.root`, `.animatedPanels`, `.sketchybarPopups` to the rest of the system?**
+  _106 weakly-connected nodes found - possible documentation gaps or missing edges._
+- **Should `Palette` be split into smaller, more focused modules?**
+  _Cohesion score 0.0974124809741248 - nodes in this community are weakly interconnected._
+- **Why does `Palette` connect `Palette` to `VeilBarController`, `OSDView`, `FocusPulse`, `main.swift`, `.load`, `.refresh`, `.fill`, `Item`, `GlyphRoot`, `String`?**
+  _High betweenness centrality (0.065) - this node is a cross-community bridge._
 - **Are the 11 inferred relationships involving `Model` (e.g. with `.applicationDidFinishLaunching()` and `.hide()`) actually correct?**
   _`Model` has 11 INFERRED edges - model-reasoned connections that need verification._
-- **Should `main.swift` be split into smaller, more focused modules?**
-  _Cohesion score 0.057692307692307696 - nodes in this community are weakly interconnected._
+- **Should `VeilBarController` be split into smaller, more focused modules?**
+  _Cohesion score 0.061971830985915494 - nodes in this community are weakly interconnected._

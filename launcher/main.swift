@@ -706,7 +706,7 @@ final class Model: NSObject, ObservableObject {
         let commands = ncCache
         out += ranked(commands, limit: commands.count)  // include every installed environment
         let systemItems = moreSystemItems(q)
-        out += ranked(systemActionItems() + systemItems.filter { $0.score < 2000 }, limit: 3)
+        out += ranked(systemActionItems() + glyphSurfaceItems() + systemItems.filter { $0.score < 2000 }, limit: 5)
         out += systemItems.filter { $0.score >= 2000 }
         out += ranked(scriptItems(q), limit: 3)
         let vaultItems = obsidianItems(q)
@@ -2309,6 +2309,9 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         panel.contentView?.wantsLayer = true
         panel.setFrame(NSRect(x: 0, y: 0, width: 1, height: 1), display: false)
         panel.orderOut(nil)
+
+        // Glyph / Nothing OS surfaces (⌃⌥ + letter). Does not steal Option←/→ word navigation.
+        GlyphShell.registerHotkeys()
 
         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] e in
             guard let self, self.panel.isVisible,
