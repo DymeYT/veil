@@ -245,30 +245,15 @@ final class VeilPanelHost: ObservableObject {
     }
 
     func dismiss() {
-        guard let window, window.isVisible else {
-            kind = nil
-            anchorRect = nil
-            self.window?.contentView = nil
-            self.window = nil
-            return
-        }
-        let finish = { [weak self] in
-            window.orderOut(nil)
-            window.contentView = nil
-            self?.window = nil
-            self?.kind = nil
-            self?.anchorRect = nil
-        }
-        if reduceMotion {
-            finish()
-        } else {
-            NSAnimationContext.runAnimationGroup({ ctx in
-                ctx.duration = 0.14
-                window.animator().alphaValue = 0
-            }, completionHandler: {
-                Task { @MainActor in finish() }
-            })
-        }
+        // Instant orderOut first — never leave a kind=nil hosting view on screen
+        // (VeilPanelView still painted chrome around EmptyView → blank bottom-left panel).
+        let window = self.window
+        kind = nil
+        anchorRect = nil
+        window?.orderOut(nil)
+        window?.contentView = nil
+        window?.alphaValue = 1
+        self.window = nil
     }
 
     /// Prefer in-process Veil bar anchors when that strip owns chrome (SketchyBar parks
@@ -380,6 +365,7 @@ final class VeilPanelHost: ObservableObject {
     }
 
     func refreshContent() {
+        guard kind != nil else { dismiss(); return }
         switch kind {
         case .music: loadMusic(fetchArtwork: true, force: true)
         case .control: ensureStatusMeta(force: true)
@@ -592,25 +578,28 @@ struct VeilPanelView: View {
     private var p: Palette { Palette.load() }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            switch host.kind {
-            case .music: musicBody
-            case .control: controlBody
-            case .keys: keysBody
-            case nil: EmptyView()
+        // No chrome when kind is nil — a dismissed/empty host must not paint a blank card.
+        Group {
+            if let kind = host.kind {
+                VStack(alignment: .leading, spacing: 0) {
+                    switch kind {
+                    case .music: musicBody
+                    case .control: controlBody
+                    case .keys: keysBody
+                    }
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .background(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(p["bg_float"].opacity(0.96))
+                        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(p["border"], lineWidth: 1))
+                        .shadow(color: .black.opacity(0.45), radius: reduceMotion ? 0 : 18, y: 8)
+                )
+                .pressable()
             }
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(p["bg_float"].opacity(0.96))
-                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(p["border"], lineWidth: 1))
-                .shadow(color: .black.opacity(0.45), radius: reduceMotion ? 0 : 18, y: 8)
-        )
-        .scaleEffect(host.kind == nil ? 0.96 : 1)
         .animation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.82), value: host.kind)
-        .pressable()
     }
 
     private var musicBody: some View {

@@ -102,9 +102,9 @@
     "semantic_hash": ""
   },
   "launcher/bar.swift": {
-    "mtime": 1794589119.8595843,
-    "seen": 1794589273.124945,
-    "ast_hash": "03ce8d28f4352078cf6467f3f0dc88f6",
+    "mtime": 1794589455.4831882,
+    "seen": 1794589526.853863,
+    "ast_hash": "f3d25a45905f9f3c2b67787f3b1be671",
     "semantic_hash": ""
   },
   "launcher/build.sh": {
@@ -552,9 +552,9 @@
     "semantic_hash": ""
   },
   "launcher/glyph.swift": {
-    "mtime": 1794588432.57397,
-    "seen": 1794588867.13694,
-    "ast_hash": "0162fce0d03dfa22b6d8dc07fdfc7d45",
+    "mtime": 1794589433.7328236,
+    "seen": 1794589526.853866,
+    "ast_hash": "ae4007c6a9f09103bb3f4db57761c54d",
     "semantic_hash": ""
   },
   "tools/make-nothing-wall.py": {

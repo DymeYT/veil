@@ -1,17 +1,17 @@
 # Graph Report - veil  (2026-11-13)
 
 ## Corpus Check
-- 85 files · ~109,459 words
+- 85 files · ~109,429 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 36 file(s) not represented in the graph (top: .toml 14, .otf 5, (none) 4)
 
 ## Summary
-- 1179 nodes · 2980 edges · 68 communities (40 shown, 28 thin omitted)
+- 1179 nodes · 2981 edges · 68 communities (40 shown, 28 thin omitted)
 - Extraction: 94% EXTRACTED · 6% INFERRED · 0% AMBIGUOUS · INFERRED: 176 edges (avg confidence: 0.85)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `1431f055`
+- Built from commit: `3e756301`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 

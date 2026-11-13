@@ -56,25 +56,13 @@ final class GlyphShell: ObservableObject {
 
     func dismiss() {
         removeKeys()
-        guard let window, window.isVisible else {
-            kind = nil
-            self.window?.contentView = nil
-            self.window = nil
-            return
-        }
-        let finish = { [weak self] in
-            window.orderOut(nil)
-            window.contentView = nil
-            self?.window = nil
-            self?.kind = nil
-        }
-        if reduceMotion { finish() }
-        else {
-            NSAnimationContext.runAnimationGroup({ ctx in
-                ctx.duration = 0.14
-                window.animator().alphaValue = 0
-            }, completionHandler: { Task { @MainActor in finish() } })
-        }
+        // Instant teardown — never leave an empty chrome layer while fade-out races.
+        let window = self.window
+        kind = nil
+        window?.orderOut(nil)
+        window?.contentView = nil
+        window?.alphaValue = 1
+        self.window = nil
     }
 
     private func ensureWindow() {
