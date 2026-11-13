@@ -37,6 +37,8 @@ music_bundle_source() {
 music_sip_nowplaying() {
   # Opt-in SIP-gated helper (default off). Usable overnight as a no-op fallback.
   [ -f "$HOME/.config/veil/generated/features/enable-sip-nowplaying" ] || return 1
+  # SIP+AMFI SIGKILLs the helper — skip entirely so music never pays a kill tax.
+  /usr/bin/csrutil status 2>/dev/null | /usr/bin/grep -qi 'enabled' && return 1
   local bin="$HOME/.config/veil/bin/veil-nowplaying-sip" action="${1:-}" raw
   [ -x "$bin" ] || return 1
   case "$action" in

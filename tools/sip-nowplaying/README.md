@@ -8,8 +8,12 @@ The private `MediaRemote` entitlement (`com.apple.private.mediaremote.read-write
 ## Overnight (SIP on) — default
 ```bash
 veil feature list          # sip-nowplaying is off
-# music dropdown uses media-control / Music / Spotify as today
+# music dropdown uses media-control / Music / Spotify / Cider as today
+# Running the helper under SIP → AMFI Killed: 9 (exit 137) — expected.
+# build.sh skips the status smoke while SIP is enabled.
 ```
+
+Full preflight checklist (PASS/FAIL, rollback): store `docs/sip-preflight.md`.
 
 ## After wake — enable
 1. Boot into Recovery → Terminal → `csrutil disable` → reboot (Big Dawg does this; not overnight).

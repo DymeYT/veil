@@ -23,4 +23,9 @@ fi
 "${SWIFTC[@]}"
 codesign --force --sign - --entitlements "$ENT" "$OUT"
 echo "built $OUT"
-"$OUT" status || true
+# Under SIP, AMFI SIGKILLs this binary (exit 137) — expected; do not treat as build failure.
+if /usr/bin/csrutil status 2>/dev/null | /usr/bin/grep -qi 'enabled'; then
+  echo "sip=enabled — skip status smoke (AMFI would Killed: 9). After csrutil disable, re-run and expect: sip=disabled mediaremote=ok"
+else
+  "$OUT" status || true
+fi
