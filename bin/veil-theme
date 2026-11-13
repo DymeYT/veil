@@ -53,6 +53,12 @@ def strings_for(theme):
     rm = subprocess.run(["defaults", "read", "com.apple.universalaccess", "reduceMotion"], capture_output=True, text=True).stdout.strip()
     out["system_motion"] = "false" if rm == "1" else "true"
     out["rift_animate"] = "false" if (GEN / "quiet").exists() else out["system_motion"]
+    # Usable tiling space follows the bar: reserve only the bar edge; free the opposite edge.
+    # Bottom bar → gap_top=0 (apps reach the top). Top bar → gap_bottom=0 (apps reach the bottom / Dock).
+    if out.get("bar_position", "top") == "bottom":
+        out["gap_top"] = "0"
+    else:
+        out["gap_bottom"] = "0"
     return out
 
 

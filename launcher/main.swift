@@ -1039,32 +1039,43 @@ final class Model: NSObject, ObservableObject {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { self.toast = ""; self.close() }
             return
         }
+        // Spotlight feel: UI gone this frame; open/run never blocks dismiss.
         close()
-        if reveal, let p = it.path { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: p)]); return }
-        switch it.action {
-        case .open(let url): NSWorkspace.shared.open(url.isFileURL ? (obsidianURL(for: url.path) ?? url) : url)
-        case .copy(let s): copyText(s, secret: it.extra == "secret")
-        case .run(let argv):
-            let p = Process()
-            p.executableURL = URL(fileURLWithPath: argv[0])
-            p.arguments = Array(argv.dropFirst())
-            p.environment = ProcessInfo.processInfo.environment.merging(["PATH": binPath]) { $1 }
-            if it.extra.hasPrefix("stdin:"), let data = Data(base64Encoded: String(it.extra.dropFirst(6))) {
-                let pipe = Pipe(); p.standardInput = pipe
-                try? p.run(); pipe.fileHandleForWriting.write(data); try? pipe.fileHandleForWriting.close()
-            } else if argv[0].hasSuffix("veil-theme") {
-                // report a refused theme change instead of failing silently
-                let err = Pipe(); p.standardError = err
-                try? p.run()
-                DispatchQueue.global().async {
-                    p.waitUntilExit()
-                    guard p.terminationStatus != 0 else { return }
-                    let msg = String(data: err.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
-                        .split(separator: "\n").last.map(String.init) ?? "Theme change failed"
-                    let safe = msg.replacingOccurrences(of: "\\", with: "").replacingOccurrences(of: "\"", with: "'")
-                    _ = try? Process.run(URL(fileURLWithPath: "/usr/bin/osascript"), arguments: ["-e", "display notification \"\(safe)\" with title \"Veil theme\""])
-                }
-            } else { try? p.run() }
+        let action = it.action
+        let path = it.path
+        let extra = it.extra
+        let secret = it.extra == "secret"
+        DispatchQueue.main.async {
+            if reveal, let p = path {
+                NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: p)])
+                return
+            }
+            switch action {
+            case .open(let url):
+                NSWorkspace.shared.open(url.isFileURL ? (obsidianURL(for: url.path) ?? url) : url)
+            case .copy(let s):
+                copyText(s, secret: secret)
+            case .run(let argv):
+                let p = Process()
+                p.executableURL = URL(fileURLWithPath: argv[0])
+                p.arguments = Array(argv.dropFirst())
+                p.environment = ProcessInfo.processInfo.environment.merging(["PATH": binPath]) { $1 }
+                if extra.hasPrefix("stdin:"), let data = Data(base64Encoded: String(extra.dropFirst(6))) {
+                    let pipe = Pipe(); p.standardInput = pipe
+                    try? p.run(); pipe.fileHandleForWriting.write(data); try? pipe.fileHandleForWriting.close()
+                } else if argv[0].hasSuffix("veil-theme") {
+                    let err = Pipe(); p.standardError = err
+                    try? p.run()
+                    DispatchQueue.global().async {
+                        p.waitUntilExit()
+                        guard p.terminationStatus != 0 else { return }
+                        let msg = String(data: err.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+                            .split(separator: "\n").last.map(String.init) ?? "Theme change failed"
+                        let safe = msg.replacingOccurrences(of: "\\", with: "").replacingOccurrences(of: "\"", with: "'")
+                        _ = try? Process.run(URL(fileURLWithPath: "/usr/bin/osascript"), arguments: ["-e", "display notification \"\(safe)\" with title \"Veil theme\""])
+                    }
+                } else { try? p.run() }
+            }
         }
     }
 
@@ -2293,6 +2304,11 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient, .ignoresCycle]
         panel.delegate = self
         model.close = { [weak self] in self?.hide() }
+        // Pre-warm the SwiftUI tree so the first ⌘Space does not pay hosting-view compile cost.
+        panel.contentView = NSHostingView(rootView: LauncherView(m: model))
+        panel.contentView?.wantsLayer = true
+        panel.setFrame(NSRect(x: 0, y: 0, width: 1, height: 1), display: false)
+        panel.orderOut(nil)
 
         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] e in
             guard let self, self.panel.isVisible,
@@ -2410,11 +2426,14 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
                                            MemoryLayout<EventHotKeyID>.size, nil, &hk)
             guard status == noErr, hk.signature == OSType(0x4E43_5348), [1, 2, 3].contains(hk.id) else { return OSStatus(eventNotHandledErr) }
             let id = hk.id
-            DispatchQueue.main.async {
+            // Spotlight-speed: run on this turn — DispatchQueue.main.async let the next keystrokes
+            // hit the previously focused app before the search field exists.
+            let run = {
                 if id == 2 { VeilMode.toggle() }
                 else if id == 3 { (NSApp.delegate as? App)?.show(query: "theme") }  // ⌃⌥T — reliable when Cursor steals ⌘T
                 else { (NSApp.delegate as? App)?.toggle() }
             }
+            if Thread.isMainThread { run() } else { DispatchQueue.main.sync(execute: run) }
             return noErr
         }, 1, &spec, nil, nil)
         // ⌃⌥⌘V turns Veil on or off; it stays registered while Veil is off, so the way back is always there
@@ -2668,13 +2687,13 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     func show(query: String = "") {
         guard !veilIsOff, let screen = NSScreen.screens.first(where: { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) }) ?? NSScreen.main else { return }
-        ClipHistory.shared.capture()
         MenuItems.frontPID = NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0
         // Beat a late dismiss-popups hide from the previous surface (killer: themes → dismiss → overview).
         showGeneration += 1
         lastShowAt = Date()
         suppressHideUntil = Date().addingTimeInterval(1.0)
-        model.refresh()
+        ignoreResignUntil = Date().addingTimeInterval(0.45)
+
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         switch q {
         case "overview":
@@ -2685,53 +2704,60 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             model.surface = .search
             model.overviewCards = []
             model.themeCards = []
-            if model.query == query { model.search() } else { model.query = query }
+            // Clear query synchronously so the field is empty and focused before any keystroke arrives.
+            if !query.isEmpty {
+                if model.query == query { model.search() } else { model.query = query }
+            } else if !model.query.isEmpty {
+                model.renderingFixture = true
+                model.query = ""
+                model.renderingFixture = false
+                model.items = []
+            }
         }
         model.selected = 0
         model.openMouse = NSEvent.mouseLocation
+        model.shown = true
+
+        // Pre-warmed hosting view: never rebuild on the hotkey path.
         if !(panel.contentView is NSHostingView<LauncherView>) {
             panel.contentView = NSHostingView(rootView: LauncherView(m: model))
             panel.contentView?.wantsLayer = true
         }
         let f = screen.frame
-        // width and placement follow the theme: top third (default), centered, or a banner under the bar
         let p = model.palette
-        panel.setContentSize(NSSize(width: min(f.width, p.num("width", 860) + 80), height: min(f.height, 640)))
+        let width = min(f.width, p.num("width", 860) + 80)
+        let height = min(f.height, 640)
+        // Restore from the idle 1×1 collapse in one setFrame (cheaper than setContentSize + top-left).
         let top: CGFloat
         switch p.s("place", "top") {
         case "center": top = f.maxY - f.height * 0.26 + 40
         case "banner": top = f.maxY - 44 + 40
-        case "bottom": top = f.minY + 48 - 40 + panel.frame.height  // card rises from just above a bottom bar
+        case "bottom": top = f.minY + 48 - 40 + height
         default: top = f.maxY - f.height * 0.18 + 40
         }
-        panel.setFrameTopLeftPoint(NSPoint(x: f.midX - panel.frame.width / 2, y: min(top, f.maxY + 40)))
-        model.shown = false
-        // Opening can briefly resign key (scrim / first-responder shuffle); do not treat that as dismiss.
-        ignoreResignUntil = Date().addingTimeInterval(0.35)
-        Scrim.shared.show(on: screen, enabled: p.flag("scrim"))
+        let originY = min(top, f.maxY + 40) - height
+        panel.setFrame(NSRect(x: f.midX - width / 2, y: originY, width: width, height: height), display: false)
+
+        // Spotlight path: activate + key + field focus BEFORE heavy work / scrim.
         NSApp.activate(ignoringOtherApps: true)
         panel.level = .statusBar
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient, .ignoresCycle]
         panel.makeKeyAndOrderFront(nil)
         panel.orderFrontRegardless()
-        // Second front in case mission-control / splash stole ordering.
+        if let field = panel.contentView?.firstTextField {
+            panel.makeFirstResponder(field)
+        }
+
+        // Deferred: clipboard snapshot, source refresh, scrim — never block first keystroke.
         DispatchQueue.main.async {
-            self.panel.orderFrontRegardless()
-            guard self.panel.isVisible else {
-                // Notification can arrive before the app finished launching — retry once.
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                    self.panel.makeKeyAndOrderFront(nil)
-                    self.panel.orderFrontRegardless()
-                    self.model.shown = true
-                    if self.model.surface == .overview { self.model.enterOverview() }
-                }
-                return
-            }
-            self.model.shown = true
-            // Re-assert exclusive surface after refresh async cannot pollute cards.
+            ClipHistory.shared.capture()
+            Scrim.shared.show(on: screen, enabled: p.flag("scrim"))
+            self.model.refresh()
             if self.model.surface == .overview { self.model.enterOverview() }
             else if self.model.surface == .themes { self.model.enterThemes() }
-            if !(self.panel.firstResponder is NSTextView), let field = self.panel.contentView?.firstTextField {
+            // Re-assert focus in case SwiftUI rebuilt the field after refresh.
+            if self.panel.isVisible, !(self.panel.firstResponder is NSTextView),
+               let field = self.panel.contentView?.firstTextField {
                 self.panel.makeFirstResponder(field)
             }
         }
@@ -2772,34 +2798,30 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     func hide(force: Bool = true) {
         _ = force
-        guard panel.isVisible else {
-            model.surface = .search
+        // Instant dismiss first — never wait on teardown or the launched app.
+        let wasVisible = panel.isVisible
+        if wasVisible { panel.orderOut(nil) }
+        model.shown = false
+        model.actionsOpen = false
+        Scrim.shared.hide()
+        Task { @MainActor in VeilPanelHost.shared.dismiss() }
+
+        guard wasVisible || model.surface != .search else {
             model.overviewCards = []
             model.overviewThumbs = [:]
             model.themeCards = []
             model.windows = [:]
             return
         }
-        panel.orderOut(nil)
-        // Drop the SwiftUI tree so overview thumbs / theme art leave RSS.
-        panel.contentView = nil
-        // Collapse the buffered backing store while idle (940×640 Retina is tens of MiB).
-        panel.setFrame(NSRect(x: 0, y: 0, width: 1, height: 1), display: false)
-        Scrim.shared.hide()
-        IconCache.clear()
-        malloc_zone_pressure_relief(nil, 0)
-        Task { @MainActor in VeilPanelHost.shared.dismiss() }
-        model.shown = false
-        model.actionsOpen = false
         model.historyIndex = -1
         model.mode = 0
+        let q = model.query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         model.surface = .search
         model.overviewCards = []
         model.overviewThumbs = [:]
         model.themeCards = []
         model.windows = [:]
-        let q = model.query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if q == "overview" || q == "theme" {
+        if q == "overview" || q == "theme" || !model.query.isEmpty {
             model.renderingFixture = true
             model.query = ""
             model.renderingFixture = false
@@ -2807,6 +2829,10 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         model.cancelFileSearch()
         Weather.shared.cancelPending()
+        // Keep the hosting view warm for Spotlight-speed reopen; only collapse the backing store.
+        panel.setFrame(NSRect(x: 0, y: 0, width: 1, height: 1), display: false)
+        IconCache.clear()
+        malloc_zone_pressure_relief(nil, 0)
     }
 
     func registerSearchKey() {

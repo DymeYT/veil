@@ -152,7 +152,7 @@ gap_outer = "8"
 
 gap_inner = "8"
 
-gap_bottom = "8"
+gap_bottom = "0"
 
 term_font = "Menlo"
 
