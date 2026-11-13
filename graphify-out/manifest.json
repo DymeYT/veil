@@ -102,21 +102,21 @@
     "semantic_hash": ""
   },
   "launcher/bar.swift": {
-    "mtime": 1794573706.640729,
-    "seen": 1794573817.3960068,
-    "ast_hash": "ef10fe511ec1d1838086e5b8896df447",
+    "mtime": 1794588820.1355975,
+    "seen": 1794588867.136937,
+    "ast_hash": "15ec9bb852c56d8bd7d849ae632f434e",
     "semantic_hash": ""
   },
   "launcher/build.sh": {
-    "mtime": 1794586611.76976,
-    "seen": 1794586950.1367848,
-    "ast_hash": "6e553562ee945ef5dbbbaa5f9cdacf5f",
+    "mtime": 1794588449.5115016,
+    "seen": 1794588867.136938,
+    "ast_hash": "f3426828fa2b4404645b3a38143042c1",
     "semantic_hash": ""
   },
   "launcher/extras.swift": {
-    "mtime": 1794586812.3409543,
-    "seen": 1794586950.136786,
-    "ast_hash": "30880ec4da6eea6dc9c34a2a3cd953d9",
+    "mtime": 1794588153.1354222,
+    "seen": 1794588867.136939,
+    "ast_hash": "0fb78322559399cd6e4666f92d057560",
     "semantic_hash": ""
   },
   "launcher/focus.swift": {
@@ -132,9 +132,9 @@
     "semantic_hash": ""
   },
   "launcher/main.swift": {
-    "mtime": 1794586815.2899654,
-    "seen": 1794586950.136788,
-    "ast_hash": "db0b083ec2ac59bbcde7eae02a8e1537",
+    "mtime": 1794588441.5265763,
+    "seen": 1794588867.136941,
+    "ast_hash": "59b95193ce5ab40a0745d12496c760a5",
     "semantic_hash": ""
   },
   "launcher/make-signing-identity.sh": {
@@ -150,9 +150,9 @@
     "semantic_hash": ""
   },
   "launcher/osd.swift": {
-    "mtime": 1794586621.292796,
-    "seen": 1794586950.136789,
-    "ast_hash": "328a0b55d2017ee1705f63773c63ebdd",
+    "mtime": 1794587187.7284956,
+    "seen": 1794587809.031878,
+    "ast_hash": "e7ee485dbdf9b8b7261fc8b5b4c74a03",
     "semantic_hash": ""
   },
   "launcher/review-render.swift": {
@@ -168,9 +168,9 @@
     "semantic_hash": ""
   },
   "launcher/sources.swift": {
-    "mtime": 1794546727.6457076,
-    "seen": 1794570665.73323,
-    "ast_hash": "6a592fe5f79d64a5a73c36cfa59bfbea",
+    "mtime": 1794588430.4025362,
+    "seen": 1794588867.136944,
+    "ast_hash": "498f2e0daab53572d42086d1ac0dfdcc",
     "semantic_hash": ""
   },
   "launcher/splash.swift": {
@@ -240,9 +240,9 @@
     "semantic_hash": ""
   },
   "templates/sketchybar/plugins/veil.sh": {
-    "mtime": 1794572931.850356,
-    "seen": 1794573519.749682,
-    "ast_hash": "204f638ff8ead4e8aa45330c0ea7ed13",
+    "mtime": 1794587880.35956,
+    "seen": 1794588867.13695,
+    "ast_hash": "a86549bd3116f9990e2b422322e43625",
     "semantic_hash": ""
   },
   "templates/sketchybar/plugins/workspace-event.sh": {
@@ -252,9 +252,9 @@
     "semantic_hash": ""
   },
   "templates/sketchybar/sketchybarrc": {
-    "mtime": 1794570179.5970626,
-    "seen": 1794570665.733234,
-    "ast_hash": "11c46844260d7a58c47efc83824e86f6",
+    "mtime": 1794588445.7499123,
+    "seen": 1794588867.136951,
+    "ast_hash": "720460a4606065105d69822078a7aa4d",
     "semantic_hash": ""
   },
   "test_theme.py": {
@@ -294,9 +294,9 @@
     "semantic_hash": ""
   },
   "tools/sip-nowplaying/build.sh": {
-    "mtime": 1794550155.271275,
-    "seen": 1794570665.733237,
-    "ast_hash": "694d784dd95ef17c327d5edee290f609",
+    "mtime": 1794587875.4421124,
+    "seen": 1794588867.136954,
+    "ast_hash": "237948056356a8f360bccd326304692c",
     "semantic_hash": ""
   },
   "tools/veil-wallpaper.swift": {
@@ -468,9 +468,9 @@
     "semantic_hash": ""
   },
   "tools/sip-nowplaying/README.md": {
-    "mtime": 1794550121.2869365,
-    "seen": 1794570665.7332458,
-    "ast_hash": "088d772823b3f6ebe9eafed02e221418",
+    "mtime": 1794587927.448078,
+    "seen": 1794588867.136968,
+    "ast_hash": "d6265eb4f36a0bb9835b875d3cfdd0b7",
     "semantic_hash": ""
   },
   "art/symbols/arasaka-logo.svg": {
@@ -552,9 +552,9 @@
     "semantic_hash": ""
   },
   "launcher/glyph.swift": {
-    "mtime": 1794586850.6705716,
-    "seen": 1794586950.136787,
-    "ast_hash": "b20b088735fe9e72198ffe084630c31d",
+    "mtime": 1794588432.57397,
+    "seen": 1794588867.13694,
+    "ast_hash": "0162fce0d03dfa22b6d8dc07fdfc7d45",
     "semantic_hash": ""
   },
   "tools/make-nothing-wall.py": {
@@ -573,6 +573,18 @@
     "mtime": 1794586392.638689,
     "seen": 1794586950.1368132,
     "ast_hash": "6e95c5bf77beff0122db61c629f08d5c",
+    "semantic_hash": ""
+  },
+  "launcher/desktop-glyphs.swift": {
+    "mtime": 1794588865.478956,
+    "seen": 1794588867.136938,
+    "ast_hash": "fe3dd3802df4d1d2efc26ac3b6624878",
+    "semantic_hash": ""
+  },
+  "art/nothing.jpg": {
+    "mtime": 1794586392.6180356,
+    "seen": 1794587809.031903,
+    "ast_hash": "5dd3de52cf6a2790b40c6762ca918f17",
     "semantic_hash": ""
   }
 }

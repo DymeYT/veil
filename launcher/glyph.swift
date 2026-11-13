@@ -399,7 +399,7 @@ struct GlyphRoot: View {
         }
         .padding(12)
         .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(bg))
-        .onAppear { VeilPanelHost.shared.ensureMusicMeta() }
+        .onAppear { VeilPanelHost.shared.ensureMusicMeta(artwork: true) }
     }
 
     // MARK: Deck

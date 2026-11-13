@@ -2705,6 +2705,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func show(query: String = "") {
         guard !veilIsOff, let screen = NSScreen.screens.first(where: { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) }) ?? NSScreen.main else { return }
         MenuItems.frontPID = NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0
+        ClipHistory.shared.setLauncherActive(true)
         // Beat a late dismiss-popups hide from the previous surface (killer: themes → dismiss → overview).
         showGeneration += 1
         lastShowAt = Date()
@@ -2821,6 +2822,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if wasVisible { panel.orderOut(nil) }
         model.shown = false
         model.actionsOpen = false
+        ClipHistory.shared.setLauncherActive(false)
         Scrim.shared.hide()
         Task { @MainActor in VeilPanelHost.shared.dismiss() }
 

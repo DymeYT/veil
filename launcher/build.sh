@@ -4,6 +4,12 @@ set -euo pipefail
 cd "$(dirname "$0")"
 app="$HOME/Applications/Veil Search.app"
 mkdir -p "$HOME/Applications"
+# Interrupted installs leave .veil-build.* trees; a binary still running from one doubles idle RSS.
+for d in "$HOME/Applications"/.veil-build.*; do
+  [ -e "$d" ] || continue
+  pkill -f "$d/Veil Search.app/Contents/MacOS/veil-search" 2>/dev/null || true
+  rm -rf "$d"
+done
 out=$(mktemp -d "$HOME/Applications/.veil-build.XXXXXX")
 stage="$out/Veil Search.app"
 keep_stage=false

@@ -38,9 +38,11 @@ case "$THEME" in
   paradis) PANEL='FIELD DESK'; WINDOW_GROUP='WORKSPACE'; SYSTEM_GROUP='EQUIPMENT'; CPU_POS=popup.city; SHOW_GRAPH=off; QUICK=terminal ;;
   umbra) PANEL='Controls'; WINDOW_GROUP='Windows'; SYSTEM_GROUP='System'; THEME_GROUP='Appearance'; CPU_POS=popup.city; NET_POS=popup.city; VOL_POS=popup.city; SHOW_APP=off; SHOW_GRAPH=off ;;
   eclipse) PANEL='Desk'; WINDOW_GROUP='Windows'; SYSTEM_GROUP='Utilities'; THEME_GROUP='Appearance'; CPU_POS=popup.city; NET_POS=popup.city; VOL_POS=popup.city; SHOW_APP=off; SHOW_GRAPH=off ;;
+  # Glyph-first: keep the strip thin — metrics live in the control panel / Sys Glyph, not a 15s bar poller.
+  nothing) PANEL='Controls'; WINDOW_GROUP='Windows'; SYSTEM_GROUP='System'; THEME_GROUP='Appearance'; CPU_POS=popup.city; NET_POS=popup.city; VOL_POS=popup.city; SHOW_APP=off; SHOW_GRAPH=off ;;
 esac
 
-CPU_FREQ=15; [ -f "$HOME/.config/veil/generated/quiet" ] && CPU_FREQ=45  # `veil quiet` survives reloads
+CPU_FREQ=30; [ -f "$HOME/.config/veil/generated/quiet" ] && CPU_FREQ=60  # `veil quiet` survives reloads
 
 # Top bars line up with the notch (38pt safe area on this MacBook): edge bars match its height exactly,
 # floating islands sit centered on it, so the notch never hangs below or floats above the bar.
