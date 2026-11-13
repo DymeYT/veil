@@ -32,7 +32,6 @@ case "$THEME" in
   elden-ring) PANEL='FIELD GUIDE'; WINDOW_GROUP='SITES OF GRACE'; SYSTEM_GROUP='TRAVERSAL'; QUICK=search; CPU_POS=popup.city; SHOW_GRAPH=off ;;
   dark-souls-3) PANEL='BONFIRE'; WINDOW_GROUP='EMBER REGISTER'; SYSTEM_GROUP='ASHEN TOOLS'; CPU_POS=popup.city; NET_POS=popup.city; SHOW_APP=off; SHOW_GRAPH=off ;;
   sekiro) PANEL='SHINOBI KIT'; WINDOW_GROUP='DOJO INDEX'; SYSTEM_GROUP='PROSTHETIC TOOLS'; QUICK=terminal ;;
-  pharloom) PANEL='DESK'; WINDOW_GROUP='ARRANGEMENT'; SYSTEM_GROUP='UTILITIES'; CPU_POS=popup.city; NET_POS=popup.city; SHOW_APP=off; SHOW_GRAPH=off ;;
   hallownest) PANEL='DESK'; WINDOW_GROUP='WINDOWS'; SYSTEM_GROUP='UTILITIES'; CPU_POS=popup.city; NET_POS=popup.city; VOL_POS=popup.city; SHOW_APP=off; SHOW_GRAPH=off ;;
   factorio) PANEL='CONTROL ROOM'; WINDOW_GROUP='WINDOW LAYOUT'; SYSTEM_GROUP='OPERATIONS'; QUICK=tools; KEYS_LABEL='KEYBINDS' ;;
   nyc) PANEL='Service information'; WINDOW_GROUP='Window service'; SYSTEM_GROUP='Utilities'; THEME_GROUP='Appearance'; CPU_POS=popup.city; SHOW_GRAPH=off; KEYS_LABEL='Help' ;;
@@ -265,10 +264,6 @@ case "$THEME" in
     sketchybar --set city popup.height=30 popup.background.corner_radius=10 popup.background.shadow.color=0xd0070a12 popup.background.shadow.distance=10
     sketchybar --set city popup.y_offset=10 background.border_color=0x66fcee09  # the wordmark's outline recedes; the dots carry the state
     sketchybar --set music label.max_chars=16 --set music.track label.font="$F_CHIP"
-    ;;
-  pharloom)
-    sketchybar --set city popup.height=30 popup.background.border_width=1 popup.background.corner_radius=3
-    sketchybar --set music.track label.font="$F_CHIP"
     ;;
   nyc)
     sketchybar --set menu.title background.drawing=on background.color=0xff151b2d background.height=30

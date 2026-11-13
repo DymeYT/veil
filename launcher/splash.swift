@@ -103,7 +103,6 @@ enum SceneArt {
 
     static func draw(_ scene: String, ctx: inout GraphicsContext, size: CGSize, t: Double, p: Palette) {
         switch scene {
-        case "cathedral": cathedral(&ctx, size, t, p)
         case "cavern": cavern(&ctx, size, t, p)
         case "factory": factory(&ctx, size, t, p)
         case "skyline": skyline(&ctx, size, t, p)
@@ -216,80 +215,6 @@ enum SceneArt {
     static func hudText(_ ctx: inout GraphicsContext, _ s: String, _ at: CGPoint, _ c: Color, _ align: HorizontalAlignment) {
         let text = ctx.resolve(Text(s).font(code(13, "Bold")).tracking(3).foregroundColor(c))
         ctx.draw(text, at: at, anchor: align == .leading ? .leading : .trailing)
-    }
-
-    // MARK: Pharloom: gothic arch with tracery, silk threads, needle, rising motes
-    static func cathedral(_ ctx: inout GraphicsContext, _ s: CGSize, _ t: Double, _ p: Palette) {
-        fill(&ctx, s, [p["bg_dark"], p["bg"], p["ws_active"], p["bg_dark"]], [0, 0.4, 0.75, 1])
-        let cx = s.width / 2, baseY = s.height * 0.95, w: CGFloat = 640, top = s.height * 0.08
-        glow(&ctx, CGPoint(x: cx, y: s.height * 0.42), 620, p["yellow"], 0.13)
-        glow(&ctx, CGPoint(x: cx, y: s.height * 0.42), 260, p["magenta"], 0.10)
-        _ = top
-        // lancet (pointed gothic) arch: two circle arcs of radius = span, each centred on the opposite springer
-        func arch(_ inset: CGFloat) -> Path {
-            var path = Path()
-            let span = w - inset * 2, l = cx - span / 2, rgt = cx + span / 2, spring = s.height * 0.5
-            path.move(to: CGPoint(x: l, y: baseY))
-            path.addLine(to: CGPoint(x: l, y: spring))
-            for i in 0...30 { let a = (180 + 60 * Double(i) / 30) * .pi / 180; path.addLine(to: CGPoint(x: rgt + span * CGFloat(cos(a)), y: spring + span * CGFloat(sin(a)))) }
-            for i in 0...30 { let a = (300 + 60 * Double(i) / 30) * .pi / 180; path.addLine(to: CGPoint(x: l + span * CGFloat(cos(a)), y: spring + span * CGFloat(sin(a)))) }
-            path.addLine(to: CGPoint(x: rgt, y: baseY))
-            return path
-        }
-        ctx.fill(arch(0), with: .color(p["bg_dark"].opacity(0.55)))
-        // quarry glass: a diamond lattice with a few lit panes, clipped to the window
-        var glass = ctx
-        glass.clip(to: arch(18))
-        var q = RNG(s: 4)
-        let step: CGFloat = 46
-        var gx: CGFloat = cx - w
-        while gx < cx + w {
-            glass.stroke(Path { $0.move(to: CGPoint(x: gx, y: 0)); $0.addLine(to: CGPoint(x: gx + s.height, y: s.height)) }, with: .color(p["yellow"].opacity(0.10)), lineWidth: 0.8)
-            glass.stroke(Path { $0.move(to: CGPoint(x: gx, y: 0)); $0.addLine(to: CGPoint(x: gx - s.height, y: s.height)) }, with: .color(p["yellow"].opacity(0.10)), lineWidth: 0.8)
-            gx += step
-        }
-        for _ in 0..<70 {
-            let px = cx + CGFloat(q.range(-0.5, 0.5)) * w, py = CGFloat(q.range(0.1, 0.95)) * s.height
-            let d: CGFloat = step / 2
-            let pane = Path { $0.move(to: CGPoint(x: px, y: py - d)); $0.addLine(to: CGPoint(x: px + d, y: py)); $0.addLine(to: CGPoint(x: px, y: py + d)); $0.addLine(to: CGPoint(x: px - d, y: py)) }
-            glass.fill(pane, with: .color([p["magenta"], p["yellow"], p["cyan"], p["blue"]][Int(q.next() * 4)].opacity(q.range(0.05, 0.16))))
-        }
-        ctx.stroke(arch(0), with: .color(p["yellow"].opacity(0.55)), lineWidth: 2)
-        ctx.stroke(arch(18), with: .color(p["yellow"].opacity(0.25)), lineWidth: 1)
-        // tracery: mullions and a rose window
-        for i in 1..<4 {
-            let x = cx - w / 2 + w * CGFloat(i) / 4
-            ctx.stroke(Path { $0.move(to: CGPoint(x: x, y: s.height * 0.56)); $0.addLine(to: CGPoint(x: x, y: baseY)) }, with: .color(p["yellow"].opacity(0.3)), lineWidth: 1.5)
-        }
-        let rose = CGPoint(x: cx, y: s.height * 0.24)
-        ctx.stroke(Path(ellipseIn: CGRect(x: rose.x - 90, y: rose.y - 90, width: 180, height: 180)), with: .color(p["yellow"].opacity(0.4)), lineWidth: 1.2)
-        for k in 0..<12 {
-            let a = Double(k) / 12 * .pi * 2
-            ctx.stroke(Path { $0.move(to: rose); $0.addLine(to: CGPoint(x: rose.x + cos(a) * 90, y: rose.y + sin(a) * 90)) }, with: .color(p["yellow"].opacity(0.22)), lineWidth: 0.8)
-            ctx.stroke(Path(ellipseIn: CGRect(x: rose.x + cos(a) * 60 - 14, y: rose.y + sin(a) * 60 - 14, width: 28, height: 28)), with: .color(p["magenta"].opacity(0.3)), lineWidth: 0.8)
-        }
-        // silk threads drifting across
-        var r = RNG(s: 3)
-        for i in 0..<9 {
-            let y0 = CGFloat(r.range(0.15, 0.9)) * s.height, amp = CGFloat(r.range(40, 160)), ph = r.range(0, 6) + t * 1.4
-            var path = Path()
-            path.move(to: CGPoint(x: -40, y: y0))
-            path.addCurve(to: CGPoint(x: s.width + 40, y: y0 + CGFloat(r.range(-120, 120))),
-                          control1: CGPoint(x: s.width * 0.33, y: y0 - amp * CGFloat(sin(ph))),
-                          control2: CGPoint(x: s.width * 0.66, y: y0 + amp * CGFloat(cos(ph))))
-            ctx.stroke(path, with: .color((i % 3 == 0 ? p["magenta"] : p["yellow"]).opacity(0.18 + 0.05 * Double(i % 3))), lineWidth: i % 4 == 0 ? 1.4 : 0.7)
-        }
-        // the needle
-        let n0 = CGPoint(x: s.width * 0.72, y: s.height * 0.16), n1 = CGPoint(x: s.width * 0.6, y: s.height * 0.36)
-        ctx.stroke(Path { $0.move(to: n0); $0.addLine(to: n1) }, with: .color(p["fg"].opacity(0.8)), lineWidth: 2)
-        ctx.fill(Path { $0.move(to: CGPoint(x: n1.x, y: n1.y + 10)); $0.addLine(to: CGPoint(x: n1.x - 6, y: n1.y)); $0.addLine(to: CGPoint(x: n1.x, y: n1.y - 10)); $0.addLine(to: CGPoint(x: n1.x + 6, y: n1.y)) }, with: .color(p["cyan"]))
-        // motes
-        var m = RNG(s: 11)
-        for _ in 0..<110 {
-            let x = CGFloat(m.range(0, Double(s.width))), y = (CGFloat(m.range(0, Double(s.height))) - CGFloat(t) * 80).truncatingRemainder(dividingBy: s.height)
-            let d = CGFloat(m.range(1, 3))
-            ctx.fill(Path(ellipseIn: CGRect(x: x, y: y < 0 ? y + s.height : y, width: d, height: d)), with: .color(p["yellow"].opacity(m.range(0.15, 0.55))))
-        }
     }
 
     // MARK: Hallownest: cavern, stalactites, lumafly lantern, soul wisps, the pale mask

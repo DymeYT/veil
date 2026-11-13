@@ -87,7 +87,7 @@ for i in 0 1 2 3 4; do
         esac
       fi ;;
     underline)  # roman numeral + name, a thread under the active one
-      num="${roman[$i]}"; case "$THEME" in pharloom|dark-souls-3) num='' ;; esac   # names only, a thread under the active one
+      num="${roman[$i]}"; case "$THEME" in dark-souls-3) num='' ;; esac   # names only, a thread under the active one
       base=(icon="$num" label="$n" background.height=2 background.y_offset=-11 background.corner_radius=1 background.color=0xff00e5ff)
       case $state in
         active) args+=(--set "$s" "${base[@]}" background.drawing=on icon.color=0xfffcee09 label.color=0xffffffff) ;;
