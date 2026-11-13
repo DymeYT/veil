@@ -201,26 +201,31 @@ final class VeilPanelHost: ObservableObject {
     @Published var kind: VeilPanelKind?
     @Published var musicTitle = "Nothing playing"
     @Published var musicArtist = ""
+    @Published var musicAlbum = ""
     @Published var musicSource = "Now playing"
+    @Published var musicArtwork: NSImage?
     @Published var playing = false
     @Published var statusLine = ""
+    /// AppKit screen rect of the bar button that opened the panel (nil → resolve from SketchyBar).
+    var anchorRect: NSRect?
     private var window: NSWindow?
     private var reduceMotion: Bool {
         VeilFeature.forceReduceMotion || NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
     }
 
-    func toggle(_ k: VeilPanelKind) {
+    func toggle(_ k: VeilPanelKind, near anchor: NSRect? = nil) {
         if kind == k { dismiss(); return }
-        present(k)
+        present(k, near: anchor)
     }
 
-    func present(_ k: VeilPanelKind) {
+    func present(_ k: VeilPanelKind, near anchor: NSRect? = nil) {
         if VeilFeature.sketchybarPopups {
             // Caller should use SketchyBar; keep host quiet.
             dismiss()
             return
         }
         kind = k
+        anchorRect = anchor ?? Self.sketchybarItemRect(for: k) ?? anchorRect
         ensureWindow()
         refreshContent()
         guard let window else { return }
@@ -238,6 +243,7 @@ final class VeilPanelHost: ObservableObject {
     func dismiss() {
         guard let window, window.isVisible else {
             kind = nil
+            anchorRect = nil
             self.window?.contentView = nil
             self.window = nil
             return
@@ -247,6 +253,7 @@ final class VeilPanelHost: ObservableObject {
             window.contentView = nil
             self?.window = nil
             self?.kind = nil
+            self?.anchorRect = nil
         }
         if reduceMotion {
             finish()
@@ -260,13 +267,90 @@ final class VeilPanelHost: ObservableObject {
         }
     }
 
-    private func ensureWindow() {
-        let screen = NSScreen.main ?? NSScreen.screens[0]
+    /// SketchyBar `bounding_rects` use top-left display coords → AppKit bottom-left.
+    static func sketchybarItemRect(for kind: VeilPanelKind) -> NSRect? {
+        let item: String
+        switch kind {
+        case .music: item = "music"
+        case .control: item = "city"
+        case .keys: item = "keys"
+        }
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/opt/homebrew/bin/sketchybar")
+        if !FileManager.default.isExecutableFile(atPath: p.executableURL!.path) {
+            p.executableURL = URL(fileURLWithPath: "/usr/local/bin/sketchybar")
+        }
+        p.arguments = ["--query", item]
+        let pipe = Pipe()
+        p.standardOutput = pipe
+        p.standardError = FileHandle.nullDevice
+        guard (try? p.run()) != nil else { return nil }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        p.waitUntilExit()
+        guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let rects = obj["bounding_rects"] as? [String: Any] else { return nil }
+        // Prefer the display under the mouse; else first rect.
+        let mouse = NSEvent.mouseLocation
+        var chosen: (origin: [Double], size: [Double])?
+        for (_, v) in rects {
+            guard let r = v as? [String: Any],
+                  let origin = r["origin"] as? [Double], origin.count == 2,
+                  let size = r["size"] as? [Double], size.count == 2 else { continue }
+            if chosen == nil { chosen = (origin, size) }
+            // Heuristic match: same X band as mouse on that display
+            if abs(origin[0] + size[0] / 2 - mouse.x) < 400 { chosen = (origin, size); break }
+        }
+        guard let chosen else { return nil }
+        let screen = NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) })
+            ?? NSScreen.main ?? NSScreen.screens[0]
+        // SketchyBar Y is measured downward from the top of the display.
+        let x = screen.frame.minX + chosen.origin[0]
+        let y = screen.frame.maxY - chosen.origin[1] - chosen.size[1]
+        return NSRect(x: x, y: y, width: chosen.size[0], height: chosen.size[1])
+    }
+
+    private func panelSize() -> (CGFloat, CGFloat) {
         let width: CGFloat = 340
-        let height: CGFloat = kind == .control ? 420 : 210
-        let x = screen.visibleFrame.maxX - width - 16
-        let y = screen.visibleFrame.maxY - height - 12
-        let frame = NSRect(x: x, y: y, width: width, height: height)
+        let height: CGFloat
+        switch kind {
+        case .control: height = 420
+        case .keys: height = 360
+        case .music: height = musicArtwork == nil ? 210 : 280
+        case nil: height = 210
+        }
+        return (width, height)
+    }
+
+    /// Place the panel beside the bar button: above a bottom bar, below a top bar; X centered on the button.
+    private func frameNearAnchor(width: CGFloat, height: CGFloat) -> NSRect {
+        let screen = NSScreen.screens.first(where: {
+            if let a = anchorRect { return a.intersects($0.frame) }
+            return NSMouseInRect(NSEvent.mouseLocation, $0.frame, false)
+        }) ?? NSScreen.main ?? NSScreen.screens[0]
+        let gap: CGFloat = 8
+        let barBottom = Palette.load().s("bar_position", "top") == "bottom"
+        let anchor = anchorRect ?? {
+            // Fallback: mouse X on the bar edge.
+            let m = NSEvent.mouseLocation
+            let y = barBottom ? screen.visibleFrame.minY : screen.visibleFrame.maxY - 28
+            return NSRect(x: m.x - 12, y: y, width: 24, height: 28)
+        }()
+        var x = anchor.midX - width / 2
+        x = min(max(x, screen.visibleFrame.minX + 8), screen.visibleFrame.maxX - width - 8)
+        if barBottom {
+            // Open above the button when the bar is at the bottom.
+            let above = anchor.minY - gap - height
+            return NSRect(x: x, y: max(above, screen.visibleFrame.minY + 4), width: width, height: height)
+        } else {
+            // Open below the button when the bar is at the top.
+            let below = anchor.maxY + gap
+            return NSRect(x: x, y: min(below, screen.visibleFrame.maxY - height - 4), width: width, height: height)
+        }
+    }
+
+    private func ensureWindow() {
+        let (width, height) = panelSize()
+        let frame = frameNearAnchor(width: width, height: height)
         if let window {
             window.setFrame(frame, display: true)
             window.contentView = NSHostingView(rootView: VeilPanelView(host: self).environmentObject(self))
@@ -292,43 +376,68 @@ final class VeilPanelHost: ObservableObject {
         case nil: break
         }
         if let window {
-            let height: CGFloat = kind == .control ? 420 : (kind == .keys ? 360 : 210)
-            var f = window.frame
-            f.size.height = height
-            if let screen = window.screen ?? NSScreen.main {
-                f.origin.y = screen.visibleFrame.maxY - height - 12
-            }
-            window.setFrame(f, display: true)
+            let (width, height) = panelSize()
+            let frame = frameNearAnchor(width: width, height: height)
+            window.setFrame(frame, display: true)
             window.contentView = NSHostingView(rootView: VeilPanelView(host: self).environmentObject(self))
         }
     }
 
+    /// Glyph Quick / other surfaces can refresh now-playing without opening the music panel.
+    func ensureMusicMeta() { loadMusic() }
+
     private func loadMusic() {
-        // media-control without artwork — avoids multi‑MB JSON / RSS spikes in the panel.
-        let mc = Process()
-        mc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        mc.arguments = ["media-control", "get", "--no-artwork"]
-        let mcp = Pipe()
-        mc.standardOutput = mcp
-        mc.standardError = FileHandle.nullDevice
-        if (try? mc.run()) != nil {
-            let data = mcp.fileHandleForReading.readDataToEndOfFile()
-            mc.waitUntilExit()
-            if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let title = (obj["title"] as? String)?.nilIfEmpty ?? (obj["name"] as? String)?.nilIfEmpty {
-                musicTitle = title
-                musicArtist = (obj["artist"] as? String) ?? (obj["artistName"] as? String) ?? ""
-                let bundle = (obj["bundleIdentifier"] as? String) ?? (obj["bundleID"] as? String) ?? ""
-                musicSource = bundle.split(separator: ".").last.map(String.init)
-                    ?? (obj["displayName"] as? String) ?? "Now playing"
-                if bundle.lowercased().contains("cider") { musicSource = "Cider" }
-                playing = (obj["playing"] as? Bool)
-                    ?? (obj["isPlaying"] as? Bool)
-                    ?? ((obj["playbackRate"] as? Double).map { $0 > 0 } ?? false)
-                return
+        // Metadata first (cheap); artwork in a second call so the panel can paint title immediately.
+        applyMusicMetadata(from: mediaControlJSON(noArtwork: true))
+        if musicTitle == "Nothing playing" {
+            applyMusicSnapshotFallback()
+        }
+        // Artwork off the main hot path. Cider often omits artworkData on the first get —
+        // retry, and persist a JPEG cache so the panel can load from disk on the main thread.
+        let expectedTitle = musicTitle
+        let cacheURL = URL(fileURLWithPath: NSHomeDirectory() + "/Library/Caches/veil-music-art.jpg")
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            var wrote = false
+            for attempt in 0..<6 {
+                if let obj = Self.mediaControlJSONSync(noArtwork: false),
+                   let raw = obj["artworkData"] as? String, raw.count > 200,
+                   let data = Data(base64Encoded: raw, options: [.ignoreUnknownCharacters]) {
+                    try? data.write(to: cacheURL, options: .atomic)
+                    wrote = true
+                    break
+                }
+                if attempt < 5 { Thread.sleep(forTimeInterval: 0.4) }
+            }
+            DispatchQueue.main.async {
+                guard let self else { return }
+                if wrote, let img = NSImage(contentsOf: cacheURL) {
+                    self.musicArtwork = img
+                } else if self.musicTitle != expectedTitle {
+                    self.musicArtwork = nil
+                }
+                if self.kind == .music { self.ensureWindow() }
             }
         }
-        // Fall back to the SketchyBar plugin snapshot (cider-bridge / SIP helper).
+    }
+
+    private func applyMusicMetadata(from obj: [String: Any]?) {
+        guard let obj,
+              let title = (obj["title"] as? String)?.nilIfEmpty ?? (obj["name"] as? String)?.nilIfEmpty else {
+            return
+        }
+        musicTitle = title
+        musicArtist = (obj["artist"] as? String) ?? (obj["artistName"] as? String) ?? ""
+        musicAlbum = (obj["album"] as? String) ?? (obj["albumName"] as? String) ?? ""
+        let bundle = (obj["bundleIdentifier"] as? String) ?? (obj["bundleID"] as? String) ?? ""
+        musicSource = bundle.split(separator: ".").last.map(String.init)
+            ?? (obj["displayName"] as? String) ?? "Now playing"
+        if bundle.lowercased().contains("cider") { musicSource = "Cider" }
+        playing = (obj["playing"] as? Bool)
+            ?? (obj["isPlaying"] as? Bool)
+            ?? ((obj["playbackRate"] as? Double).map { $0 > 0 } ?? false)
+    }
+
+    private func applyMusicSnapshotFallback() {
         let snap = Process()
         snap.executableURL = URL(fileURLWithPath: "/bin/bash")
         snap.arguments = ["-lc", #""$HOME/.config/sketchybar/plugins/veil.sh" music snapshot 2>/dev/null || true"#]
@@ -342,6 +451,7 @@ final class VeilPanelHost: ObservableObject {
                let title = (obj["title"] as? String)?.nilIfEmpty {
                 musicTitle = title
                 musicArtist = (obj["artist"] as? String) ?? ""
+                musicAlbum = (obj["album"] as? String) ?? ""
                 musicSource = (obj["source"] as? String)?.nilIfEmpty ?? "Now playing"
                 playing = (obj["state"] as? String) == "playing"
                 return
@@ -349,8 +459,35 @@ final class VeilPanelHost: ObservableObject {
         }
         musicTitle = "Nothing playing"
         musicArtist = ""
+        musicAlbum = ""
         musicSource = "Now playing"
+        musicArtwork = nil
         playing = false
+    }
+
+    private func mediaControlJSON(noArtwork: Bool) -> [String: Any]? {
+        Self.mediaControlJSONSync(noArtwork: noArtwork)
+    }
+
+    nonisolated private static func mediaControlJSONSync(noArtwork: Bool) -> [String: Any]? {
+        let mc = Process()
+        mc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        mc.arguments = noArtwork ? ["media-control", "get", "--no-artwork"] : ["media-control", "get"]
+        let mcp = Pipe()
+        mc.standardOutput = mcp
+        mc.standardError = FileHandle.nullDevice
+        guard (try? mc.run()) != nil else { return nil }
+        let data = mcp.fileHandleForReading.readDataToEndOfFile()
+        mc.waitUntilExit()
+        return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+    }
+
+    nonisolated private static func decodeArtwork(from obj: [String: Any]?) -> NSImage? {
+        guard let raw = obj?["artworkData"] as? String, !raw.isEmpty,
+              let data = Data(base64Encoded: raw, options: [.ignoreUnknownCharacters]),
+              let img = NSImage(data: data) else { return nil }
+        // Decode off-main; SwiftUI `.resizable()` scales for the 72pt tile (no AppKit lockFocus).
+        return img
     }
 
     private func loadStatus() {
@@ -394,7 +531,10 @@ final class VeilPanelHost: ObservableObject {
         p.executableURL = URL(fileURLWithPath: "/bin/bash")
         p.arguments = ["-lc", "\"$HOME/.config/sketchybar/plugins/veil.sh\" music \(action)"]
         try? p.run()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in self?.loadMusic() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+            self?.loadMusic()
+            if self?.kind == .music { self?.ensureWindow() }
+        }
     }
 
     func runVeil(_ args: [String]) {
@@ -440,16 +580,53 @@ struct VeilPanelView: View {
     private var musicBody: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(host.musicSource.uppercased())
-                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                .font(panelFont(11, .bold, mono: true))
                 .foregroundStyle(p["cyan"])
-            Text(host.musicTitle)
-                .font(.system(size: 18, weight: .semibold, design: .default))
-                .foregroundStyle(p["fg"])
-                .lineLimit(2)
-            if !host.musicArtist.isEmpty {
-                Text(host.musicArtist)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(p["dim"])
+            HStack(alignment: .top, spacing: 12) {
+                Group {
+                    if let art = host.musicArtwork {
+                        Image(nsImage: art)
+                            .resizable()
+                            .aspectRatio(1, contentMode: .fill)
+                            .id(ObjectIdentifier(art))
+                    } else if let disk = NSImage(contentsOfFile: NSHomeDirectory() + "/Library/Caches/veil-music-art.jpg") {
+                        Image(nsImage: disk)
+                            .resizable()
+                            .aspectRatio(1, contentMode: .fill)
+                    } else {
+                        ZStack {
+                            p["surface"]
+                            Image(systemName: "music.note")
+                                .font(.system(size: 22, weight: .semibold))
+                                .foregroundStyle(p["dim"])
+                        }
+                    }
+                }
+                .frame(width: 72, height: 72)
+                .clipShape(RoundedRectangle(cornerRadius: themeCorner, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: themeCorner, style: .continuous)
+                        .strokeBorder(p["border"].opacity(0.7), lineWidth: 1)
+                )
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(host.musicTitle)
+                        .font(panelFont(17, .semibold))
+                        .foregroundStyle(p["fg"])
+                        .lineLimit(2)
+                    if !host.musicArtist.isEmpty {
+                        Text(host.musicArtist)
+                            .font(panelFont(13, .medium))
+                            .foregroundStyle(p["dim"])
+                            .lineLimit(1)
+                    }
+                    if !host.musicAlbum.isEmpty {
+                        Text(host.musicAlbum)
+                            .font(panelFont(11, .medium, mono: true))
+                            .foregroundStyle(p["comment"])
+                            .lineLimit(1)
+                    }
+                }
+                Spacer(minLength: 0)
             }
             HStack(spacing: 10) {
                 panelButton("backward.fill") { host.musicAction("previous") }
@@ -463,6 +640,22 @@ struct VeilPanelView: View {
             }
             .padding(.top, 4)
         }
+    }
+
+    private var themeCorner: CGFloat {
+        // Match each theme's launcher radius language (Glyph-style round vs Eclipse square).
+        let r = p.num("l_radius", 14)
+        return max(4, min(r, 22))
+    }
+
+    private func panelFont(_ size: CGFloat, _ weight: Font.Weight, mono: Bool = false) -> Font {
+        let name = mono ? p.s("ui_mono", "") : p.s("ui_font", "")
+        if name.isEmpty {
+            return mono
+                ? .system(size: size, weight: weight, design: .monospaced)
+                : .system(size: size, weight: weight)
+        }
+        return .custom(name, size: size).weight(weight)
     }
 
     private var controlBody: some View {
@@ -734,14 +927,22 @@ struct VeilBarView: View {
             Spacer(minLength: 8)
             island {
                 HStack(spacing: 6) {
-                    Button { animateClick { VeilPanelHost.shared.toggle(.music) } } label: {
+                    Button {
+                        animateClick {
+                            VeilPanelHost.shared.toggle(.music, near: Self.anchorNearMouse(size: NSSize(width: 28, height: 24)))
+                        }
+                    } label: {
                         Image(systemName: "music.note")
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(p["fg"])
                             .frame(width: 28, height: 24)
                     }
                     .buttonStyle(.plain).pressable()
-                    Button { animateClick { VeilPanelHost.shared.toggle(.keys) } } label: {
+                    Button {
+                        animateClick {
+                            VeilPanelHost.shared.toggle(.keys, near: Self.anchorNearMouse(size: NSSize(width: 28, height: 24)))
+                        }
+                    } label: {
                         Image(systemName: "keyboard")
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(p["dim"])
@@ -766,7 +967,7 @@ struct VeilBarView: View {
                 if NSEvent.modifierFlags.contains(.option) {
                     bar.revealMenuBar()
                 } else {
-                    VeilPanelHost.shared.toggle(.control)
+                    VeilPanelHost.shared.toggle(.control, near: Self.anchorNearMouse(size: NSSize(width: 80, height: 28)))
                 }
             }
         } label: {
@@ -817,6 +1018,12 @@ struct VeilBarView: View {
         } else {
             content()
         }
+    }
+
+    /// Approximate the clicked bar control from the mouse (Veil bar path).
+    private static func anchorNearMouse(size: NSSize) -> NSRect {
+        let m = NSEvent.mouseLocation
+        return NSRect(x: m.x - size.width / 2, y: m.y - size.height / 2, width: size.width, height: size.height)
     }
 
     private func animateClick(_ action: @escaping () -> Void) {

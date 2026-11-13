@@ -41,6 +41,7 @@ logo = """  ╱╱  NIGHT CITY
 
 # Shape, type and layout (see ECOSYSTEMS.md). Values may name colors as %role%.
 [style]
+glyph_shell = "on"  # Glyph surfaces + Style + edge OSD available on every theme
 l_symbol_size = "30"   # search-field mark height in points
 l_corner = "chamfer"   # launcher outline: round | chamfer (cut corners)
 l_button = "outline"    # primary action: fill | outline (a lit slab outshouted the results)

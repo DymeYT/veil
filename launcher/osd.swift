@@ -114,12 +114,12 @@ struct OSDView: View {
         }
     }
     var percent: String { m.level.map { "\(Int(($0 * 100).rounded()))" } ?? "" }
-    var accent: Color { theme == "nothing" ? p["red"] : p["cyan"] }
+    /// Glyph ideology: one live accent (theme cyan / red) on every theme — not Nothing-only.
+    var accent: Color { theme == "nothing" || theme == "eclipse" ? p["red"] : p["cyan"] }
     var label: String {
         switch theme {
         case "eclipse": return m.title.lowercased()
         case "dark-souls-3": return m.title
-        case "nothing": return m.title.uppercased()
         default: return m.title.uppercased()
         }
     }
@@ -191,24 +191,25 @@ struct OSDView: View {
                     Rectangle().fill(accent).frame(width: g.size.width * l)
                 }
             }
-        case "nothing":
-            // Glyph edge lights: a row of dots; lit count follows level; one red leading bead.
-            HStack(spacing: 3) {
-                ForEach(0..<12, id: \.self) { i in
-                    let lit = Double(i) < (l * 12).rounded()
-                    Circle()
-                        .fill(i == 0 && lit ? accent : (lit ? Color.white : Color.white.opacity(0.18)))
-                        .frame(width: 5, height: 5)
-                }
-            }.frame(maxWidth: .infinity, alignment: .leading)
+        case "nothing", "umbra", "hallownest", "nyc", "arasaka", "factorio",
+             "elden-ring", "sekiro":
+            // Glyph edge lights (shared ideology): dots + one accent bead in the theme palette.
+            glyphDots(l)
         default:
-            GeometryReader { g in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(Color.white.opacity(0.14))
-                    Capsule().fill(accent).frame(width: g.size.width * l)
-                }
-            }
+            // Future themes inherit Glyph edge language unless they add a bespoke meter above.
+            glyphDots(l)
         }
+    }
+
+    @ViewBuilder private func glyphDots(_ l: Double) -> some View {
+        HStack(spacing: 3) {
+            ForEach(0..<12, id: \.self) { i in
+                let lit = Double(i) < (l * 12).rounded()
+                Circle()
+                    .fill(i == 0 && lit ? accent : (lit ? Color.white : Color.white.opacity(0.18)))
+                    .frame(width: 5, height: 5)
+            }
+        }.frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

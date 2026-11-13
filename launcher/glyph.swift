@@ -269,14 +269,18 @@ struct GlyphRoot: View {
     var bg: Color { p["bg"] }
 
     func ui(_ size: CGFloat, _ w: Font.Weight = .medium) -> Font {
-        let n = p.s("ui_font", "Space Grotesk")
+        let n = p.s("ui_font", "")
         return n.isEmpty ? .system(size: size, weight: w) : .custom(n, size: size).weight(w)
     }
     func mono(_ size: CGFloat, _ w: Font.Weight = .bold) -> Font {
-        let n = p.s("ui_mono", "Space Mono")
+        let n = p.s("ui_mono", "")
         return n.isEmpty ? .system(size: size, weight: w, design: .monospaced) : .custom(n, size: size).weight(w)
     }
-    func doto(_ size: CGFloat) -> Font { .custom("Doto", size: size).weight(.bold) }
+    /// Display digits: Doto on Nothing; each other theme keeps its own UI face (Glyph ideology, theme voice).
+    func doto(_ size: CGFloat) -> Font {
+        if p.s("theme_id", "") == "nothing" { return .custom("Doto", size: size).weight(.bold) }
+        return ui(size, .bold)
+    }
 
     var body: some View {
         ZStack {
@@ -370,18 +374,32 @@ struct GlyphRoot: View {
 
     var mediaStrip: some View {
         HStack(spacing: 14) {
-            Circle().fill(Color.white.opacity(0.08)).overlay(DotField().clipShape(Circle())).frame(width: 52, height: 52)
+            Group {
+                if let art = VeilPanelHost.shared.musicArtwork {
+                    Image(nsImage: art).resizable().aspectRatio(1, contentMode: .fill)
+                } else {
+                    Circle().fill(Color.white.opacity(0.08)).overlay(DotField().clipShape(Circle()))
+                }
+            }
+            .frame(width: 52, height: 52)
+            .clipShape(Circle())
             VStack(alignment: .leading, spacing: 2) {
                 Text("NOW PLAYING").font(mono(9)).foregroundStyle(muted)
                 Text(VeilPanelHost.shared.musicTitle).font(ui(14, .semibold)).foregroundStyle(fg).lineLimit(1)
                 Text(VeilPanelHost.shared.musicArtist).font(ui(12)).foregroundStyle(muted).lineLimit(1)
             }
             Spacer()
-            Circle().fill(red).frame(width: 36, height: 36)
-                .overlay(Image(systemName: "play.fill").font(.system(size: 12, weight: .bold)).foregroundStyle(.white))
+            Button {
+                VeilPanelHost.shared.musicAction("playpause")
+            } label: {
+                Circle().fill(p["cyan"]).frame(width: 36, height: 36)
+                    .overlay(Image(systemName: VeilPanelHost.shared.playing ? "pause.fill" : "play.fill")
+                        .font(.system(size: 12, weight: .bold)).foregroundStyle(.white))
+            }.buttonStyle(.plain)
         }
         .padding(12)
         .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(bg))
+        .onAppear { VeilPanelHost.shared.ensureMusicMeta() }
     }
 
     // MARK: Deck
@@ -523,18 +541,23 @@ struct GlyphRoot: View {
                 }
                 Spacer()
                 LazyVGrid(columns: [GridItem(.fixed(150)), GridItem(.fixed(150))], spacing: 14) {
-                    homeTile("CAL", Text("\(Calendar.current.component(.day, from: Date()))").font(doto(42)))
+                    // Calendar Glyph slot → Quick (calendar remains via clock click / desktop clock).
+                    Button { shell.present(.quick) } label: {
+                        homeTile("QUICK", Image(systemName: "switch.2").font(.system(size: 36, weight: .medium)))
+                    }.buttonStyle(.plain)
                     homeTile("GPU", Text("·").font(doto(42)))
                     homeTile("SYS", Text("CPU").font(mono(12)))
                     ZStack {
                         Circle().stroke(Color.white.opacity(0.15), lineWidth: 8)
-                        Circle().trim(from: 0, to: 0.55).stroke(red, style: StrokeStyle(lineWidth: 8, lineCap: .round))
+                        Circle().trim(from: 0, to: 0.55).stroke(p["cyan"], style: StrokeStyle(lineWidth: 8, lineCap: .round))
                             .rotationEffect(.degrees(-90))
                         Text("CAVA").font(mono(10)).foregroundStyle(muted)
                     }
                     .frame(width: 150, height: 150)
                     .background(Circle().fill(panel))
                 }
+                Text("Calendar · click clock on desktop Glyph or ⌃⌥C")
+                    .font(mono(9)).foregroundStyle(muted)
             }
             .padding(60)
             VStack {

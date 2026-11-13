@@ -247,6 +247,7 @@ func glyphSurfaceItems() -> [Item] {
         ("Glyph Style", "Theme creator · ⌃⌥Y", "paintpalette", "style"),
         ("Glyph Lock (mock)", "Inert lock UI", "lock", "lockMock"),
         ("Glyph Login (mock)", "SDDM analog mock", "person.crop.circle", "loginMock"),
+        ("Desktop Glyphs", "Pin / show Home·Quick·Cava on the wallpaper", "rectangle.on.rectangle", "DESKTOP"),
         ("Rice: Nothing", "Apply Nothing OS theme", "circle.fill", "APPLY:nothing"),
     ]
     return surfaces.map { title, sub, sym, kind in
@@ -255,6 +256,12 @@ func glyphSurfaceItems() -> [Item] {
             let bin = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".config/veil/bin/veil-theme").path
             return Item(kind: .action, title: title, subtitle: sub, symbol: sym,
                         action: .run([bin, "apply", id]), score: 80)
+        }
+        if kind == "DESKTOP" {
+            return Item(kind: .action, title: title, subtitle: sub, symbol: sym,
+                        action: .run(["/usr/bin/osascript", "-l", "JavaScript", "-e",
+                                      "ObjC.import('Foundation'); $.NSDistributedNotificationCenter.defaultCenter.postNotificationNameObjectUserInfoDeliverImmediately('app.veil.desktop-glyphs', 'toggle', $(), true)"]),
+                        score: 90)
         }
         return Item(kind: .action, title: title, subtitle: sub, symbol: sym,
                     action: .run(["/usr/bin/osascript", "-l", "JavaScript", "-e",

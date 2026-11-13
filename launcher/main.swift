@@ -2312,6 +2312,8 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         // Glyph / Nothing OS surfaces (⌃⌥ + letter). Does not steal Option←/→ word navigation.
         GlyphShell.registerHotkeys()
+        // Pin-able desktop Glyph widgets (wallpaper layer) — every theme.
+        if !veilIsOff { DesktopGlyphBoard.shared.start() }
 
         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] e in
             guard let self, self.panel.isVisible,
@@ -2601,12 +2603,23 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         DistributedNotificationCenter.default().addObserver(forName: Notification.Name("app.veil.panel"), object: nil, queue: .main) { n in
             let raw = ((n.object as? String) ?? "").lowercased()
             Task { @MainActor in
+                // Re-resolve SketchyBar button bounds each open so panels hug the clicked item.
                 switch raw {
-                case "music": VeilPanelHost.shared.toggle(.music)
-                case "control", "city": VeilPanelHost.shared.toggle(.control)
-                case "keys": VeilPanelHost.shared.toggle(.keys)
+                case "music": VeilPanelHost.shared.toggle(.music, near: VeilPanelHost.sketchybarItemRect(for: .music))
+                case "control", "city": VeilPanelHost.shared.toggle(.control, near: VeilPanelHost.sketchybarItemRect(for: .control))
+                case "keys": VeilPanelHost.shared.toggle(.keys, near: VeilPanelHost.sketchybarItemRect(for: .keys))
                 case "dismiss", "off": VeilPanelHost.shared.dismiss()
                 default: break
+                }
+            }
+        }
+        DistributedNotificationCenter.default().addObserver(forName: Notification.Name("app.veil.desktop-glyphs"), object: nil, queue: .main) { n in
+            let raw = ((n.object as? String) ?? "").lowercased()
+            Task { @MainActor in
+                switch raw {
+                case "toggle", "on", "off": DesktopGlyphBoard.shared.toggleEnabled()
+                case "refresh", "reload": DesktopGlyphBoard.shared.refresh()
+                default: DesktopGlyphBoard.shared.start()
                 }
             }
         }
@@ -2774,6 +2787,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         model.palette = p
         model.ncCache = ncItems(liveWorkspaceNames(paletteWS: model.wsNames))
         if model.shown { model.search() }
+        Task { @MainActor in DesktopGlyphBoard.shared.refresh() }
         splash?.orderOut(nil); splash?.contentView = nil
         guard !veilIsOff, let screen = NSScreen.screens.first(where: { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) }) ?? NSScreen.main else { return }
         let w = NSWindow(contentRect: screen.frame, styleMask: .borderless, backing: .buffered, defer: false)

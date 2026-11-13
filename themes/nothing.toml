@@ -40,6 +40,7 @@ NOTHING
 GLYPH"""
 
 [style]
+glyph_shell = "on"  # Glyph surfaces + Style + edge OSD available on every theme
 l_layout = "nothing"
 l_detail = "panel"
 l_corner = "round"

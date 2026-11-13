@@ -37,6 +37,7 @@ ws = "FOCUS BUILD STUDY MEDIA FLOAT"
 logo = "◐  UMBRA"
 
 [style]
+glyph_shell = "on"  # Glyph surfaces + Style + edge OSD available on every theme
 l_layout = "umbra"
 l_detail = "panel"
 l_corner = "round"

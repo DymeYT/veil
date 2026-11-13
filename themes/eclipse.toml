@@ -40,6 +40,7 @@ STRUGGLE"""
 
 # Shape, type and layout (see ECOSYSTEMS.md). Values may name colors as %role%.
 [style]
+glyph_shell = "on"  # Glyph surfaces + Style + edge OSD available on every theme
 l_symbol_size = "40"   # search-field mark height in points
 l_scrim = "true"
 l_button = "outline"   # a crimson outline, so the Brand stays the loudest mark
