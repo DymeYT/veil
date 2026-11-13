@@ -255,6 +255,7 @@ final class GlyphShell: ObservableObject {
 
 struct GlyphRoot: View {
     @ObservedObject var shell: GlyphShell
+    @ObservedObject private var veilPanel = VeilPanelHost.shared
     let kind: GlyphKind
     let p: Palette
     var red: Color { p["red"] }
@@ -320,7 +321,9 @@ struct GlyphRoot: View {
                 Text("QUICK").font(mono(11)).foregroundStyle(muted).tracking(2)
             }
             HStack(spacing: 10) {
-                pill("Wi‑Fi", "wifi"); pill("Bluetooth", "wave.3.right"); pill("Focus", "moon.fill")
+                pill("Wi‑Fi", veilPanel.wifiOn ? "wifi" : "wifi.slash", on: veilPanel.wifiOn) { veilPanel.toggleWifi() }
+                pill("Bluetooth", "wave.3.right", on: veilPanel.bluetoothOn) { veilPanel.toggleBluetooth() }
+                pill("Focus", "moon.fill", on: veilPanel.focusOn) { veilPanel.enableDoNotDisturb() }
             }
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                 tile("Dark", "circle.lefthalf.filled") { shell.applyStylePack(id: "nothing") }
@@ -330,8 +333,8 @@ struct GlyphRoot: View {
                 tile("Buds", "earbuds") { shell.present(.buds) }
                 tile("Power", "power") { shell.present(.power) }
             }
-            sliderRow("VOLUME")
-            sliderRow("BRIGHTNESS")
+            liveSlider("VOLUME", isVolume: true)
+            liveSlider("BRIGHTNESS", isVolume: false)
             mediaStrip
             Text("Notifications · empty").font(ui(12)).foregroundStyle(muted)
         }
@@ -340,16 +343,38 @@ struct GlyphRoot: View {
         .background(opaquePanel(28))
         .clipShape(RoundedRectangle(cornerRadius: 28, style: .circular))
             .compositingGroup()
+        .onAppear { veilPanel.refreshControlToggles() }
     }
 
-    func pill(_ t: String, _ sym: String) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: sym).font(.system(size: 11, weight: .semibold))
-            Text(t.uppercased()).font(mono(10))
+    func pill(_ t: String, _ sym: String, on: Bool = false, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: sym).font(.system(size: 11, weight: .semibold))
+                Text(t.uppercased()).font(mono(10))
+            }
+            .foregroundStyle(on ? p["bg_dark"] : fg)
+            .padding(.horizontal, 12).padding(.vertical, 8)
+            .background(Capsule().fill(on ? p["yellow"] : bg))
         }
-        .foregroundStyle(fg)
-        .padding(.horizontal, 12).padding(.vertical, 8)
-        .background(Capsule().fill(bg))
+        .buttonStyle(.plain)
+    }
+
+    /// Live system volume / brightness — was a decorative GeometryReader husk.
+    func liveSlider(_ label: String, isVolume: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(label).font(mono(9)).foregroundStyle(muted).tracking(2)
+            Slider(value: Binding(
+                get: {
+                    if isVolume { return veilPanel.muted ? 0 : veilPanel.volumeLevel }
+                    return veilPanel.brightnessLevel
+                },
+                set: { v in
+                    if isVolume { veilPanel.setVolume(v) }
+                    else { veilPanel.setBrightness(v) }
+                }
+            ), in: 0...1)
+            .tint(fg)
+        }
     }
 
     func tile(_ t: String, _ sym: String, _ action: @escaping () -> Void) -> some View {
@@ -362,18 +387,6 @@ struct GlyphRoot: View {
             .frame(maxWidth: .infinity, minHeight: 72)
             .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(bg))
         }.buttonStyle(.plain)
-    }
-
-    func sliderRow(_ label: String) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(label).font(mono(9)).foregroundStyle(muted).tracking(2)
-            GeometryReader { g in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(Color.white.opacity(0.08))
-                    Capsule().fill(Color.white).frame(width: g.size.width * 0.55)
-                }
-            }.frame(height: 10)
-        }
     }
 
     var mediaStrip: some View {
@@ -554,7 +567,7 @@ struct GlyphRoot: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .layoutPriority(1)
                 LazyVGrid(columns: [GridItem(.fixed(150)), GridItem(.fixed(150))], spacing: 14) {
-                    // Calendar Glyph slot → Quick (calendar remains via clock click / desktop clock).
+                    // Calendar Glyph slot → Quick (bar date + desktop clock also open Quick).
                     Button { shell.present(.quick) } label: {
                         homeTile("QUICK", Image(systemName: "switch.2").font(.system(size: 36, weight: .medium)))
                     }.buttonStyle(.plain)

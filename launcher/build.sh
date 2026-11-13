@@ -39,6 +39,7 @@ cat > "$stage/Contents/Info.plist" <<PLIST
   <key>NSCalendarsFullAccessUsageDescription</key><string>Veil Search shows upcoming events and creates events you type.</string>
   <key>NSRemindersFullAccessUsageDescription</key><string>Veil Search creates reminders you type.</string>
   <key>NSScreenCaptureUsageDescription</key><string>Veil Search captures live window previews for Workspace Overview.</string>
+  <key>NSBluetoothAlwaysUsageDescription</key><string>Veil Search reads Bluetooth power and accessory battery levels for the control strip and Buds Glyph.</string>
   <key>LSMinimumSystemVersion</key><string>14.0</string>
 </dict></plist>
 PLIST

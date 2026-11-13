@@ -518,7 +518,7 @@ final class DesktopGlyphBoard: ObservableObject {
         }
         if let id = pendingID, !pendingResize, pinAtScreen(NSEvent.mouseLocation)?.id == id {
             switch id {
-            case .clock: GlyphShell.shared.present(.cal)
+            case .clock: GlyphShell.shared.present(.quick)  // VEI-45: date/clock → Quick (not calendar-only)
             case .quick: GlyphShell.shared.present(.quick)
             case .media: VeilPanelHost.shared.toggle(.music, near: nil)
             default: break
@@ -907,7 +907,7 @@ struct DesktopGlyphCanvas: View {
             Text(dateLine()).font(mono(7)).foregroundStyle(p["comment"]).lineLimit(1).minimumScaleFactor(0.6)
             Text(greeting()).font(ui(10)).foregroundStyle(p["fg"]).lineLimit(1).minimumScaleFactor(0.7)
             Spacer(minLength: 0)
-            Text("CAL").font(mono(7)).foregroundStyle(p["cyan"])
+            Text("QUICK").font(mono(7)).foregroundStyle(p["cyan"])
         }
         .padding(8)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)

@@ -223,6 +223,7 @@ final class VeilPanelHost: ObservableObject {
     /// Live control-panel toggles (VEI-39).
     @Published var wifiOn = true
     @Published var bluetoothOn = true
+    @Published var focusOn = false
     @Published var volumeLevel: Double = 0.5
     @Published var brightnessLevel: Double = 0.7
     @Published var muted = false
@@ -364,7 +365,8 @@ final class VeilPanelHost: ObservableObject {
         switch kind {
         case .control: width = 360; height = 520
         case .keys: width = 340; height = 360
-        case .music: width = 340; height = musicArtwork == nil ? 210 : 280
+        // Compact: content-sized — avoid sparse empty chrome under the track row.
+        case .music: width = 288; height = musicArtwork == nil ? 148 : 168
         case nil: width = 1; height = 1 // unused — ensureWindow refuses nil kind
         }
         return (width, height)
@@ -453,17 +455,19 @@ final class VeilPanelHost: ObservableObject {
         refreshControlToggles()
     }
 
-    /// Snapshot Wi‑Fi / BT / volume / brightness for live control chrome.
+    /// Snapshot Wi‑Fi / BT / Focus / volume / brightness for live control chrome.
     func refreshControlToggles() {
         DispatchQueue.global(qos: .userInitiated).async {
             let wifi = SystemControls.wifiOn
             let bt = SystemControls.bluetoothOn
+            let focus = SystemControls.focusOn
             let vol = SystemControls.volumeLevel() ?? 0.5
             let muted = SystemControls.isMuted()
             let bright = Double(Brightness.get() ?? 0.7)
             DispatchQueue.main.async {
                 self.wifiOn = wifi
                 self.bluetoothOn = bt
+                self.focusOn = focus
                 self.volumeLevel = vol
                 self.muted = muted
                 self.brightnessLevel = bright
@@ -491,7 +495,16 @@ final class VeilPanelHost: ObservableObject {
 
     func toggleFocus() {
         DispatchQueue.global(qos: .userInitiated).async {
-            _ = SystemControls.toggleFocus()
+            let on = SystemControls.enableDoNotDisturb()
+            DispatchQueue.main.async { self.focusOn = on }
+        }
+    }
+
+    /// Control Focus tile — turn Do Not Disturb on (not a Settings husk).
+    func enableDoNotDisturb() {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let on = SystemControls.enableDoNotDisturb()
+            DispatchQueue.main.async { self.focusOn = on }
         }
     }
 
@@ -901,7 +914,7 @@ struct VeilPanelView: View {
                     case .keys: keysBody
                     }
                 }
-                .padding(14)
+                .padding(kind == .music ? 10 : 14)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .background(
                     RoundedRectangle(cornerRadius: 14, style: .circular)
@@ -917,11 +930,11 @@ struct VeilPanelView: View {
     }
 
     private var musicBody: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 8) {
             Text(host.musicSource.uppercased())
-                .font(panelFont(11, .bold, mono: true))
+                .font(panelFont(10, .bold, mono: true))
                 .foregroundStyle(p["cyan"])
-            HStack(alignment: .top, spacing: 12) {
+            HStack(alignment: .center, spacing: 10) {
                 Group {
                     if let art = host.musicArtwork {
                         Image(nsImage: art)
@@ -936,38 +949,38 @@ struct VeilPanelView: View {
                         ZStack {
                             p["surface"]
                             Image(systemName: "music.note")
-                                .font(.system(size: 22, weight: .semibold))
+                                .font(.system(size: 18, weight: .semibold))
                                 .foregroundStyle(p["dim"])
                         }
                     }
                 }
-                .frame(width: 72, height: 72)
+                .frame(width: 56, height: 56)
                 .clipShape(RoundedRectangle(cornerRadius: themeCorner, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: themeCorner, style: .continuous)
                         .strokeBorder(p["border"].opacity(0.7), lineWidth: 1)
                 )
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text(host.musicTitle)
-                        .font(panelFont(17, .semibold))
+                        .font(panelFont(14, .semibold))
                         .foregroundStyle(p["fg"])
                         .lineLimit(2)
                     if !host.musicArtist.isEmpty {
                         Text(host.musicArtist)
-                            .font(panelFont(13, .medium))
+                            .font(panelFont(11, .medium))
                             .foregroundStyle(p["dim"])
                             .lineLimit(1)
                     }
                     if !host.musicAlbum.isEmpty {
                         Text(host.musicAlbum)
-                            .font(panelFont(11, .medium, mono: true))
+                            .font(panelFont(10, .medium, mono: true))
                             .foregroundStyle(p["comment"])
                             .lineLimit(1)
                     }
                 }
                 Spacer(minLength: 0)
             }
-            HStack(spacing: 10) {
+            HStack(spacing: 8) {
                 panelButton("backward.fill") { host.musicAction("previous") }
                 panelButton(host.playing ? "pause.fill" : "play.fill") { host.musicAction("playpause") }
                 panelButton("forward.fill") { host.musicAction("next") }
@@ -977,7 +990,6 @@ struct VeilPanelView: View {
                     .foregroundStyle(p["comment"])
                     .pressable()
             }
-            .padding(.top, 4)
         }
     }
 
@@ -1010,12 +1022,20 @@ struct VeilPanelView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
             }
-            // Live system toggles (VEI-39) — not dead husks.
+            // One tile per function — no Sound/Network mini-rows (dup volume + settings).
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
-                controlToggle("Wi‑Fi", host.wifiOn ? "wifi" : "wifi.slash", host.wifiOn) { host.toggleWifi() }
-                controlToggle("BT", "wave.3.right", host.bluetoothOn) { host.toggleBluetooth() }
-                controlToggle("Focus", "moon.fill", false) { host.toggleFocus() }
-                controlToggle("Displays", "display.2", false) { host.openDisplays() }
+                controlToggle("Wi‑Fi", host.wifiOn ? "wifi" : "wifi.slash", host.wifiOn,
+                              onPrimary: { host.toggleWifi() },
+                              onSettings: { SystemControls.openWiFiSettings(); host.dismiss() })
+                controlToggle("BT", "wave.3.right", host.bluetoothOn,
+                              onPrimary: { host.toggleBluetooth() },
+                              onSettings: { SystemControls.openBluetoothSettings(); host.dismiss() })
+                controlToggle("Focus", "moon.fill", host.focusOn,
+                              onPrimary: { host.enableDoNotDisturb() },
+                              onSettings: nil)
+                controlToggle("Displays", "display.2", false,
+                              onPrimary: { host.openDisplays() },
+                              onSettings: nil)
             }
             controlSlider("VOLUME", host.muted ? 0 : host.volumeLevel) { host.setVolume($0) }
             controlSlider("BRIGHTNESS", host.brightnessLevel) { host.setBrightness($0) }
@@ -1031,10 +1051,6 @@ struct VeilPanelView: View {
             controlRow("Themes", "paintpalette") { host.openThemeGallery() }
             controlRow("Workspace Overview", "rectangle.grid.2x2") { host.runVeil(["overview"]) }
             controlRow("Launcher", "magnifyingglass") { host.runVeil(["launch"]) }
-            HStack(spacing: 8) {
-                miniRow("Sound", "speaker.wave.2") { SystemControls.openSound(); host.dismiss() }
-                miniRow("Network", "network") { SystemControls.openNetwork(); host.dismiss() }
-            }
             controlRow("Show menu bar", "menubar.rectangle") {
                 VeilBarController.shared.revealMenuBar()
                 host.dismiss()
@@ -1052,8 +1068,10 @@ struct VeilPanelView: View {
         .onAppear { host.refreshControlToggles() }
     }
 
-    private func controlToggle(_ title: String, _ symbol: String, _ on: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
+    private func controlToggle(_ title: String, _ symbol: String, _ on: Bool,
+                               onPrimary: @escaping () -> Void,
+                               onSettings: (() -> Void)?) -> some View {
+        Button(action: onPrimary) {
             VStack(spacing: 6) {
                 Image(systemName: symbol)
                     .font(.system(size: 16, weight: .semibold))
@@ -1076,6 +1094,11 @@ struct VeilPanelView: View {
         }
         .buttonStyle(.plain)
         .pressable()
+        .contextMenu {
+            if let onSettings {
+                Button("Open \(title) Settings") { onSettings() }
+            }
+        }
     }
 
     private func controlSlider(_ label: String, _ value: Double, onChange: @escaping (Double) -> Void) -> some View {
@@ -1445,15 +1468,25 @@ struct VeilBarView: View {
                     .foregroundStyle(p["dim"])
                     .lineLimit(1)
                     .fixedSize()
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(bar.clockDate)
-                        .font(code(10, "Bold"))
-                        .foregroundStyle(p["dim"])
-                    Text(bar.clockTime)
-                        .font(mono(13, "Medium"))
-                        .foregroundStyle(p["fg"])
+                // Date/time → Quick settings (same as Quick Glyph). Chip still opens Control.
+                Button {
+                    animateClick { GlyphShell.shared.present(.quick) }
+                } label: {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(bar.clockDate)
+                            .font(code(10, "Bold"))
+                            .foregroundStyle(p["dim"])
+                        Text(bar.clockTime)
+                            .font(mono(13, "Medium"))
+                            .foregroundStyle(p["fg"])
+                    }
+                    .fixedSize()
+                    .frame(height: rowH, alignment: .center)
+                    .contentShape(Rectangle())
                 }
-                .fixedSize()
+                .buttonStyle(.plain)
+                .pressable()
+                .help("Quick settings")
             }
             .frame(height: rowH, alignment: .center)
         }
@@ -1607,7 +1640,34 @@ enum SystemControls {
 
     static func toggleBluetooth() -> Bool { setBluetooth(!bluetoothOn) }
 
-    /// Focus / DND — open Focus Settings (authoritative) and attempt a Control Center Focus click when Accessibility allows.
+    /// Best-effort: a Focus / DND assertion is active (Control Center window title/AX).
+    static var focusOn: Bool {
+        let script = """
+        tell application "System Events"
+          tell process "ControlCenter"
+            repeat with w in windows
+              try
+                set n to name of w as text
+                if n contains "Do Not Disturb" then return "on"
+              end try
+            end repeat
+            if (count of windows) > 0 then
+              repeat with e in entire contents of window 1
+                try
+                  set n to name of e as text
+                  if n contains "Do Not Disturb" then return "on"
+                end try
+              end repeat
+            end if
+          end tell
+        end tell
+        return "off"
+        """
+        var err: NSDictionary?
+        let raw = NSAppleScript(source: script)?.executeAndReturnError(&err).stringValue?.lowercased() ?? "off"
+        return raw.contains("on")
+    }
+
     static func openFocus() {
         openSettings("x-apple.systempreferences:com.apple.Focus-Settings.extension")
         DispatchQueue.main.async {
@@ -1615,45 +1675,105 @@ enum SystemControls {
         }
     }
 
-    /// Best-effort Focus toggle via Control Center menu bar item (needs Accessibility — already required for MediaKeys).
+    /// Turn Do Not Disturb on. Prefers a Shortcuts named "Veil Do Not Disturb" / "Do Not Disturb",
+    /// then Control Center (menu bar is often empty to AX when Veil owns the chrome — open via click),
+    /// then Focus Settings.
     @discardableResult
-    static func toggleFocus() -> Bool {
+    static func enableDoNotDisturb() -> Bool {
+        if runFocusShortcut() {
+            DispatchQueue.main.async {
+                OSD.shared.show(.input, level: nil, title: "Focus", detail: "Do Not Disturb")
+            }
+            return true
+        }
+        if activateDoNotDisturbViaControlCenter() {
+            DispatchQueue.main.async {
+                OSD.shared.show(.input, level: nil, title: "Focus", detail: "Do Not Disturb")
+            }
+            return true
+        }
+        openFocus()
+        return false
+    }
+
+    /// `shortcuts run` for a user/installed Focus shortcut (optional but most reliable on modern macOS).
+    private static func runFocusShortcut() -> Bool {
+        for name in ["Veil Do Not Disturb", "Do Not Disturb", "Set Do Not Disturb"] {
+            let p = Process()
+            p.executableURL = URL(fileURLWithPath: "/usr/bin/shortcuts")
+            p.arguments = ["run", name]
+            p.standardOutput = FileHandle.nullDevice
+            p.standardError = FileHandle.nullDevice
+            do {
+                try p.run()
+                p.waitUntilExit()
+                if p.terminationStatus == 0 { return true }
+            } catch { continue }
+        }
+        return false
+    }
+
+    /// Reveal the stock menu bar, open Control Center with a click, then AX-click Focus / DND.
+    private static func activateDoNotDisturbViaControlCenter() -> Bool {
+        _ = NSAppleScript(source: "tell application \"System Events\" to tell dock preferences to set autohide menu bar to false")?
+            .executeAndReturnError(nil)
+        Thread.sleep(forTimeInterval: 0.45)
+        guard let screen = NSScreen.main else { return false }
+        let w = screen.frame.width
+        // Control Center toggles sit left of the clock; Wi‑Fi/Battery are further left.
+        // Sweep a few x positions and stop on a Control Center window that mentions Focus or has several toggles.
+        var opened = false
+        for dx: CGFloat in [170, 150, 190, 130, 210, 110] {
+            clickScreen(x: w - dx, y: 5)
+            Thread.sleep(forTimeInterval: 0.4)
+            if controlCenterWindowOpen() { opened = true; break }
+        }
+        guard opened else { return false }
         let script = """
         tell application "System Events"
           tell process "ControlCenter"
-            set focusItem to missing value
-            repeat with mb in menu bar items of menu bar 1
+            if (count of windows) is 0 then return "missing"
+            -- Prefer an explicit Focus / Do Not Disturb control anywhere in the panel.
+            repeat with e in entire contents of window 1
               try
-                set n to name of mb as text
-                if n contains "Focus" or n contains "Do Not Disturb" or n contains "Concentration" then
-                  set focusItem to mb
-                  exit repeat
+                set n to name of e as text
+                if n contains "Do Not Disturb" or n contains "Focus" then
+                  click e
+                  delay 0.2
+                  -- If a submenu appeared, prefer DND.
+                  try
+                    click button "Do Not Disturb" of window 1
+                  end try
+                  try
+                    click checkbox "Do Not Disturb" of window 1
+                  end try
+                  return "on"
                 end if
               end try
             end repeat
-            if focusItem is missing value then return "missing"
-            click focusItem
-            delay 0.15
-            try
-              click button 1 of window 1
-              return "toggled"
-            on error
-              return "opened"
-            end try
+            return "missing"
           end tell
         end tell
         """
         var err: NSDictionary?
         let result = NSAppleScript(source: script)?.executeAndReturnError(&err).stringValue ?? ""
-        if result == "missing" || err != nil {
-            openFocus()
-            return false
-        }
-        DispatchQueue.main.async {
-            OSD.shared.show(.input, level: nil, title: "Focus", detail: result == "toggled" ? "Toggled" : "Menu")
-        }
-        return true
+        return result == "on"
     }
+
+    private static func controlCenterWindowOpen() -> Bool {
+        let opts: CGWindowListOption = [.optionOnScreenOnly]
+        guard let info = CGWindowListCopyWindowInfo(opts, kCGNullWindowID) as? [[String: Any]] else { return false }
+        return info.contains { ($0[kCGWindowOwnerName as String] as? String ?? "") == "Control Center" }
+    }
+
+    private static func clickScreen(x: CGFloat, y: CGFloat) {
+        let p = CGPoint(x: x, y: y)
+        CGEvent(mouseEventSource: nil, mouseType: .leftMouseDown, mouseCursorPosition: p, mouseButton: .left)?.post(tap: .cghidEventTap)
+        CGEvent(mouseEventSource: nil, mouseType: .leftMouseUp, mouseCursorPosition: p, mouseButton: .left)?.post(tap: .cghidEventTap)
+    }
+
+    @discardableResult
+    static func toggleFocus() -> Bool { enableDoNotDisturb() }
 
     static func openDisplays() {
         openSettings("x-apple.systempreferences:com.apple.Displays-Settings.extension")
@@ -1664,6 +1784,15 @@ enum SystemControls {
 
     static func openSound() {
         openSettings("x-apple.systempreferences:com.apple.Sound-Settings.extension")
+    }
+
+    static func openWiFiSettings() {
+        // Prefer Wi‑Fi pane; Network pane is the fallback.
+        openSettings("x-apple.systempreferences:com.apple.wifi-settings-extension")
+    }
+
+    static func openBluetoothSettings() {
+        openSettings("x-apple.systempreferences:com.apple.BluetoothSettings")
     }
 
     static func openNetwork() {
