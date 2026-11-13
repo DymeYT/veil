@@ -1,9 +1,36 @@
 import AppKit
 
-/// VEI-35: dismiss floating Veil UI when the user clicks anywhere outside it.
+/// Outside-click monitors + shared overlay dismiss registry (VEI-53).
 /// Global monitors are required for `.nonactivatingPanel` hosts that never become key.
+/// `dismissAll` is the one-shot path: Esc / outside-click / `dismiss-popups` must bury
+/// launcher + Control + Quick + music + Glyph — never leave stuck chrome.
 @MainActor
 enum OutsideClick {
+    private static var registry: [String: () -> Void] = [:]
+    private static var dismissing = false
+
+    /// Register an overlay dismiss hook. Replaces any prior hook for `id`.
+    /// Lane C: wire panel outside-click / Esc to `dismissAll()` (see lane-requests.md).
+    static func register(_ id: String, dismiss: @escaping () -> Void) {
+        registry[id] = dismiss
+    }
+
+    static func unregister(_ id: String) {
+        registry.removeValue(forKey: id)
+    }
+
+    /// Kill every registered overlay in one shot. Re-entrant calls are no-ops.
+    /// Hard-falls back to Glyph + VeilPanelHost so a missed registration cannot stick UI.
+    static func dismissAll() {
+        guard !dismissing else { return }
+        dismissing = true
+        defer { dismissing = false }
+        let handlers = Array(registry.values)
+        for h in handlers { h() }
+        GlyphShell.shared.dismiss()
+        VeilPanelHost.shared.dismissImmediate()
+    }
+
     /// Install global (+ local) mouse-down monitors. Caller must `remove` on dismiss.
     /// `ignoreUntil` avoids dismissing from the same click that opened the surface.
     static func install(

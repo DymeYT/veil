@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import Darwin
 import Combine
 import SwiftUI
@@ -231,9 +232,14 @@ final class VeilPanelHost: ObservableObject {
     @Published var batteryDevices: [BatteryDevice] = []
     /// AppKit screen rect of the bar button that opened the panel (nil → resolve from SketchyBar).
     var anchorRect: NSRect?
+    /// Public frame for shared OutsideClick safe zones.
+    var panelWindowFrame: NSRect? { window?.isVisible == true ? window?.frame : nil }
     private var window: NSWindow?
     private var dismissGeneration = 0
     private var outsideMonitors: [Any] = []
+    private var glyphOutsideMonitors: [Any] = []
+    private var escMonitors: [Any] = []
+    private var glyphKindWatch: AnyCancellable?
     private var lastMusicFetch = Date.distantPast
     private var lastStatusFetch = Date.distantPast
     private var lastBatteryDevicesFetch = Date.distantPast
@@ -242,17 +248,37 @@ final class VeilPanelHost: ObservableObject {
         VeilFeature.forceReduceMotion || NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
     }
 
+    /// Watch Glyph Quick so OutsideClick.dismissAll covers lingering Quick too (VEI-55).
+    func startOverlayDismissWatch() {
+        installEscDismiss()
+        if glyphKindWatch == nil {
+            glyphKindWatch = GlyphShell.shared.$kind
+                .receive(on: RunLoop.main)
+                .sink { [weak self] _ in
+                    DispatchQueue.main.async { self?.installGlyphOutsideClick() }
+                }
+        }
+        installGlyphOutsideClick()
+    }
+
+    func bindGlyphOutsideClick() {
+        installEscDismiss()
+        DispatchQueue.main.async { self.installGlyphOutsideClick() }
+    }
+
     func toggle(_ k: VeilPanelKind, near anchor: NSRect? = nil) {
-        if kind == k { dismiss(); return }
+        if kind == k { OutsideClick.dismissAll(); return }
         present(k, near: anchor)
     }
 
     func present(_ k: VeilPanelKind, near anchor: NSRect? = nil) {
         if VeilFeature.sketchybarPopups {
-            // Caller should use SketchyBar; keep host quiet.
             dismiss()
             return
         }
+        // Idempotent — Lane A also registers at launch when present.
+        OutsideClick.register("veil-panel") { VeilPanelHost.shared.dismissImmediate() }
+        OutsideClick.register("glyph") { GlyphShell.shared.dismiss() }
         kind = k
         anchorRect = anchor ?? Self.sketchybarItemRect(for: k) ?? anchorRect
         ensureWindow()
@@ -268,18 +294,20 @@ final class VeilPanelHost: ObservableObject {
             }
         }
         installOutsideClick()
+        installEscDismiss()
+        startOverlayDismissWatch()
     }
 
     func dismiss() {
         dismissImmediate(animated: false)
     }
 
-    /// Instant tear-down — never leave a kind=nil hosting view on screen
-    /// (VeilPanelView painted chrome around EmptyView → blank bottom-left husk).
+    /// Instant tear-down — never leave a kind=nil hosting view on screen.
     func dismissImmediate(animated: Bool = false) {
-        _ = animated // reserved; husks require sync kill
+        _ = animated
         dismissGeneration &+= 1
         OutsideClick.remove(&outsideMonitors)
+        OutsideClick.remove(&glyphOutsideMonitors)
         let window = self.window
         kind = nil
         anchorRect = nil
@@ -289,25 +317,80 @@ final class VeilPanelHost: ObservableObject {
         self.window = nil
     }
 
+    /// Close / UI path — cascade via shared registry (lane-requests.md).
+    func dismissAllOverlays() {
+        OutsideClick.dismissAll()
+    }
+
     private func installOutsideClick() {
         OutsideClick.remove(&outsideMonitors)
         let gen = dismissGeneration
         let anchor = anchorRect
         outsideMonitors = OutsideClick.install(
             window: window,
-            ignoreUntil: Date().addingTimeInterval(0.4),
+            ignoreUntil: Date().addingTimeInterval(0.35),
             extraSafeFrames: {
                 var frames: [NSRect] = []
-                if let anchor { frames.append(anchor.insetBy(dx: -8, dy: -8)) }
-                if let bar = VeilBarController.shared.barWindowFrame { frames.append(bar) }
+                // Opener chip only — whole-bar safe zone made Control undismissable.
+                if let anchor { frames.append(anchor.insetBy(dx: -6, dy: -6)) }
                 return frames
             },
             onOutside: { [weak self] in
                 guard let self, self.dismissGeneration == gen else { return }
-                GlyphShell.shared.dismiss()
-                self.dismissImmediate()
+                // Lane A contract: cascade launcher + Glyph + Control.
+                OutsideClick.dismissAll()
             }
         )
+    }
+
+    /// Register Glyph Quick with OutsideClick so it cannot linger after Control dismiss.
+    private func installGlyphOutsideClick() {
+        OutsideClick.remove(&glyphOutsideMonitors)
+        guard GlyphShell.shared.kind != nil else { return }
+        let level = NSWindow.Level.statusBar.rawValue + 2
+        guard let gw = NSApp.windows.first(where: {
+            $0.isVisible && $0.level.rawValue == level && $0.frame.width > 80 && $0.frame.height > 80
+        }) else { return }
+        glyphOutsideMonitors = OutsideClick.install(
+            window: gw,
+            ignoreUntil: Date().addingTimeInterval(0.35),
+            extraSafeFrames: { [weak self] in
+                var frames: [NSRect] = []
+                if let pf = self?.panelWindowFrame { frames.append(pf) }
+                if let bar = VeilBarController.shared.barWindowFrame {
+                    frames.append(NSRect(x: bar.maxX - 220, y: bar.minY, width: 220, height: bar.height))
+                }
+                return frames
+            },
+            onOutside: {
+                OutsideClick.dismissAll()
+            }
+        )
+    }
+
+    /// Esc closes Control/music/keys (+ cascades via dismissAll) when panel never becomes key.
+    private func installEscDismiss() {
+        guard escMonitors.isEmpty else { return }
+        let fire: (NSEvent) -> Void = { e in
+            guard e.keyCode == UInt16(kVK_Escape) else { return }
+            Task { @MainActor in
+                guard VeilPanelHost.shared.kind != nil || GlyphShell.shared.kind != nil else { return }
+                OutsideClick.dismissAll()
+            }
+        }
+        if let g = NSEvent.addGlobalMonitorForEvents(matching: .keyDown, handler: fire) {
+            escMonitors.append(g)
+        }
+        if let l = NSEvent.addLocalMonitorForEvents(matching: .keyDown, handler: { e in
+            if e.keyCode == UInt16(kVK_Escape),
+               VeilPanelHost.shared.kind != nil || GlyphShell.shared.kind != nil {
+                OutsideClick.dismissAll()
+                return nil
+            }
+            return e
+        }) {
+            escMonitors.append(l)
+        }
     }
 
     /// Prefer in-process Veil bar anchors when that strip owns chrome (SketchyBar parks
@@ -363,11 +446,11 @@ final class VeilPanelHost: ObservableObject {
         let width: CGFloat
         let height: CGFloat
         switch kind {
-        case .control: width = 360; height = 520
-        case .keys: width = 340; height = 360
-        // Compact: content-sized — avoid sparse empty chrome under the track row.
-        case .music: width = 288; height = musicArtwork == nil ? 148 : 168
-        case nil: width = 1; height = 1 // unused — ensureWindow refuses nil kind
+        // Denser Control — less empty air under rows (VEI-55).
+        case .control: width = 332; height = 428
+        case .keys: width = 320; height = 300
+        case .music: width = 276; height = musicArtwork == nil ? 132 : 152
+        case nil: width = 1; height = 1
         }
         return (width, height)
     }
@@ -495,15 +578,15 @@ final class VeilPanelHost: ObservableObject {
 
     func toggleFocus() {
         DispatchQueue.global(qos: .userInitiated).async {
-            let on = SystemControls.enableDoNotDisturb()
+            let on = SystemControls.toggleDoNotDisturb()
             DispatchQueue.main.async { self.focusOn = on }
         }
     }
 
-    /// Control Focus tile — turn Do Not Disturb on (not a Settings husk).
+    /// Control Focus tile — flip real Do Not Disturb when possible.
     func enableDoNotDisturb() {
         DispatchQueue.global(qos: .userInitiated).async {
-            let on = SystemControls.enableDoNotDisturb()
+            let on = SystemControls.toggleDoNotDisturb()
             DispatchQueue.main.async { self.focusOn = on }
         }
     }
@@ -511,16 +594,17 @@ final class VeilPanelHost: ObservableObject {
     func openDisplays() { SystemControls.openDisplays() }
 
     func setVolume(_ level: Double) {
-        volumeLevel = level
-        volumeText = "\(Int((level * 100).rounded()))%"
-        DispatchQueue.global(qos: .userInitiated).async {
-            SystemControls.setVolume(level)
-        }
+        let clamped = max(0, min(1, level))
+        volumeLevel = clamped
+        muted = false
+        volumeText = "\(Int((clamped * 100).rounded()))%"
+        SystemControls.setVolume(clamped)
     }
 
     func setBrightness(_ level: Double) {
-        brightnessLevel = level
-        SystemControls.setBrightness(level)
+        let clamped = max(0.01, min(1, level))
+        brightnessLevel = clamped
+        SystemControls.setBrightness(clamped)
     }
 
     func toggleMute() {
@@ -930,11 +1014,22 @@ struct VeilPanelView: View {
     }
 
     private var musicBody: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(host.musicSource.uppercased())
-                .font(panelFont(10, .bold, mono: true))
-                .foregroundStyle(p["cyan"])
-            HStack(alignment: .center, spacing: 10) {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(host.musicSource.uppercased())
+                    .font(panelFont(10, .bold, mono: true))
+                    .foregroundStyle(p["cyan"])
+                Spacer(minLength: 0)
+                Button { host.dismissAllOverlays() } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(p["dim"])
+                        .frame(width: 22, height: 22)
+                }
+                .buttonStyle(.plain)
+                .help("Close")
+            }
+            HStack(alignment: .center, spacing: 8) {
                 Group {
                     if let art = host.musicArtwork {
                         Image(nsImage: art)
@@ -949,20 +1044,20 @@ struct VeilPanelView: View {
                         ZStack {
                             p["surface"]
                             Image(systemName: "music.note")
-                                .font(.system(size: 18, weight: .semibold))
+                                .font(.system(size: 16, weight: .semibold))
                                 .foregroundStyle(p["dim"])
                         }
                     }
                 }
-                .frame(width: 56, height: 56)
+                .frame(width: 48, height: 48)
                 .clipShape(RoundedRectangle(cornerRadius: themeCorner, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: themeCorner, style: .continuous)
                         .strokeBorder(p["border"].opacity(0.7), lineWidth: 1)
                 )
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 1) {
                     Text(host.musicTitle)
-                        .font(panelFont(14, .semibold))
+                        .font(panelFont(13, .semibold))
                         .foregroundStyle(p["fg"])
                         .lineLimit(2)
                     if !host.musicArtist.isEmpty {
@@ -973,22 +1068,18 @@ struct VeilPanelView: View {
                     }
                     if !host.musicAlbum.isEmpty {
                         Text(host.musicAlbum)
-                            .font(panelFont(10, .medium, mono: true))
+                            .font(panelFont(9, .medium, mono: true))
                             .foregroundStyle(p["comment"])
                             .lineLimit(1)
                     }
                 }
                 Spacer(minLength: 0)
             }
-            HStack(spacing: 8) {
+            HStack(spacing: 6) {
                 panelButton("backward.fill") { host.musicAction("previous") }
                 panelButton(host.playing ? "pause.fill" : "play.fill") { host.musicAction("playpause") }
                 panelButton("forward.fill") { host.musicAction("next") }
-                Spacer()
-                Button("Close") { host.dismiss() }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(p["comment"])
-                    .pressable()
+                Spacer(minLength: 0)
             }
         }
     }
@@ -1010,60 +1101,64 @@ struct VeilPanelView: View {
     }
 
     private var controlBody: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
                 Text(p.cased("Controls"))
                     .font(panelFont(12, .bold, mono: true))
                     .foregroundStyle(p["yellow"])
-                Spacer()
+                Spacer(minLength: 0)
                 Text(host.statusLine)
-                    .font(panelFont(10, .medium, mono: true))
+                    .font(panelFont(9, .medium, mono: true))
                     .foregroundStyle(p["dim"])
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
+                Button { host.dismissAllOverlays() } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(p["dim"])
+                        .frame(width: 22, height: 22)
+                        .background(RoundedRectangle(cornerRadius: 6).strokeBorder(p["border"], lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+                .help("Close · Esc")
             }
-            // One tile per function — no Sound/Network mini-rows (dup volume + settings).
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 6) {
                 controlToggle("Wi‑Fi", host.wifiOn ? "wifi" : "wifi.slash", host.wifiOn,
                               onPrimary: { host.toggleWifi() },
-                              onSettings: { SystemControls.openWiFiSettings(); host.dismiss() })
-                controlToggle("BT", "wave.3.right", host.bluetoothOn,
+                              onSettings: { SystemControls.openWiFiSettings(); host.dismissAllOverlays() })
+                controlToggle("Bluetooth", "bluetooth", host.bluetoothOn,
                               onPrimary: { host.toggleBluetooth() },
-                              onSettings: { SystemControls.openBluetoothSettings(); host.dismiss() })
+                              onSettings: { SystemControls.openBluetoothSettings(); host.dismissAllOverlays() })
                 controlToggle("Focus", "moon.fill", host.focusOn,
-                              onPrimary: { host.enableDoNotDisturb() },
-                              onSettings: nil)
-                controlToggle("Displays", "display.2", false,
-                              onPrimary: { host.openDisplays() },
-                              onSettings: nil)
+                              onPrimary: { host.toggleFocus() },
+                              onSettings: { SystemControls.openFocus(); host.dismissAllOverlays() })
             }
-            controlSlider("VOLUME", host.muted ? 0 : host.volumeLevel) { host.setVolume($0) }
-            controlSlider("BRIGHTNESS", host.brightnessLevel) { host.setBrightness($0) }
-            HStack(spacing: 8) {
+            controlSlider("VOLUME", host.muted ? 0 : host.volumeLevel,
+                          readout: host.muted ? "MUTE" : host.volumeText) { host.setVolume($0) }
+            controlSlider("BRIGHTNESS", host.brightnessLevel,
+                          readout: "\(Int((host.brightnessLevel * 100).rounded()))%") { host.setBrightness($0) }
+            HStack(spacing: 6) {
                 panelButton(host.muted ? "speaker.slash.fill" : "speaker.wave.2.fill") { host.toggleMute() }
                 Text(host.muted ? "MUTED" : host.volumeText)
-                    .font(panelFont(11, .semibold, mono: true))
+                    .font(panelFont(10, .semibold, mono: true))
                     .foregroundStyle(p["dim"])
-                Spacer()
+                Spacer(minLength: 0)
             }
             Divider().overlay(p["border"])
-            // Themes → gallery/switcher — Style creator stays ⌃⌥Y / Glyph Style.
+            controlRow("Open Displays…", "display.2") {
+                host.openDisplays()
+                host.dismissAllOverlays()
+            }
             controlRow("Themes", "paintpalette") { host.openThemeGallery() }
             controlRow("Workspace Overview", "rectangle.grid.2x2") { host.runVeil(["overview"]) }
             controlRow("Launcher", "magnifyingglass") { host.runVeil(["launch"]) }
             controlRow("Show menu bar", "menubar.rectangle") {
                 VeilBarController.shared.revealMenuBar()
-                host.dismiss()
+                host.dismissAllOverlays()
             }
-            HStack(spacing: 8) {
-                miniRow("Quiet", "leaf") { host.runVeil(["toggle-quiet"]) }
-                miniRow("Reload", "arrow.clockwise") { host.runVeil(["reload"]) }
+            controlRow("Veil Quiet", "leaf") {
+                host.runVeil(["toggle-quiet"])
             }
-            Spacer(minLength: 0)
-            Button("Close") { host.dismiss() }
-                .buttonStyle(.plain)
-                .foregroundStyle(p["comment"])
-                .pressable()
         }
         .onAppear { host.refreshControlToggles() }
     }
@@ -1072,28 +1167,29 @@ struct VeilPanelView: View {
                                onPrimary: @escaping () -> Void,
                                onSettings: (() -> Void)?) -> some View {
         Button(action: onPrimary) {
-            VStack(spacing: 6) {
+            VStack(spacing: 4) {
                 Image(systemName: symbol)
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.system(size: 15, weight: .semibold))
                 Text(title.uppercased())
-                    .font(panelFont(8, .bold, mono: true))
-                    .tracking(0.6)
+                    .font(panelFont(7, .bold, mono: true))
+                    .tracking(0.5)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.8)
+                    .minimumScaleFactor(0.7)
             }
             .foregroundStyle(on ? p["bg_dark"] : p["fg"])
-            .frame(maxWidth: .infinity, minHeight: 58)
+            .frame(maxWidth: .infinity, minHeight: 52)
             .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .fill(on ? p["yellow"] : p["surface"])
                     .overlay(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
                             .strokeBorder(p["border"], lineWidth: on ? 0 : 1)
                     )
             )
         }
         .buttonStyle(.plain)
         .pressable()
+        .help(onSettings == nil ? title : "Click to toggle · Right-click for Settings")
         .contextMenu {
             if let onSettings {
                 Button("Open \(title) Settings") { onSettings() }
@@ -1101,34 +1197,27 @@ struct VeilPanelView: View {
         }
     }
 
-    private func controlSlider(_ label: String, _ value: Double, onChange: @escaping (Double) -> Void) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(label)
-                .font(panelFont(9, .bold, mono: true))
-                .foregroundStyle(p["dim"])
-                .tracking(1.2)
+    private func controlSlider(_ label: String, _ value: Double, readout: String = "",
+                               onChange: @escaping (Double) -> Void) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(label)
+                    .font(panelFont(9, .bold, mono: true))
+                    .foregroundStyle(p["dim"])
+                    .tracking(1.2)
+                Spacer(minLength: 0)
+                if !readout.isEmpty {
+                    Text(readout)
+                        .font(panelFont(10, .semibold, mono: true))
+                        .foregroundStyle(p["fg"])
+                }
+            }
             Slider(value: Binding(
                 get: { value },
                 set: { onChange($0) }
             ), in: 0...1)
             .tint(p["fg"])
         }
-    }
-
-    private func miniRow(_ title: String, _ symbol: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 8) {
-                Image(systemName: symbol).foregroundStyle(p["cyan"]).frame(width: 16)
-                Text(title).foregroundStyle(p["fg"]).font(panelFont(12, .medium))
-                Spacer(minLength: 0)
-            }
-            .padding(.vertical, 6)
-            .padding(.horizontal, 8)
-            .frame(maxWidth: .infinity)
-            .background(RoundedRectangle(cornerRadius: 8).fill(p["surface"]))
-        }
-        .buttonStyle(.plain)
-        .pressable()
     }
 
     private var keysBody: some View {
@@ -1150,22 +1239,22 @@ struct VeilPanelView: View {
                     Spacer()
                 }
             }
-            Spacer(minLength: 0)
-            Button("Close") { host.dismiss() }
-                .buttonStyle(.plain)
-                .foregroundStyle(p["comment"])
-                .pressable()
+            Button { host.dismissAllOverlays() } label: {
+                Text("Close").font(panelFont(11, .medium)).foregroundStyle(p["comment"])
+            }
+            .buttonStyle(.plain)
+            .pressable()
         }
     }
 
     private func controlRow(_ title: String, _ symbol: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            HStack(spacing: 10) {
-                Image(systemName: symbol).foregroundStyle(p["cyan"]).frame(width: 18)
-                Text(title).foregroundStyle(p["fg"])
-                Spacer()
+            HStack(spacing: 8) {
+                Image(systemName: symbol).foregroundStyle(p["cyan"]).frame(width: 16)
+                Text(title).foregroundStyle(p["fg"]).font(panelFont(12, .medium))
+                Spacer(minLength: 0)
             }
-            .padding(.vertical, 6)
+            .padding(.vertical, 5)
             .padding(.horizontal, 8)
             .background(RoundedRectangle(cornerRadius: 8).fill(p["surface"]))
         }
@@ -1176,10 +1265,10 @@ struct VeilPanelView: View {
     private func panelButton(_ symbol: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: 14, weight: .semibold))
+                .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(p["fg"])
-                .frame(width: 40, height: 36)
-                .background(RoundedRectangle(cornerRadius: 10).fill(p["surface"]))
+                .frame(width: 36, height: 32)
+                .background(RoundedRectangle(cornerRadius: 8).fill(p["surface"]))
         }
         .buttonStyle(.plain)
         .pressable()
@@ -1239,11 +1328,15 @@ final class VeilBarController: ObservableObject {
     /// SketchyBar EDGE_H (strip/bare) / ISLE_H (islands) — keep in lockstep with sketchybarrc.
     var barHeight: CGFloat { barLayout == "islands" ? 34 : 36 }
 
+    /// Gap above screen bottom so autohide Dock can peek (complaint #3). Must be > 0.
+    static let dockClearance: CGFloat = 10
+
     /// Screen frame of the in-process bar — safe for outside-click (VEI-35).
     var barWindowFrame: NSRect? { window?.isVisible == true ? window?.frame : nil }
 
     func start() {
         guard VeilFeature.veilBar, !veilIsOff else { stop(); return }
+        VeilPanelHost.shared.startOverlayDismissWatch()
         reload(forceLayout: true)
         clockTimer?.invalidate()
         workspaceTimer?.invalidate()
@@ -1330,7 +1423,7 @@ final class VeilBarController: ObservableObject {
 
     private func tickPower() {
         let s = StateWatch.power()
-        let next = "PWR \(Int((s.level * 100).rounded()))%"
+        let next = "Battery \(Int((s.level * 100).rounded()))%"
         if powerLabel != next { powerLabel = next }
     }
 
@@ -1361,10 +1454,10 @@ final class VeilBarController: ObservableObject {
     private func ensureWindow(force: Bool = false) {
         let screen = NSScreen.main ?? NSScreen.screens[0]
         let h = barHeight
-        // Match SketchyBar geometry: bottom strip on screen.frame.minY (not visibleFrame+gap).
-        // Rift outer insets reserve usable app space; Dock paints above us at a higher level.
+        // Bottom: lift by dockClearance so autohide Dock can peek (complaint #3).
         let frame: NSRect = barOnBottom
-            ? NSRect(x: screen.frame.minX, y: screen.frame.minY, width: screen.frame.width, height: h)
+            ? NSRect(x: screen.frame.minX, y: screen.frame.minY + Self.dockClearance,
+                     width: screen.frame.width, height: h)
             : NSRect(x: screen.frame.minX, y: screen.frame.maxY - h, width: screen.frame.width, height: h)
         if window == nil {
             let w = NSPanel(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
@@ -1457,10 +1550,10 @@ struct VeilBarView: View {
             }
             Spacer(minLength: 12)
             HStack(alignment: .center, spacing: 10) {
-                barIconButton(system: "music.note", help: "Music") {
+                barIconButton(system: "music.note", help: "Music panel") {
                     VeilPanelHost.shared.toggle(.music, near: Self.anchorNearMouse(size: NSSize(width: 24, height: 24)))
                 }
-                barIconButton(system: "keyboard", help: "Keys") {
+                barIconButton(system: "keyboard", help: "Keyboard shortcuts") {
                     VeilPanelHost.shared.toggle(.keys, near: Self.anchorNearMouse(size: NSSize(width: 24, height: 24)))
                 }
                 Text(bar.powerLabel)
@@ -1470,7 +1563,10 @@ struct VeilBarView: View {
                     .fixedSize()
                 // Date/time → Quick settings (same as Quick Glyph). Chip still opens Control.
                 Button {
-                    animateClick { GlyphShell.shared.present(.quick) }
+                    animateClick {
+                        GlyphShell.shared.present(.quick)
+                        VeilPanelHost.shared.bindGlyphOutsideClick()
+                    }
                 } label: {
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
                         Text(bar.clockDate)
@@ -1486,7 +1582,7 @@ struct VeilBarView: View {
                 }
                 .buttonStyle(.plain)
                 .pressable()
-                .help("Quick settings")
+                .help("Quick settings · date & calendar")
             }
             .frame(height: rowH, alignment: .center)
         }
@@ -1523,7 +1619,7 @@ struct VeilBarView: View {
         }
         .buttonStyle(.plain)
         .pressable()
-        .help("Control panel · ⌥-click shows the macOS menu bar")
+        .help("Control panel · ⌃⌥O · ⌥-click shows the macOS menu bar")
     }
 
     private func workspaceButton(_ ws: (index: Int, name: String, active: Bool)) -> some View {
@@ -1640,8 +1736,9 @@ enum SystemControls {
 
     static func toggleBluetooth() -> Bool { setBluetooth(!bluetoothOn) }
 
-    /// Best-effort: a Focus / DND assertion is active (Control Center window title/AX).
+    /// Best-effort Focus/DND. Soft spot: no FocusStatusCenter auth — infer from DND DB + CC AX.
     static var focusOn: Bool {
+        if dndAssertionsActive() { return true }
         let script = """
         tell application "System Events"
           tell process "ControlCenter"
@@ -1651,14 +1748,6 @@ enum SystemControls {
                 if n contains "Do Not Disturb" then return "on"
               end try
             end repeat
-            if (count of windows) > 0 then
-              repeat with e in entire contents of window 1
-                try
-                  set n to name of e as text
-                  if n contains "Do Not Disturb" then return "on"
-                end try
-              end repeat
-            end if
           end tell
         end tell
         return "off"
@@ -1668,6 +1757,20 @@ enum SystemControls {
         return raw.contains("on")
     }
 
+    private static func dndAssertionsActive() -> Bool {
+        let url = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/DoNotDisturb/DB/Assertions.json")
+        guard let data = try? Data(contentsOf: url),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let blocks = obj["data"] as? [[String: Any]] else { return false }
+        for block in blocks {
+            for key in ["storeAssertionRecords", "assertions", "activeAssertions", "storeAssertionModeRecords"] {
+                if let rows = block[key] as? [Any], !rows.isEmpty { return true }
+            }
+        }
+        return false
+    }
+
     static func openFocus() {
         openSettings("x-apple.systempreferences:com.apple.Focus-Settings.extension")
         DispatchQueue.main.async {
@@ -1675,12 +1778,38 @@ enum SystemControls {
         }
     }
 
-    /// Turn Do Not Disturb on. Prefers a Shortcuts named "Veil Do Not Disturb" / "Do Not Disturb",
-    /// then Control Center (menu bar is often empty to AX when Veil owns the chrome — open via click),
-    /// then Focus Settings.
+    /// Toggle DND. Soft spots: off-path needs Shortcuts/CC AX; Settings is last resort.
+    @discardableResult
+    static func toggleDoNotDisturb() -> Bool {
+        let wasOn = focusOn
+        if wasOn {
+            if runFocusShortcut(names: [
+                "Turn Off Do Not Disturb", "Turn Off Focus", "Disable Do Not Disturb",
+                "Veil Focus Off", "Veil Do Not Disturb Off"
+            ]) {
+                DispatchQueue.main.async {
+                    OSD.shared.show(.input, level: nil, title: "Focus", detail: "Off")
+                }
+                return false
+            }
+            if activateDoNotDisturbViaControlCenter() {
+                let now = focusOn
+                DispatchQueue.main.async {
+                    OSD.shared.show(.input, level: nil, title: "Focus", detail: now ? "On" : "Off")
+                }
+                return now
+            }
+            openFocus()
+            return wasOn
+        }
+        return enableDoNotDisturb()
+    }
+
     @discardableResult
     static func enableDoNotDisturb() -> Bool {
-        if runFocusShortcut() {
+        if runFocusShortcut(names: [
+            "Veil Do Not Disturb", "Do Not Disturb", "Set Do Not Disturb", "Turn On Do Not Disturb"
+        ]) {
             DispatchQueue.main.async {
                 OSD.shared.show(.input, level: nil, title: "Focus", detail: "Do Not Disturb")
             }
@@ -1696,9 +1825,9 @@ enum SystemControls {
         return false
     }
 
-    /// `shortcuts run` for a user/installed Focus shortcut (optional but most reliable on modern macOS).
-    private static func runFocusShortcut() -> Bool {
-        for name in ["Veil Do Not Disturb", "Do Not Disturb", "Set Do Not Disturb"] {
+    private static func runFocusShortcut(names: [String]? = nil) -> Bool {
+        let list = names ?? ["Veil Do Not Disturb", "Do Not Disturb", "Set Do Not Disturb"]
+        for name in list {
             let p = Process()
             p.executableURL = URL(fileURLWithPath: "/usr/bin/shortcuts")
             p.arguments = ["run", name]
@@ -1773,7 +1902,7 @@ enum SystemControls {
     }
 
     @discardableResult
-    static func toggleFocus() -> Bool { enableDoNotDisturb() }
+    static func toggleFocus() -> Bool { toggleDoNotDisturb() }
 
     static func openDisplays() {
         openSettings("x-apple.systempreferences:com.apple.Displays-Settings.extension")
@@ -1825,9 +1954,9 @@ enum SystemControls {
         var err: NSDictionary?
         _ = NSAppleScript(source: src)?.executeAndReturnError(&err)
         DispatchQueue.main.async {
-            OSD.shared.show(.volume, level: Double(v) / 100, title: "Volume")
             VeilPanelHost.shared.volumeText = "\(v)%"
             VeilPanelHost.shared.volumeLevel = Double(v) / 100
+            VeilPanelHost.shared.muted = false
         }
     }
 
