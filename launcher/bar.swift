@@ -207,9 +207,17 @@ final class VeilPanelHost: ObservableObject {
     @Published var musicArtwork: NSImage?
     @Published var playing = false
     @Published var statusLine = ""
+    /// Structured status for desktop Glyph catalog tiles.
+    @Published var cpuText = "—"
+    @Published var memText = "—"
+    @Published var gpuText = "—"
+    @Published var batteryText = "—"
+    @Published var netText = "Wi‑Fi"
+    @Published var volumeText = "—"
     /// AppKit screen rect of the bar button that opened the panel (nil → resolve from SketchyBar).
     var anchorRect: NSRect?
     private var window: NSWindow?
+    private var dismissGeneration = 0
     private var lastMusicFetch = Date.distantPast
     private var lastStatusFetch = Date.distantPast
     private var lastMusicKey = ""
@@ -245,8 +253,14 @@ final class VeilPanelHost: ObservableObject {
     }
 
     func dismiss() {
-        // Instant orderOut first — never leave a kind=nil hosting view on screen
-        // (VeilPanelView still painted chrome around EmptyView → blank bottom-left panel).
+        dismissImmediate(animated: false)
+    }
+
+    /// Instant tear-down — never leave a kind=nil hosting view on screen
+    /// (VeilPanelView painted chrome around EmptyView → blank bottom-left husk).
+    func dismissImmediate(animated: Bool = false) {
+        _ = animated // reserved; husks require sync kill
+        dismissGeneration &+= 1
         let window = self.window
         kind = nil
         anchorRect = nil
@@ -312,7 +326,7 @@ final class VeilPanelHost: ObservableObject {
         case .control: height = 420
         case .keys: height = 360
         case .music: height = musicArtwork == nil ? 210 : 280
-        case nil: height = 210
+        case nil: height = 1 // unused — ensureWindow refuses nil kind
         }
         return (width, height)
     }
@@ -345,6 +359,11 @@ final class VeilPanelHost: ObservableObject {
     }
 
     private func ensureWindow() {
+        // Never materialize a panel with no kind — that was the blank bottom-left husk.
+        guard kind != nil else {
+            dismissImmediate(animated: false)
+            return
+        }
         let (width, height) = panelSize()
         let frame = frameNearAnchor(width: width, height: height)
         if let window {
@@ -438,6 +457,7 @@ final class VeilPanelHost: ObservableObject {
                     self.musicArtwork = nil
                 }
                 if self.kind == .music { self.ensureWindow() }
+                else if self.kind == nil { self.dismissImmediate(animated: false) }
             }
         }
     }
@@ -542,7 +562,27 @@ final class VeilPanelHost: ObservableObject {
                 .trimmingCharacters(in: .whitespacesAndNewlines) ?? "?"
             vp.waitUntilExit()
         }
-        var parts = ["CPU \(cpu)%", "MEM \(mem)G", "VOL \(vol)"]
+        cpuText = cpu == "?" ? "—" : "\(cpu)%"
+        memText = mem == "?" ? "—" : "\(mem)G"
+        volumeText = vol
+        gpuText = "—" // discrete GPU counter rarely exposed on Apple silicon
+        netText = "Wi‑Fi"
+        let batt = Process()
+        batt.executableURL = URL(fileURLWithPath: "/usr/bin/pmset")
+        batt.arguments = ["-g", "batt"]
+        let bp = Pipe()
+        batt.standardOutput = bp
+        batt.standardError = FileHandle.nullDevice
+        if (try? batt.run()) != nil {
+            let bout = String(data: bp.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+            batt.waitUntilExit()
+            if let match = bout.range(of: #"\d+%"#, options: .regularExpression) {
+                batteryText = String(bout[match])
+            } else {
+                batteryText = "—"
+            }
+        }
+        var parts = ["CPU \(cpuText)", "MEM \(memText)", "VOL \(volumeText)"]
         if quiet { parts.append("QUIET") }
         if motionOff { parts.append("MOTION OFF") }
         statusLine = parts.joined(separator: "  ·  ")

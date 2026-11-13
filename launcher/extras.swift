@@ -247,8 +247,15 @@ func glyphSurfaceItems() -> [Item] {
         ("Glyph Style", "Theme creator · ⌃⌥Y", "paintpalette", "style"),
         ("Glyph Lock (mock)", "Inert lock UI", "lock", "lockMock"),
         ("Glyph Login (mock)", "SDDM analog mock", "person.crop.circle", "loginMock"),
-        ("Desktop Glyphs", "Snap-grid wallpaper tiles · drag to move", "rectangle.on.rectangle", "DESKTOP"),
-        ("Reset Desktop Glyphs", "Restore balanced 6×4 default layout", "arrow.counterclockwise", "DESKTOP_RESET"),
+        ("Desktop Glyphs", "Full-desktop snap grid · drag / resize", "rectangle.on.rectangle", "DESKTOP"),
+        ("Reset Desktop Glyphs", "Restore balanced full-desktop default", "arrow.counterclockwise", "DESKTOP_RESET"),
+        ("Add Glyph: GPU", "Pin GPU tile on desktop grid", "cpu", "DESKTOP_ADD:gpu"),
+        ("Add Glyph: Memory", "Pin memory tile on desktop grid", "memorychip", "DESKTOP_ADD:mem"),
+        ("Add Glyph: Battery", "Pin battery tile on desktop grid", "battery.100", "DESKTOP_ADD:battery"),
+        ("Add Glyph: CPU", "Pin CPU tile on desktop grid", "gauge", "DESKTOP_ADD:cpu"),
+        ("Add Glyph: Net", "Pin network tile on desktop grid", "wifi", "DESKTOP_ADD:net"),
+        ("Add Glyph: Volume", "Pin volume tile on desktop grid", "speaker.wave.2", "DESKTOP_ADD:volume"),
+        ("Add Glyph: Media", "Pin now-playing tile on desktop grid", "music.note", "DESKTOP_ADD:media"),
         ("Rice: Nothing", "Apply Nothing OS theme", "circle.fill", "APPLY:nothing"),
     ]
     return surfaces.map { title, sub, sym, kind in
@@ -257,6 +264,13 @@ func glyphSurfaceItems() -> [Item] {
             let bin = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".config/veil/bin/veil-theme").path
             return Item(kind: .action, title: title, subtitle: sub, symbol: sym,
                         action: .run([bin, "apply", id]), score: 80)
+        }
+        if kind.hasPrefix("DESKTOP_ADD:") {
+            let gid = String(kind.dropFirst("DESKTOP_ADD:".count))
+            return Item(kind: .action, title: title, subtitle: sub, symbol: sym,
+                        action: .run(["/usr/bin/osascript", "-l", "JavaScript", "-e",
+                                      "ObjC.import('Foundation'); $.NSDistributedNotificationCenter.defaultCenter.postNotificationNameObjectUserInfoDeliverImmediately('app.veil.desktop-glyphs', 'add:\(gid)', $(), true)"]),
+                        score: 88)
         }
         if kind == "DESKTOP" || kind == "DESKTOP_RESET" {
             let notif = kind == "DESKTOP_RESET" ? "reset" : "toggle"

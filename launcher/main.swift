@@ -2616,13 +2616,22 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         DistributedNotificationCenter.default().addObserver(forName: Notification.Name("app.veil.desktop-glyphs"), object: nil, queue: .main) { n in
             let raw = ((n.object as? String) ?? "").lowercased()
             Task { @MainActor in
+                if raw.hasPrefix("add:") {
+                    let name = String(raw.dropFirst(4))
+                    if let id = DesktopGlyphID(rawValue: name) {
+                        DesktopGlyphBoard.shared.setPin(id, pinned: true)
+                    }
+                    return
+                }
                 switch raw {
                 case "toggle", "on", "off": DesktopGlyphBoard.shared.toggleEnabled()
                 case "refresh", "reload": DesktopGlyphBoard.shared.refresh()
                 case "reset", "default": DesktopGlyphBoard.shared.resetToDefault()
                 case "prove-drag":
                     // Same pipeline as AX mouse drag — for screenshots when CGEvent is blocked.
-                    DesktopGlyphBoard.shared.proveDrag(.cava, toCol: 6, toRow: 4)
+                    DesktopGlyphBoard.shared.proveDrag(.cava, toCol: 14, toRow: 7)
+                case "dismiss-panels":
+                    VeilPanelHost.shared.dismissImmediate()
                 default: DesktopGlyphBoard.shared.start()
                 }
             }
