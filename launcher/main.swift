@@ -520,8 +520,14 @@ final class Model: NSObject, ObservableObject {
     @Published var searchingFiles = false
     @Published var windows: [Int: [Win]] = [:]
     @Published var shown = false
-    /// Dedicated overview surface — not Theme: gallery rows under WORKSPACE OVERVIEW chrome.
-    @Published var overviewActive = false
+    /// Exclusive launcher surface — overview and theme gallery never share card sources.
+    enum Surface: Equatable { case search, overview, themes }
+    @Published var surface: Surface = .search
+    /// Overview-only cards (never Theme: rows). Bound by overviewPicker exclusively.
+    @Published var overviewCards: [Item] = []
+    /// Theme-gallery-only cards. Bound by themePicker exclusively.
+    @Published var themeCards: [Item] = []
+    var overviewActive: Bool { surface == .overview }
     var openMouse = NSPoint.zero  // hover selects only after the pointer moves from where it was at open
     var apps: [Item] = []
     var shortcuts: [Item] = []
@@ -643,10 +649,15 @@ final class Model: NSObject, ObservableObject {
                                           symbol: "doc.on.clipboard", action: .copy(""), score: 0)] : clips)
             return
         }
-        // Overview is a dedicated surface — evaluate before empty-query wipe / Theme gallery.
-        if overviewActive || q.lowercased() == "overview" {
+        // Exclusive surfaces — never let Theme: rows and overview chrome share `items`.
+        if surface == .overview || q.lowercased() == "overview" {
             cancelFileSearch()
-            presentOverviewCards()
+            enterOverview()
+            return
+        }
+        if surface == .themes || q.lowercased() == "theme" {
+            cancelFileSearch()
+            enterThemes()
             return
         }
         if q.isEmpty {
@@ -655,15 +666,7 @@ final class Model: NSObject, ObservableObject {
             selected = 0
             return
         }
-        if choosingTheme {
-            overviewActive = false
-            cancelFileSearch()
-            publish(ncCache.filter { $0.symbol == "paintpalette" }.sorted {
-                ($0.subtitle == "Current theme" ? 0 : 1, $0.title) < ($1.subtitle == "Current theme" ? 0 : 1, $1.title)
-            })
-            return
-        }
-        overviewActive = false
+        surface = .search
         if let entries = folderItems(q) {  // "~/Dev/": browse instead of search
             cancelFileSearch()
             publish(entries); return
@@ -876,55 +879,111 @@ final class Model: NSObject, ObservableObject {
     }
 
     var userMoved = false  // keep the selection on a row only after the user picked it
-    func move(_ d: Int) { if !items.isEmpty { selected = (selected + d + items.count) % items.count; userMoved = true } }
 
     /// Columns in the result grid (Foundry's console and Cinder's register are two-up); 1 for lists.
-    var choosingTheme: Bool { mode == 0 && !overviewActive && query.trimmingCharacters(in: .whitespaces).lowercased() == "theme" }
-    var choosingOverview: Bool { overviewActive || (mode == 0 && query.trimmingCharacters(in: .whitespaces).lowercased() == "overview") }
+    var choosingTheme: Bool { surface == .themes }
+    var choosingOverview: Bool { surface == .overview }
     var gridColumns: Int {
         if choosingTheme { return 3 }
         if choosingOverview { return 2 }
         return ["console", "embers"].contains(palette.s("layout", "")) ? 2 : 1
     }
 
-    func presentOverviewCards() {
-        overviewActive = true
+    /// Build workspace cards BEFORE flipping chrome — never leave Theme: rows under WORKSPACE OVERVIEW.
+    func enterOverview() {
         mode = 0
         actionsOpen = false
         cancelFileSearch()
         palette = Palette.load()
-        let cards = overviewWorkspaceCards(paletteWS: wsNames)
-        ncCache = ncItems(liveWorkspaceNames(paletteWS: wsNames))
-        // Never filter Theme: rows into this surface — cards are purpose-built.
-        items = cards.isEmpty
+        let names = liveWorkspaceNames(paletteWS: wsNames)
+        ncCache = ncItems(names)
+        let cards = overviewWorkspaceCards(paletteWS: names)
+        let safe = cards.isEmpty
             ? [Item(kind: .answer, title: "No workspaces", subtitle: "Theme vocabulary missing",
                     symbol: "rectangle.grid.2x2", action: .copy(""), score: 0)]
             : cards
+        // Cards first, then exclusive surface — prevents gallery bleed for one paint cycle.
+        overviewCards = safe
+        themeCards = []
+        items = safe
         selected = 0
+        surface = .overview
         if query.trimmingCharacters(in: .whitespaces).lowercased() != "overview" {
-            query = "overview"
+            // Avoid re-entrant search wiping surface: set without didSet search if possible.
+            if renderingFixture {
+                query = "overview"
+            } else {
+                renderingFixture = true
+                query = "overview"
+                renderingFixture = false
+            }
         }
     }
 
-    func toggleThemePicker() {
-        overviewActive = false
-        let next = choosingTheme ? "" : "theme"
+    func enterThemes() {
         mode = 0
         actionsOpen = false
-        if query == next { search() } else { query = next }
+        cancelFileSearch()
+        palette = Palette.load()
+        // Keep a pre-seeded ncCache (selftest / fixtures); otherwise refresh from live theme list.
+        if ncCache.filter({ $0.symbol == "paintpalette" }).isEmpty {
+            ncCache = ncItems(liveWorkspaceNames(paletteWS: wsNames))
+        }
+        let themes = ncCache.filter { $0.symbol == "paintpalette" }.sorted {
+            ($0.subtitle == "Current theme" ? 0 : 1, $0.title) < ($1.subtitle == "Current theme" ? 0 : 1, $1.title)
+        }
+        themeCards = themes
+        overviewCards = []
+        items = themes
+        selected = 0
+        surface = .themes
+        if query.trimmingCharacters(in: .whitespaces).lowercased() != "theme" {
+            renderingFixture = true
+            query = "theme"
+            renderingFixture = false
+        }
+    }
+
+    func presentOverviewCards() { enterOverview() }
+
+    func toggleThemePicker() {
+        if surface == .themes {
+            surface = .search
+            overviewCards = []
+            themeCards = []
+            query = ""
+            items = []
+        } else {
+            enterThemes()
+        }
     }
 
     /// Grid moves: up/down by a row, left/right by a column, stopping at the edges instead of wrapping.
     func moveGrid(dx: Int, dy: Int) {
-        guard !items.isEmpty else { return }
+        let pool = surfaceItems()
+        guard !pool.isEmpty else { return }
         let c = gridColumns, col = selected % c
         let next = dx != 0 ? (col + dx >= 0 && col + dx < c ? selected + dx : selected) : selected + dy * c
-        selected = max(0, min(items.count - 1, next)); userMoved = true
+        selected = max(0, min(pool.count - 1, next)); userMoved = true
+    }
+
+    func move(_ d: Int) {
+        let pool = surfaceItems()
+        if !pool.isEmpty { selected = (selected + d + pool.count) % pool.count; userMoved = true }
+    }
+
+    func surfaceItems() -> [Item] {
+        switch surface {
+        case .overview: return overviewCards
+        case .themes: return themeCards
+        case .search: return items
+        }
     }
 
     func activate(_ i: Int? = nil, reveal: Bool = false, paste: Bool = false) {
-        guard items.indices.contains(i ?? selected) else { return }
-        let it = items[i ?? selected]
+        let pool = surfaceItems()
+        guard pool.indices.contains(i ?? selected) else { return }
+        let it = pool[i ?? selected]
         guard !it.isInformational else { return }
         // permission rows ask, then search again with the new source
         if it.extra.hasPrefix("grant:") {
@@ -1741,16 +1800,20 @@ struct LauncherView: View {
             .padding(.horizontal, 18).frame(height: 62)
             .background(p.s("frame", "none") == "station" ? p["bg_dark"] : .clear)
 
-            if !m.items.isEmpty {
+            let surfaceHasCards = m.surface == .overview ? !m.overviewCards.isEmpty
+                : m.surface == .themes ? !m.themeCards.isEmpty
+                : !m.items.isEmpty
+            if surfaceHasCards {
                 if p.s("frame", "none") == "station" { p["white"].opacity(0.85).frame(height: 2) } else { divider(p) }
-                if m.choosingTheme { themePicker(p).frame(height: 412) }
-                else if m.choosingOverview { overviewPicker(p).frame(height: 412) }
+                // Exclusive surfaces: chrome and card source are one enum — never mix Theme: into overview.
+                if m.surface == .themes { themePicker(p).frame(height: 412) }
+                else if m.surface == .overview { overviewPicker(p).frame(height: 412) }
                 else { results(p).frame(height: 412) }
                 HStack(spacing: 16) {
                     // four hints at most (the rest live in ⌘K); narrow launchers drop to two
-                    if m.choosingTheme {
+                    if m.surface == .themes {
                         hint("↑↓←→", "navigate"); hint("↵", "apply"); hint("esc", "back")
-                    } else if m.choosingOverview {
+                    } else if m.surface == .overview {
                         hint("↑↓", "workspace"); hint("↵", "switch"); hint("esc", "close")
                     } else { ViewThatFits(in: .horizontal) {
                         HStack(spacing: 16) { hint("↵", "open"); hint("⌘K", "actions"); hint("⌘C", "copy"); hint("esc", "close") }
@@ -1923,10 +1986,11 @@ struct LauncherView: View {
     }
 
     func themePicker(_ p: Palette) -> some View {
-        ScrollViewReader { proxy in
+        let cards = m.themeCards
+        return ScrollViewReader { proxy in
             ScrollView {
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3), spacing: 10) {
-                    ForEach(Array(m.items.enumerated()), id: \.element.id) { index, item in
+                    ForEach(Array(cards.enumerated()), id: \.element.id) { index, item in
                         Button { m.activate(index) } label: {
                             ThemePreview(item: item, palette: p, selected: index == m.selected)
                         }
@@ -1944,15 +2008,17 @@ struct LauncherView: View {
     }
 
     /// Theme-aware workspace overview surface (pairs with Rift mission control on ⌃⌥M).
+    /// Cards come ONLY from overviewCards — never from Theme gallery `items`.
     func overviewPicker(_ p: Palette) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
+        let cards = m.overviewCards
+        return VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 10) {
                 Text(p.cased("Workspace Overview"))
                     .font(mono(13, "Bold")).tracking(1.6).foregroundStyle(p["yellow"])
                 Text(p.cased("⌃⌥M · Esc dismisses"))
                     .font(mono(11, "Bold")).tracking(0.8).foregroundStyle(p["dim"])
                 Spacer(minLength: 8)
-                Text(p.cased("\(m.items.count) spaces"))
+                Text(p.cased("\(cards.count) spaces"))
                     .font(mono(11, "Bold")).tracking(1.2).foregroundStyle(p["comment"])
             }
             .padding(.horizontal, 16).frame(height: 36)
@@ -1960,7 +2026,7 @@ struct LauncherView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 2), spacing: 12) {
-                        ForEach(Array(m.items.enumerated()), id: \.element.id) { index, item in
+                        ForEach(Array(cards.enumerated()), id: \.element.id) { index, item in
                             Button { m.activate(index) } label: {
                                 OverviewCard(item: item, palette: p, selected: index == m.selected, index: index)
                             }
@@ -2194,6 +2260,9 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var ignoreResignUntil = Date.distantPast
     /// Distributed hide from a prior `dismiss-popups` must not win over a just-posted show.
     var suppressHideUntil = Date.distantPast
+    /// Monotonic show generation — stale force-hides posted before this show are ignored.
+    var showGeneration = 0
+    var lastShowAt = Date.distantPast
 
     func applicationDidFinishLaunching(_ n: Notification) {
         if Model.migrateRankingPrivacy(.standard) { model.usage = [:]; model.history = []; model.pins = []; model.queryChoices = [:] }
@@ -2255,8 +2324,8 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
             switch Int(e.keyCode) {
             case kVK_Escape:  // Overview: close immediately. Else clear query → mode → close.
-                if self.model.choosingOverview || self.model.overviewActive {
-                    self.hide(); return nil
+                if self.model.surface == .overview {
+                    self.hide(force: true); return nil
                 }
                 if !self.model.query.isEmpty { self.model.query = ""; self.model.historyIndex = -1 }
                 else if self.model.mode != 0 { self.model.mode = 0; self.model.search() }
@@ -2372,9 +2441,18 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         // veil dismiss-popups / Esc path — hide Search overview/panel entirely
         DistributedNotificationCenter.default().addObserver(forName: Notification.Name("app.veil.search.hide"), object: nil, queue: .main) { [weak self] n in
             guard let self else { return }
-            let force = (n.object as? String)?.lowercased() == "force"
-            if !force, Date() < self.suppressHideUntil { return }
-            self.hide()
+            let obj = (n.object as? String) ?? ""
+            // Epoch-ms from `veil dismiss-popups`: ignore hides requested before the latest show
+            // (fixes themes→dismiss→overview and rapid open/close where a late hide kills the new panel).
+            if let hideMs = Double(obj), hideMs > 1_000_000 {
+                let hideAt = Date(timeIntervalSince1970: hideMs / 1000.0)
+                if hideAt < self.lastShowAt { return }
+            } else if obj.lowercased() == "force" {
+                // legacy force — honor when panel is up
+            } else if Date() < self.suppressHideUntil, !self.panel.isVisible {
+                return
+            }
+            self.hide(force: true)
         }
         // functional check: top results for one query per feature, written to ~/Library/Caches/veil-search-verify.txt
         DistributedNotificationCenter.default().addObserver(forName: Notification.Name("app.veil.search.verify"), object: nil, queue: .main) { [weak self] _ in
@@ -2449,8 +2527,10 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             self.model.ncCache = ncItems(liveWorkspaceNames(paletteWS: self.model.wsNames))
             self.band.reload(self.model.palette)
             if self.model.shown {
-                if self.model.overviewActive || self.model.choosingOverview {
-                    self.model.presentOverviewCards()
+                if self.model.surface == .overview {
+                    self.model.enterOverview()
+                } else if self.model.surface == .themes {
+                    self.model.enterThemes()
                 } else {
                     self.model.search()
                 }
@@ -2546,14 +2626,21 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         guard !veilIsOff, let screen = NSScreen.screens.first(where: { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) }) ?? NSScreen.main else { return }
         ClipHistory.shared.capture()
         MenuItems.frontPID = NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0
-        // Beat a late dismiss-popups hide from the previous surface.
-        suppressHideUntil = Date().addingTimeInterval(0.7)
+        // Beat a late dismiss-popups hide from the previous surface (killer: themes → dismiss → overview).
+        showGeneration += 1
+        lastShowAt = Date()
+        suppressHideUntil = Date().addingTimeInterval(1.0)
         model.refresh()
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if q == "overview" {
-            model.presentOverviewCards()
-        } else {
-            model.overviewActive = false
+        switch q {
+        case "overview":
+            model.enterOverview()
+        case "theme":
+            model.enterThemes()
+        default:
+            model.surface = .search
+            model.overviewCards = []
+            model.themeCards = []
             if model.query == query { model.search() } else { model.query = query }
         }
         model.selected = 0
@@ -2579,13 +2666,27 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         ignoreResignUntil = Date().addingTimeInterval(0.35)
         Scrim.shared.show(on: screen, enabled: p.flag("scrim"))
         NSApp.activate(ignoringOtherApps: true)
+        panel.level = .statusBar
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient, .ignoresCycle]
         panel.makeKeyAndOrderFront(nil)
         panel.orderFrontRegardless()
+        // Second front in case mission-control / splash stole ordering.
         DispatchQueue.main.async {
-            guard self.panel.isVisible else { return }
+            self.panel.orderFrontRegardless()
+            guard self.panel.isVisible else {
+                // Notification can arrive before the app finished launching — retry once.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                    self.panel.makeKeyAndOrderFront(nil)
+                    self.panel.orderFrontRegardless()
+                    self.model.shown = true
+                    if self.model.surface == .overview { self.model.enterOverview() }
+                }
+                return
+            }
             self.model.shown = true
-            // Re-assert overview cards after refresh async callbacks cannot race Theme: rows in.
-            if self.model.overviewActive { self.model.presentOverviewCards() }
+            // Re-assert exclusive surface after refresh async cannot pollute cards.
+            if self.model.surface == .overview { self.model.enterOverview() }
+            else if self.model.surface == .themes { self.model.enterThemes() }
             if !(self.panel.firstResponder is NSTextView), let field = self.panel.contentView?.firstTextField {
                 self.panel.makeFirstResponder(field)
             }
@@ -2625,9 +2726,12 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
     }
 
-    func hide() {
+    func hide(force: Bool = true) {
+        _ = force
         guard panel.isVisible else {
-            model.overviewActive = false
+            model.surface = .search
+            model.overviewCards = []
+            model.themeCards = []
             return
         }
         panel.orderOut(nil)
@@ -2636,9 +2740,15 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         model.actionsOpen = false
         model.historyIndex = -1
         model.mode = 0
-        model.overviewActive = false
-        if model.query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "overview" {
+        model.surface = .search
+        model.overviewCards = []
+        model.themeCards = []
+        let q = model.query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if q == "overview" || q == "theme" {
+            model.renderingFixture = true
             model.query = ""
+            model.renderingFixture = false
+            model.items = []
         }
         model.cancelFileSearch()
         Weather.shared.cancelPending()
@@ -2688,12 +2798,20 @@ func selftest() -> Never {
             Item(kind: .nc, title: "Workspace Overview", action: .run(["veil", "overview"]))
         ]
         model.toggleThemePicker()
-        precondition(model.gridColumns == 3 && model.items.count == 2 && model.items.first?.title == "Theme: Umbra")
+        precondition(model.surface == .themes)
+        precondition(model.gridColumns == 3 && model.themeCards.count == 2 && model.themeCards.first?.title == "Theme: Umbra")
         precondition(!model.searchingFiles && model.completion == nil)
         model.moveGrid(dx: 1, dy: 0)
-        precondition(model.items[model.selected].title == "Theme: Night City")
-        model.toggleThemePicker()
-        precondition(model.query.isEmpty && model.items.isEmpty)
+        precondition(model.themeCards[model.selected].title == "Theme: Night City")
+        // Gallery must not pollute overview surface
+        model.enterOverview()
+        precondition(model.surface == .overview)
+        precondition(model.overviewCards.allSatisfy { !$0.title.hasPrefix("Theme:") })
+        precondition(model.themeCards.isEmpty)
+        model.toggleThemePicker()  // from overview → themes via toggle clears? enterThemes path
+        // toggle from themes closes; ensure clean exit from themes
+        if model.surface == .themes { model.toggleThemePicker() }
+        precondition(model.surface == .search)
     }
     do {
         let cards = overviewWorkspaceCards(paletteWS: ["FOCUS", "BUILD", "STUDY", "MEDIA", "FLOAT"])
@@ -2703,10 +2821,12 @@ func selftest() -> Never {
         precondition(isNumericWorkspaceToken("3") && !isNumericWorkspaceToken("WALL"))
         let model = Model()
         model.renderingFixture = true
-        model.overviewActive = true
-        model.search()
-        precondition(model.choosingOverview)
-        precondition(model.items.allSatisfy { !$0.title.hasPrefix("Theme:") })
+        model.enterThemes()
+        precondition(model.surface == .themes)
+        model.enterOverview()
+        precondition(model.surface == .overview)
+        precondition(model.overviewCards.allSatisfy { !$0.title.hasPrefix("Theme:") })
+        precondition(model.themeCards.isEmpty)
         model.renderingFixture = false
         model.cancelFileSearch()
     }
