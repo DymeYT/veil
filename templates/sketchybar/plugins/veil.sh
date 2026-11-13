@@ -4,18 +4,243 @@ TAGS='@@tag_mode@@'   # text: tags are words | icons: tags are glyphs that also 
 CASE='@@value_case@@' # upper | lower | title, for words the bar writes (WIFI, MUTE, MON 26)
 CLOCK_DATE='@@clock_date@@'; CLOCK_TIME='@@clock_time@@'
 cased() { case "$CASE" in upper) tr '[:lower:]' '[:upper:]' ;; lower) tr '[:upper:]' '[:lower:]' ;; *) LC_ALL=C awk '{ for (i = 1; i <= NF; i++) if ($i ~ /^[A-Za-z]+$/ && $i !~ /^(CPU|MEM|VOL|NET|VPN|LAN|WIFI)$/) $i = toupper(substr($i, 1, 1)) tolower(substr($i, 2)) } 1' ;; esac; }  # title case leaves numbers, symbols and acronyms alone
+CACHE="$HOME/Library/Caches"
+METRICS="$HOME/.local/bin/veil-metrics"
+unchanged() {
+  local stamp old_stamp old_value
+  read -r stamp 2>/dev/null < "$CACHE/veil-bar-epoch" || return 1
+  {
+    read -r old_stamp
+    read -r old_value
+  } 2>/dev/null < "$CACHE/veil-bar-$NAME"
+  [[ "$stamp" = "$old_stamp" && "$1" = "$old_value" ]]
+}
+remember() {
+  local stamp
+  read -r stamp 2>/dev/null < "$CACHE/veil-bar-epoch" || return 0
+  printf '%s\n' "$stamp" "$1" > "$CACHE/veil-bar-$NAME"
+}
+# Music and Spotify publish playback transitions through distributed
+# notifications. Read their scripting dictionaries only when the panel opens
+# without an event or when a control is clicked. Cider has no AppleScript
+# dictionary; when enabled, media-control reads Now Playing on demand (no
+# stream helper, no timer). Disable with: veil feature disable cider-bridge
+music_feature_off() { [ -f "$HOME/.config/veil/generated/features/disable-$1" ]; }
+music_bundle_source() {
+  case "$1" in
+    com.apple.Music) echo Music ;;
+    com.spotify.client) echo Spotify ;;
+    sh.cider.*|*.cider.*) echo Cider ;;
+    *) [ -n "$1" ] && echo "$1" || echo "" ;;
+  esac
+}
+music_media_control() {
+  music_feature_off cider-bridge && return 1
+  command -v media-control >/dev/null || return 1
+  local action="${1:-}" raw bundle source state title artist album playing
+  case "$action" in
+    previous) media-control previous-track >/dev/null 2>&1 || true ;;
+    next) media-control next-track >/dev/null 2>&1 || true ;;
+    playpause) media-control toggle-play-pause >/dev/null 2>&1 || true ;;
+  esac
+  raw=$(media-control get --no-artwork 2>/dev/null) || return 1
+  [ -n "$raw" ] && [ "$raw" != null ] || return 1
+  bundle=$(jq -r '.bundleIdentifier // .bundleID // empty' <<<"$raw" 2>/dev/null) || return 1
+  source=$(music_bundle_source "$bundle")
+  [ -n "$source" ] || source=$(jq -r '.displayName // .appName // "Now playing"' <<<"$raw")
+  playing=$(jq -r 'if (.playing == true) or (.isPlaying == true) or ((.playbackRate // 0) > 0) then "playing" else "paused" end' <<<"$raw")
+  title=$(jq -r '.title // .name // empty' <<<"$raw")
+  artist=$(jq -r '.artist // .artistName // empty' <<<"$raw")
+  album=$(jq -r '.album // .albumName // empty' <<<"$raw")
+  [ -n "$title" ] || return 1
+  jq -nc --arg source "$source" --arg state "$playing" --arg title "$title" --arg artist "$artist" --arg album "$album" \
+    '{source:$source, state:$state, title:$title, artist:$artist, album:$album}'
+}
+music_snapshot() {
+  local selected="$1" action="$2" snapshot=""
+  if [ "$selected" = Cider ]; then
+    music_media_control "$action"
+    return
+  fi
+  # Cap AppleScript so a stuck Music/Spotify Automation prompt cannot freeze the bar.
+  snapshot=$(perl -e 'alarm 2; exec @ARGV' /usr/bin/osascript -l JavaScript - "$selected" "$action" <<'JXA'
+ObjC.import("AppKit");
+function run(args) {
+    const players = [
+        { source: "Music", id: "com.apple.Music" },
+        { source: "Spotify", id: "com.spotify.client" }
+    ];
+    const [selected, action] = args;
+    const candidates = players.filter(player => !selected || player.source === selected);
+    const snapshots = [];
+    let unavailable = "";
+    for (const player of candidates) {
+        const running = $.NSRunningApplication.runningApplicationsWithBundleIdentifier(player.id);
+        if (!Number(running.count)) continue;
+        try {
+            const app = Application(ObjC.unwrap(running.objectAtIndex(0).bundleURL.path));
+            switch (action) {
+                case "previous": app.previousTrack(); break;
+                case "next": app.nextTrack(); break;
+                case "playpause": app.playpause(); break;
+            }
+            const state = String(app.playerState());
+            if (state === "stopped") continue;
+            const track = app.currentTrack;
+            const title = String(track.name() || "");
+            const artist = String(track.artist() || "");
+            let album = "";
+            try { album = String(track.album() || ""); } catch (_) {}
+            if (title) snapshots.push({ source: player.source, state, title, artist, album });
+        } catch (error) {
+            unavailable = String(error).includes("-1743") ? "Allow SketchyBar to control " + player.source + " in Automation." : "Playback details unavailable.";
+        }
+    }
+    return JSON.stringify(snapshots.find(item => item.state === "playing") || snapshots[0] ||
+        { source: "", state: "stopped", title: "", artist: "", album: "", message: unavailable });
+}
+JXA
+) || snapshot=""
+  # Merge AppleScript players with Now Playing (Cider). A paused Music track must
+  # not hide an actively playing Cider session.
+  local now=""
+  if [ -z "$selected" ] || [ "$selected" = Cider ]; then
+    now=$(music_media_control "") || now=""
+  fi
+  if [ -n "$now" ] && jq -e '.state == "playing" and (.title | length) > 0' >/dev/null 2>&1 <<<"$now"; then
+    printf '%s\n' "$now"
+    return 0
+  fi
+  if [ -n "$snapshot" ] && jq -e '(.title | length) > 0' >/dev/null 2>&1 <<<"$snapshot"; then
+    printf '%s\n' "$snapshot"
+    return 0
+  fi
+  if [ -n "$now" ]; then
+    printf '%s\n' "$now"
+    return 0
+  fi
+  printf '%s\n' "${snapshot:-{\"source\":\"\",\"state\":\"stopped\",\"title\":\"\"}}"
+}
+music_read() {
+  player=; state=; track=; detail=; message=
+  IFS=$'\x1f' read -r player state track detail message < <(jq -r '
+    def line: if type == "string" then gsub("[[:cntrl:]]"; " ") else "" end;
+    [(.source | line), (.state | line), (.title | line),
+     ([.artist, .album] | map(line | select(length > 0)) | join(" · ")), (.message | line)]
+    | join("\u001f")' <<<"$1")
+}
+music_draw() {
+  local show=off controls=off detail_drawing=off color=0xff8794ad glyph=󰐊 toggle='Play'
+  [ -z "$detail" ] || detail_drawing=on
+  if [ -n "$player" ] && [ -n "$track" ] && [ "$state" != stopped ]; then controls=on; fi
+  if [ "$state" = playing ] && [ -n "$track" ]; then
+    show=on; color=0xff00e5ff; glyph=󰏤; toggle='Pause'
+  fi
+  sketchybar --set music label="$track" label.drawing="$show" icon.color="$color" \
+    --set music.source label="${player:-Now playing}" \
+    --set music.track label="${track:-${message:-Nothing playing}}" \
+    --set music.detail label="$detail" drawing="$detail_drawing" \
+    --set music.previous drawing="$controls" --set music.toggle drawing="$controls" icon="$glyph" label="$toggle" \
+    --set music.next drawing="$controls" "$@"
+}
+music_panel() {
+  local event="${1:-$SENDER}" cache="$CACHE/veil-bar-music"
+  local player state track detail message snapshot cached source
+  case "$event" in
+    forced) rm -f "$cache"; return ;;
+    mouse.exited.global) sketchybar --set music popup.drawing=off; return ;;
+  esac
+  if [[ -s "$cache" ]]; then
+    read -r cached < "$cache"
+    music_read "$cached"
+  fi
+  case "$event" in
+    music_change|spotify_change)
+      source=Music; [ "$event" != spotify_change ] || source=Spotify
+      snapshot=$(jq -ce --arg source "$source" '
+        def text: if type == "string" then . else "" end;
+        {source: $source, state: (."Player State" | text | ascii_downcase), title: (.Name | text),
+         artist: (.Artist | text), album: (.Album | text)}
+        | select(.state == "playing" or .state == "paused" or .state == "stopped")' <<<"$INFO" 2>/dev/null) || return
+      # A stale pause from the other player must not replace the active track.
+      if [ -n "$player" ] && [ "$source" != "$player" ] && [ "$state" = playing ]; then
+        [ "$(jq -r .state <<<"$snapshot")" = playing ] || return
+      fi
+      # Spotify pause payloads may omit metadata. Keep the previous track so
+      # the panel can resume it without querying for every player event.
+      snapshot=$(jq -c --argjson prior "${cached:-null}" '
+        if .source == $prior.source and .state == "paused" and .title == "" then
+          $prior + {state: .state}
+        elif .state == "stopped" then
+          {source: "", state: "stopped", title: "", artist: "", album: ""}
+        else . end' <<<"$snapshot") || return
+      ;;
+    mouse.clicked)
+      if sketchybar --query music | jq -e '.popup.drawing == "on" or .popup.drawing == true' >/dev/null; then
+        sketchybar --set music popup.drawing=off
+        return
+      fi
+      # Always re-query on open so a Cider/Now Playing handoff is not hidden by a
+      # stale Music/Spotify cache from an earlier session.
+      snapshot=$(music_snapshot "" "") || snapshot="$cached"
+      ;;
+    previous|next|playpause)
+      [ -n "$player" ] || return
+      if [ "$player" = Cider ]; then
+        snapshot=$(music_media_control "$event") || return
+      else
+        snapshot=$(music_snapshot "$player" "$event") || return
+      fi
+      ;;
+    *) return ;;
+  esac
+  [ -n "$snapshot" ] || snapshot='{"source":"","state":"stopped","title":""}'
+  music_read "$snapshot"
+  if [ "$event" = mouse.clicked ]; then
+    music_draw --set city popup.drawing=off --set keys popup.drawing=off --set clock popup.drawing=off --set music popup.drawing=on || return
+  else
+    music_draw || return
+  fi
+  printf '%s\n' "$snapshot" > "$cache"
+}
+
+if [ "${1:-}" = music ]; then
+  music_panel "$2"
+  exit
+fi
 case "$NAME" in
- clock) sketchybar --set "$NAME" icon="$(date "+$CLOCK_DATE" | cased)" label="$(date "+$CLOCK_TIME")" ;;
+ clock)
+   if [[ "$SENDER" = mouse.exited.global ]]; then exec sketchybar --set clock popup.drawing=off; fi
+  # Read both fields from one timestamp so midnight cannot split the date and time.
+  stamp=$(date "+$CLOCK_DATE"$'\t'"$CLOCK_TIME") || exit 0
+  unchanged "$stamp" && exit 0
+  if sketchybar --set "$NAME" icon="$(cased <<<"${stamp%%$'\t'*}")" label="${stamp#*$'\t'}"; then
+   remember "$stamp"
+  fi ;;
  battery)
-  data=$(pmset -g batt); percent=$(printf '%s' "$data" | /usr/bin/grep -Eo '[0-9]+%' | head -1)
-  color=0xff00e5ff; label="$percent"
+  data=$(pmset -g batt) || exit 0
+  if [[ ! "$data" =~ ([0-9]{1,3})% ]]; then
+   # Desktops and some USB battery reports have no internal battery percentage.
+   unchanged absent && exit 0
+   if sketchybar --set "$NAME" drawing=off update_freq=0 updates=on; then
+    remember absent
+   fi
+   exit 0
+  fi
+  value=$((10#${BASH_REMATCH[1]})); [ "$value" -le 100 ] || exit 0
+  color=0xff00e5ff; label="${value}%"
   [[ "$data" == *'AC Power'* ]] && color=0xff5af7a5
-  value=${percent%%%}; [[ -n "$value" && "$value" -lt 20 && "$data" != *'AC Power'* ]] && color=0xffff5370
+  [[ "$value" -lt 20 && "$data" != *'AC Power'* ]] && color=0xffff5370
   # level glyph (Nerd Font battery 10..100, bolt when charging)
-  glyphs=(󰂎 󰁺 󰁻 󰁼 󰁽 󰁾 󰁿 󰂀 󰂁 󰂂 󰁹); g=${glyphs[$(( ${value:-0} / 10 ))]}
+  glyphs=(󰂎 󰁺 󰁻 󰁼 󰁽 󰁾 󰁿 󰂀 󰂁 󰂂 󰁹); g=${glyphs[$(( value / 10 ))]}
   [[ "$data" == *'AC Power'* ]] && g=󰂄
-  if [ "$TAGS" = icons ]; then sketchybar --set "$NAME" icon="$g" label="$label" icon.color="$color"
-  else sketchybar --set "$NAME" label="$label" icon.color="$color"; fi ;;
+  glyph=()
+  [ "$TAGS" != icons ] || glyph=(icon="$g")
+  state="$value $color"
+  unchanged "$state" && exit 0
+  if sketchybar --set "$NAME" drawing=on update_freq=180 "${glyph[@]}" label="$label" icon.color="$color"; then
+   remember "$state"
+  fi ;;
  volume)
   # first draw has no event payload: read the current level instead of showing a placeholder
   [[ "$SENDER" == volume_change ]] || INFO=$(osascript -e 'if output muted of (get volume settings) then return 0' -e 'return output volume of (get volume settings)' 2>/dev/null)
@@ -23,45 +248,74 @@ case "$NAME" in
   if [ "$INFO" = 0 ]; then label=$(echo MUTE | cased); g=󰝟; else label="${INFO}%"; g=󰕿; [ "$INFO" -gt 33 ] && g=󰖀; [ "$INFO" -gt 66 ] && g=󰕾; fi
   if [ "$TAGS" = icons ]; then sketchybar --set "$NAME" icon="$g" label="$label"; else sketchybar --set "$NAME" label="$label"; fi ;;
  net)
-  # label = kind of the default route: WIFI, LAN, VPN (utun, e.g. Mullvad) or the port name
-  if iface=$(route -n get default 2>/dev/null | awk '/interface:/{print $2}') && [[ -n "$iface" ]]; then
-   port=$(networksetup -listallhardwareports | awk -v d="$iface" '/^Hardware Port:/{sub(/^Hardware Port: /,""); p=$0} /^Device:/{if ($2==d) print p}')
-   case "$iface:$port" in
-    utun*|ipsec*|ppp*) label=VPN ;; *:Wi-Fi) label=WIFI ;; *:*Ethernet*|*:*LAN*|*:Thunderbolt*) label=LAN ;; *:iPhone*) label=PHONE ;;
-    *) label=$(printf '%s' "${port:-$iface}" | tr '[:lower:]' '[:upper:]' | cut -c1-6) ;;
-   esac
-   g=󰖩; [ "$label" = LAN ] && g=󰈀; [ "$label" = VPN ] && g=󰦝
-   [ "$TAGS" = icons ] && sketchybar --set "$NAME" icon="$g"
-   sketchybar --set "$NAME" label="$(echo "$label" | cased)" label.color=0xffd9f4ff icon.color=0xff00e5ff
-  else
-   [ "$TAGS" = icons ] && sketchybar --set "$NAME" icon=󰖪
-   sketchybar --set "$NAME" label="$(echo OFFLINE | cased)" label.color=0xffff5370 icon.color=0xffff5370
+  # Route and hardware inventory are needed only on a network event. A tunnel
+  # already identifies its own kind, so skip the hardware query in that case.
+  route_data=$(route -n get default 2>/dev/null)
+  iface=''
+  if [[ "$route_data" =~ interface:[[:blank:]]*([[:alnum:]]+) ]]; then
+   iface=${BASH_REMATCH[1]}
+  fi
+  # Wi-Fi notifications are unavailable on some recent macOS releases. On a
+  # periodic check the interface alone is enough to rule out a visible change.
+  if [ "$SENDER" = routine ] && unchanged "$iface"; then
+   exit 0
+  fi
+  color=0xff00e5ff; ink=0xffd9f4ff
+  case "$iface" in
+   '') label=OFFLINE; color=0xffff5370; ink=0xffff5370; g=󰖪 ;;
+   utun*|ipsec*|ppp*) label=VPN; g=󰦝 ;;
+   *)
+    port=$(networksetup -listallhardwareports | awk -v d="$iface" '/^Hardware Port:/{sub(/^Hardware Port: /,""); p=$0} /^Device:/{if ($2==d) {print p; exit}}')
+    g=󰖩
+    case "$port" in
+     Wi-Fi) label=WIFI ;;
+     *Ethernet*|*LAN*|Thunderbolt*) label=LAN; g=󰈀 ;;
+     *iPhone*) label=PHONE ;;
+     *) label=$(tr '[:lower:]' '[:upper:]' <<<"${port:-$iface}"); label=${label:0:6} ;;
+    esac ;;
+  esac
+  glyph=()
+  [ "$TAGS" != icons ] || glyph=(icon="$g")
+  if sketchybar --set "$NAME" "${glyph[@]}" label="$(cased <<<"$label")" label.color="$ink" icon.color="$color"; then
+   remember "$iface"
   fi ;;
- music)
-  # shortcut: only updates on player notifications, so a track already playing at bar start shows after the next play/pause/skip
-  state=$(jq -r '."Player State" // empty' <<<"$INFO" 2>/dev/null)
-  if [[ "$state" == Playing ]]; then
-   sketchybar --set "$NAME" drawing=on label="$(jq -r '[.Artist, .Name] | map(select(. != null)) | join(" - ")' <<<"$INFO")"
-  else
-   sketchybar --set "$NAME" drawing=off
-  fi ;;
+ music) music_panel ;;
  app) [[ "$SENDER" == front_app_switched && "$INFO" != "Veil Search" ]] && sketchybar --set "$NAME" label="$INFO" ;;  # the launcher is an overlay, not the app you are in
  cpu)
-  read -r cpu mem temp < <("$HOME/.local/bin/veil-metrics" "$HOME/Library/Caches/veil-cpu")
-  if [[ -n "$cpu" ]]; then
-   v=$(printf '%d.%02d' $((cpu / 100)) $((cpu % 100))); H="$HOME/Library/Caches/veil-cpu-hist"
-   # a reloaded bar starts with an empty graph: refill it once from the saved history (the rc writes a new epoch per load)
-   if [[ "$(cat "$H.seeded" 2>/dev/null)" != "$(cat "$HOME/Library/Caches/veil-bar-epoch" 2>/dev/null)" ]]; then
-    [[ -s "$H" ]] && sketchybar --push cpu.graph $(tr '\n' ' ' < "$H")
-    cp "$HOME/Library/Caches/veil-bar-epoch" "$H.seeded" 2>/dev/null
+  graph=${1:-on}; show_temp=${2:-on}
+  options=()
+  [ "$show_temp" = on ] || options=(--no-temperature)
+  read -r cpu mem temp < <("$METRICS" "$CACHE/veil-cpu" "${options[@]}") || exit 0
+  args=(--set cpu label="${cpu}%" --set memory label="${mem}G")
+  if [[ "$graph" = on ]]; then
+   printf -v value '%d.%02d' "$((cpu / 100))" "$((cpu % 100))"
+   history="$CACHE/veil-cpu-hist"
+   samples=()
+   if [[ -s "$history" ]]; then
+    while read -r sample; do
+     [[ "$sample" =~ ^(0\.[0-9][0-9]|1\.00)$ ]] && samples+=("$sample")
+    done < "$history"
    fi
-   { cat "$H" 2>/dev/null; echo "$v"; } | tail -n 34 > "$H.tmp" && mv -f "$H.tmp" "$H"
-   sketchybar --set cpu label="${cpu}%" --set memory label="${mem}G" --push cpu.graph "$v"
+   epoch=''; seeded=''
+   read -r epoch 2>/dev/null < "$CACHE/veil-bar-epoch"
+   read -r seeded 2>/dev/null < "$history.seeded"
+   if [[ "$epoch" != "$seeded" && ${#samples[@]} -gt 0 ]]; then
+    args+=(--push cpu.graph "${samples[@]}")
+   fi
+   args+=(--push cpu.graph "$value")
   fi
-  # colour only when it needs attention: the die runs hot past ~85°C under sustained load
-  if [[ "${temp:-0}" -gt 0 ]]; then
+  if [[ "$show_temp" = on ]]; then
    tc=0xffd9f4ff; [[ "$temp" -ge 85 ]] && tc=0xffff5370
-   sketchybar --set temp label="${temp}°" label.color=$tc 2>/dev/null
+   temp_label='—'; [[ "$temp" -gt 0 ]] && temp_label="${temp}°"
+   args+=(--set temp label="$temp_label" label.color="$tc")
+  fi
+  if sketchybar "${args[@]}" && [[ "$graph" = on ]]; then
+   samples+=("$value")
+   offset=$(( ${#samples[@]} > 34 ? ${#samples[@]} - 34 : 0 ))
+   printf '%s\n' "${samples[@]:$offset}" > "$history"
+   if [[ "$epoch" != "$seeded" ]]; then
+    printf '%s\n' "$epoch" > "$history.seeded"
+   fi
   fi ;;
  city)
   if [[ "$SENDER" == mouse.clicked ]]; then
@@ -71,14 +325,14 @@ case "$NAME" in
    extra=''; [ "$(defaults read com.apple.universalaccess reduceMotion 2>/dev/null)" = 1 ] && extra="$extra  ·  MOTION OFF BY SYSTEM"
    # ⌥Z pauses tiling on the focused display's space: say so, or the pause looks like a broken window manager
    rift-cli query displays 2>/dev/null | jq -e 'any(.[]; .is_active_context and (.is_active_space | not))' >/dev/null && extra="$extra  ·  TILING PAUSED"
-   read -r cpu mem temp < <("$HOME/.local/bin/veil-metrics" "$HOME/Library/Caches/veil-cpu")
+   read -r cpu mem temp < <("$METRICS" "$CACHE/veil-cpu" --instant)
    vol=$(osascript -e 'if output muted of (get volume settings) then return "MUTE"' -e 'return (output volume of (get volume settings) as text) & "%"' 2>/dev/null)
    if route -n get default >/dev/null 2>&1; then net=ONLINE; else net=OFFLINE; fi
    t=''; [[ "${temp:-0}" -gt 0 ]] && t="  ·  TEMP ${temp}°"
    # one line: the readings always, states only when they are the exception
    state=''; [ "$net" = OFFLINE ] && state="  ·  OFFLINE"; [ "$quiet" = ON ] && state="$state  ·  QUIET"
    status="CPU ${cpu:-?}%  ·  MEM ${mem:-?}G$t  ·  VOL ${vol:-?}$state$extra"
-   sketchybar --set menu.status label="$(echo "$status" | cased)" --set city popup.drawing=toggle
+   sketchybar --set menu.status label="$(echo "$status" | cased)" --set keys popup.drawing=off --set music popup.drawing=off --set clock popup.drawing=off --set city popup.drawing=toggle
   else
    sketchybar --set city popup.drawing=off
   fi ;;

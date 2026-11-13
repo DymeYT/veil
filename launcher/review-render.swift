@@ -9,7 +9,7 @@ func renderReviewFixtureIfRequested() -> Bool {
     let args = CommandLine.arguments
     guard let i = args.firstIndex(of: "--render-review"), args.count > i + 2 else { return false }
     let state = args.count > i + 3 ? args[i + 3] : "results"
-    guard ["results", "long", "empty", "idle", "last"].contains(state) else { return false }
+    guard ["results", "long", "empty", "idle", "last", "themes"].contains(state) else { return false }
     MainActor.assumeIsolated {
         _ = NSApplication.shared
         let model = Model()
@@ -24,8 +24,17 @@ func renderReviewFixtureIfRequested() -> Bool {
         for file in fonts where wanted.contains(where: { normalize(file.lastPathComponent).hasPrefix($0) }) {
             CTFontManagerRegisterFontsForURL(file as CFURL, .process, nil)
         }
-        model.query = state == "idle" ? "" : "Search"
-        if state != "empty" && state != "idle" {
+        model.query = state == "themes" ? "theme" : state == "idle" ? "" : "Search"
+        if state == "themes" {
+            let current = model.palette.s("theme_id", "")
+            model.ncCache = ncItems(model.wsNames).map { item in
+                guard item.symbol == "paintpalette" else { return item }
+                var item = item
+                item.subtitle = item.extra == current ? "Current theme" : "Apply theme"
+                return item
+            }
+            model.search()
+        } else if state != "empty" && state != "idle" {
             model.items = [
                 Item(kind: .app, title: "Calendar", subtitle: "Applications", symbol: "calendar", action: .open(URL(fileURLWithPath: "/System/Applications/Calendar.app"))),
                 Item(kind: .app, title: "System Settings", subtitle: "Applications", symbol: "gearshape", action: .open(URL(fileURLWithPath: "/System/Applications/System Settings.app"))),

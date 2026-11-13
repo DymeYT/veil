@@ -1,14 +1,14 @@
 # Veil
 
-Twelve complete desktop environments for macOS. One command swaps the whole look and feel: tiling, bar, borders,
-launcher, terminal, editor, prompt, monitors and wallpaper all change together, each built around a game, anime
-or city.
+Twelve desktop environments for macOS. One command changes tiling, the status bar, launcher,
+terminal, editor, system monitors, and wallpaper. Umbra pairs a NASA photograph of a lunar eclipse
+with graphite surfaces, a cyan focus edge, and a centered workspace dock.
 
 Built on [Rift](https://github.com/acsandmann/rift) (tiling, patched for Hyprland-style animations and directional
 resizing), [SketchyBar](https://github.com/FelixKratz/SketchyBar), [JankyBorders](https://github.com/FelixKratz/JankyBorders)
 and **Veil Search**, a native ⌘Space launcher that replaces Spotlight.
 
-Themes: Night City, Arasaka, Pharloom, Hallownest, Foundry, New York, Paradis, Eclipse, Guidance, Cinder, Ashina.
+Themes: Umbra, Night City, Arasaka, Pharloom, Hallownest, Foundry, New York, Paradis, Eclipse, Guidance, Cinder, Ashina.
 
 ## Install
 
@@ -25,9 +25,12 @@ Veil Search Accessibility when asked, and run `veil selftest`. `./uninstall.sh` 
 Optional: `launcher/make-signing-identity.sh` creates a local signing identity so macOS keeps Veil Search's permissions
 across rebuilds.
 
-**Wallpapers are not included** (they are copyrighted game and anime art). Put your own image at `art/<theme>.jpg`
-(3456×2234 suits a 16" MacBook Pro); `art/<theme>.notes.md` records where each original came from. A good wallpaper
-spreads its detail across the frame instead of giving the eye one subject to stare at.
+Umbra includes a [credited NASA photograph](art/umbra.notes.md). For the other themes, place your
+wallpaper at `art/<theme>.jpg`. The accompanying `art/<theme>.notes.md` files record the source
+and crop used in Veil's original setups.
+
+The native Veil screen saver is installed alongside Veil Search. Select it under
+System Settings → Wallpaper → Screen Saver → Custom → Other. Its artwork and palette follow theme switches.
 
 ## Daily use
 
@@ -35,6 +38,8 @@ spreads its detail across the frame instead of giving the eye one subject to sta
 | --- | --- |
 | Veil Search (Spotlight replacement): apps, files, math, settings, workspaces, commands, themes, web, dictionary | ⌘Space (↵ open, ⌘↵ show in Finder, ⌘C copy, ↑↓/Tab move, Esc close) |
 | New terminal window | ⌥Return |
+| Workspace Overview | ⌃⌥M, the control panel, or `veil overview` |
+| Focus or move a tile | ⌃⌥Arrow to focus, ⇧⌃⌥Arrow to move |
 | Resize tiles with the keyboard | ⌥R, then arrows (Shift shrinks a middle tile); Esc or switching apps leaves |
 | Control panel | click the theme chip at the left of the bar |
 | Shortcut cheat sheet | click the keys button (󰘥) at the right of the bar, or `veil keys` |
@@ -43,6 +48,10 @@ spreads its detail across the frame instead of giving the eye one subject to sta
 | Battery saver | `veil quiet` (back: `veil normal`) |
 | Stock look, keep tiling | `veil off` or ⌃⌥⌘V (Rift stays on; bar, borders, overlays, wallpaper and colours go stock; back: `veil on`, or ⌃⌥⌘V again); also "Theme: Stock macOS" in Veil Search |
 | Something looks broken | `veil selftest`, then `veil recover` |
+
+Overview shows every Rift workspace, including empty ones. Use the arrow keys to navigate,
+Tab to cycle, Return to activate, and Esc to close. Drag a window card to move it to another
+workspace. Cards use app icons and titles, so Overview works without Screen Recording access.
 
 ## How theming works
 
@@ -57,17 +66,16 @@ each file, backs up whatever changes into `backups/`, and writes the new files a
 - Each theme is a full design language: bar information hierarchy, workspace grammar, window spacing,
   terminal frame and font, prompt layout, monitor density, launcher composition, and editor/notes layouts
   all change alongside the palette. See `themes/ECOSYSTEMS.md`; `[style]` in each TOML drives the templates.
-- Themes: Night City, Arasaka, Pharloom, Hallownest, Foundry, New York, Paradis (Attack on Titan), Eclipse (Berserk), Guidance, Cinder, and Ashina.
+- Themes: Umbra, Night City, Arasaka, Pharloom, Hallownest, Foundry, New York, Paradis (Attack on Titan), Eclipse (Berserk), Guidance, Cinder, and Ashina.
   Applying one also sets the macOS accent color and the theme's wallpaper (`art/<theme>.jpg`).
 - After changing the tool: `python3 test_theme.py`.
 
-Themed: Veil Search, Ghostty, SketchyBar, borders, Rift, Starship, fzf, bat, eza (terminal colors), btop, cava, fastfetch, Neovim, Cursor, Obsidian, and the macOS accent color. Twelve distinct launcher compositions include the three-part Arasaka security directory, Guidance's Grace index, Cinder's ember board, and Ashina's selection posture rail. The bar keeps different system readings visible for each theme and moves quieter readings into its control panel.
+Themed: Veil Search, Ghostty, SketchyBar, borders, Rift, Starship, fzf, bat, eza (terminal colors), btop, cava, fastfetch, Neovim, Cursor, Obsidian, and the macOS accent color. Eleven distinct launcher compositions include the three-part Arasaka security directory, Guidance's Grace index, Cinder's ember board, and Ashina's selection posture rail. The bar keeps different system readings visible for each theme and moves quieter readings into its control panel.
 Not themeable: Safari (follows dark mode and accent), system dialogs, the login screen.
 
-Rift's shortcuts use ⌥ with H J K L, F, V, Z, R, Tab, Return and 1–5 (⇧ to move windows). While Rift runs, those take
-priority over the same ⌥ shortcuts in other apps, for example ⌥F (forward one word) in a shell; ⌥ with the arrow keys
-is left to apps for word-by-word editing. Rift matches physical keys, so on non-US layouts some ⌥ characters
-(such as @ on German ⌥L) are taken too; edit `templates/rift.toml` to change them.
+Use ⌃⌥ with the arrow keys to focus a tile and ⇧⌃⌥ with the arrow keys to move it.
+Option–Left and Option–Right move the text cursor by a word in macOS apps.
+Rift matches physical keys. Edit `templates/rift.toml` to change the shortcuts.
 
 ## Veil Search (⌘Space launcher)
 

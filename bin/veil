@@ -32,13 +32,17 @@ case "${1:-help}" in
  quiet)
   touch "$HOME/.config/veil/generated/quiet"
   rift-cli execute config set settings.animate false || true  # Rift may be down; the flag still applies on its next start
-  sketchybar --set cpu update_freq=30 2>/dev/null || true  # only themes that show CPU on the bar poll it
+  rift-cli execute config set settings.ui.mission_control.fade_enabled false || true
+  sketchybar --set cpu update_freq=45 2>/dev/null || true  # only themes that show CPU on the bar poll it
   ;;
  normal)
   rm -f "$HOME/.config/veil/generated/quiet"
   # Reduce Motion (System Settings) still keeps animations off
-  [ "$(defaults read com.apple.universalaccess reduceMotion 2>/dev/null)" = 1 ] || rift-cli execute config set settings.animate true || true
-  sketchybar --set cpu update_freq=10 2>/dev/null || true
+  if [ "$(defaults read com.apple.universalaccess reduceMotion 2>/dev/null)" != 1 ]; then
+   rift-cli execute config set settings.animate true || true
+   rift-cli execute config set settings.ui.mission_control.fade_enabled true || true
+  fi
+  sketchybar --set cpu update_freq=15 2>/dev/null || true
   ;;
  toggle-quiet)
   if [ -f "$HOME/.config/veil/generated/quiet" ]; then "$0" normal; else "$0" quiet; fi ;;
@@ -119,7 +123,14 @@ PLIST
  keys)
   sed -n '/^\[keys\]/,/^\[binding_modes/p' "$HOME/.config/rift/config.toml" | grep '^"' \
     | sed -E 's/^"([^"]+)" = (.*)$/\1\t\2/; s/Alt/⌥/g; s/Shift/⇧/g; s/Ctrl/⌃/g; s/ \+ //g' | column -t -s $'\t' ;;
- launch) open -a "$HOME/Applications/Veil Search.app" ;;  # the app toggles its panel on reopen
+ overview) exec rift-cli execute mission-control show-all ;;
+ launch)
+  if pgrep -xq veil-search; then
+   osascript -l JavaScript -e "ObjC.import('Foundation'); \$.NSDistributedNotificationCenter.defaultCenter.postNotificationNameObjectUserInfoDeliverImmediately('app.veil.search.show', \$(), \$(), true)"
+  else
+   open -a "$HOME/Applications/Veil Search.app"
+  fi
+  ;;
  # new Ghostty window (open -a only focuses a running Ghostty); first use asks once for Automation permission
  term)
   osascript -e 'tell application "Ghostty"' -e 'if it is running then new window' -e 'activate' -e 'end tell' >/dev/null ;;
@@ -143,7 +154,19 @@ PLIST
   check "launcher running" "pgrep -xq veil-search"
   for a in git.acsandmann.rift app.veil.sketchybar app.veil.borders app.veil.search; do check "$a starts at login" "launchctl print gui/$(id -u)/$a"; done
   check "rift answers queries" "perl -e 'alarm 5; exec @ARGV' rift-cli query workspaces"
-  check "bar has all items" "[ \$(sketchybar --query bar | jq '.items|length') -gt 30 ]"
+  bar_ready() {
+   local attempt
+   # --reload schedules a fresh configuration asynchronously. Give it time
+   # to finish and check the actual required items rather than a total count.
+   for attempt in 1 2 3 4 5 6; do
+    if sketchybar --query bar | jq -e '["city", "clock", "ws.0", "ws.4", "menu.status", "workspace.refresh"] - .items == []' >/dev/null; then
+     return 0
+    fi
+    [ "$attempt" = 6 ] || sleep 0.2
+   done
+   return 1
+  }
+  check "bar has all items" bar_ready
   check "theme files match templates" "veil-theme status | grep -q 'all files match'"
   # Spotlight keeps ⌘Space unless its shortcut (symbolic hot key 64) is off; then Veil Search can't open with it
   check "Spotlight has released ⌘Space" "[ \"\$(defaults export com.apple.symbolichotkeys - | plutil -extract AppleSymbolicHotKeys.64.enabled raw -)\" = false ]"
@@ -154,5 +177,34 @@ PLIST
   out=$("$0" selftest 2>&1) || true; n=$(grep -c '^FAIL' <<<"$out" || true)
   if [ "$n" = 0 ]; then msg="All checks passed"; else msg="$n failed: $(grep '^FAIL' <<<"$out" | cut -c7- | paste -sd, -)"; fi
   osascript -e "display notification \"$msg\" with title \"Veil self-test\"" ;;
- *) printf '%s\n' 'Veil: veil off | on [THEME] | toggle | quiet | normal | toggle-quiet | pause | reload | recover | quit | keys | launch | term | btop | status | selftest' ;;
+ feature)
+  # Major additions ship on by default. Disable individually without removing themes.
+  # Flags live in ~/.config/veil/generated/features/disable-<name>
+  V="$HOME/.config/veil"; F="$V/generated/features"; mkdir -p "$F"
+  known='music-popup clock-calendar cider-bridge screensaver-sync'
+  case "${2:-}" in
+   list|"")
+    echo "Veil features (disable with: veil feature disable NAME)"
+    for name in $known; do
+      if [ -f "$F/disable-$name" ]; then state=off; else state=on; fi
+      printf '  %-20s %s\n' "$name" "$state"
+    done ;;
+   disable)
+    name=${3:?feature name}; echo " $known " | grep -q " $name " || { echo "unknown feature: $name (want: $known)"; exit 1; }
+    touch "$F/disable-$name"
+    case "$name" in
+     music-popup|clock-calendar) veil-theme apply "$(cat "$V/current")" ;;
+     screensaver-sync) python3 "$V/screensaver/sync.py" "$V" --remove 2>/dev/null || true ;;
+    esac
+    echo "disabled $name" ;;
+   enable)
+    name=${3:?feature name}; echo " $known " | grep -q " $name " || { echo "unknown feature: $name (want: $known)"; exit 1; }
+    rm -f "$F/disable-$name"
+    case "$name" in
+     music-popup|clock-calendar|screensaver-sync) veil-theme apply "$(cat "$V/current")" ;;
+    esac
+    echo "enabled $name" ;;
+   *) echo "usage: veil feature [list|enable NAME|disable NAME]"; exit 1 ;;
+  esac ;;
+ *) printf '%s\n' 'Veil: veil off | on [THEME] | toggle | quiet | normal | toggle-quiet | feature | pause | reload | recover | quit | keys | overview | launch | term | btop | status | selftest' ;;
 esac

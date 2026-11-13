@@ -23,7 +23,7 @@ THEME='@@theme_id@@'
 # These are different information hierarchies, not different names for the same HUD.
 CPU_POS=right; NET_POS=right; VOL_POS=right; SHOW_APP=on; SHOW_GRAPH=on; SHOW_TEMP=off
 PANEL='CONTROL PANEL'; WINDOW_GROUP='WINDOWS'; SYSTEM_GROUP='SYSTEM'; THEME_GROUP='APPEARANCE'
-KEYS_LABEL=''; QUICK='none'
+KEYS_LABEL=''; QUICK='none'; CHIP_ICON='@@chip_icon@@'
 case "$THEME" in
   # the techy themes read like a HUD: load, memory and die temperature on the bar; network and volume stay in the panel
   night-city) NET_POS=popup.city; VOL_POS=popup.city; SHOW_TEMP=on ;;
@@ -37,11 +37,11 @@ case "$THEME" in
   factorio) PANEL='CONTROL ROOM'; WINDOW_GROUP='WINDOW LAYOUT'; SYSTEM_GROUP='OPERATIONS'; QUICK=tools; KEYS_LABEL='KEYBINDS' ;;
   nyc) PANEL='Service information'; WINDOW_GROUP='Window service'; SYSTEM_GROUP='Utilities'; THEME_GROUP='Appearance'; CPU_POS=popup.city; SHOW_GRAPH=off; KEYS_LABEL='Help' ;;
   paradis) PANEL='FIELD DESK'; WINDOW_GROUP='WORKSPACE'; SYSTEM_GROUP='EQUIPMENT'; CPU_POS=popup.city; SHOW_GRAPH=off; QUICK=terminal ;;
+  umbra) PANEL='Controls'; WINDOW_GROUP='Windows'; SYSTEM_GROUP='System'; THEME_GROUP='Appearance'; CPU_POS=popup.city; NET_POS=popup.city; VOL_POS=popup.city; SHOW_APP=off; SHOW_GRAPH=off ;;
   eclipse) PANEL='Desk'; WINDOW_GROUP='Windows'; SYSTEM_GROUP='Utilities'; THEME_GROUP='Appearance'; CPU_POS=popup.city; NET_POS=popup.city; VOL_POS=popup.city; SHOW_APP=off; SHOW_GRAPH=off ;;
 esac
 
-CPU_FREQ=10; [ -f "$HOME/.config/veil/generated/quiet" ] && CPU_FREQ=30  # `veil quiet` survives reloads
-date +%s.%N > "$HOME/Library/Caches/veil-bar-epoch"  # the cpu plugin refills its sparkline once per load
+CPU_FREQ=15; [ -f "$HOME/.config/veil/generated/quiet" ] && CPU_FREQ=45  # `veil quiet` survives reloads
 
 # Top bars line up with the notch (38pt safe area on this MacBook): edge bars match its height exactly,
 # floating islands sit centered on it, so the notch never hangs below or floats above the bar.
@@ -49,13 +49,11 @@ EDGE_H=36; ISLE_Y=6; ISLE_H=34  # bottom edge bars (Eclipse) a little taller for
 [ "$POSITION" = top ] && { EDGE_H=38; ISLE_Y=3; ISLE_H=33; }
 case "$LAYOUT" in
   strip) sketchybar --bar position=$POSITION height=$EDGE_H y_offset=0 margin=0 color=0xff070a12 border_width=0 corner_radius=0 blur_radius=0 shadow=off topmost=off sticky=on ;;
-  # bare text sits on the art, so a soft veil keeps it at 4.5:1 over bright skies
-  bare) sketchybar --bar position=$POSITION height=$EDGE_H y_offset=0 margin=0 color=0x99070a12 border_width=0 corner_radius=0 blur_radius=24 shadow=off topmost=off sticky=on ;;
+  # Keep the text readable even over bright art without sampling or blurring the wallpaper.
+  bare) sketchybar --bar position=$POSITION height=$EDGE_H y_offset=0 margin=0 color=0xff070a12 border_width=0 corner_radius=0 blur_radius=0 shadow=off topmost=off sticky=on ;;
   *) sketchybar --bar position=$POSITION height=$ISLE_H y_offset=$ISLE_Y margin=12 color=0x00000000 border_width=0 corner_radius=0 blur_radius=0 shadow=off topmost=off sticky=on ;;
 esac
-shadow=""
-[ "$LAYOUT" = bare ] && shadow="label.shadow.drawing=on label.shadow.color=0xcc070a12 label.shadow.distance=2 icon.shadow.drawing=on icon.shadow.color=0xcc070a12 icon.shadow.distance=2"
-sketchybar --default icon.font="$F_TAG" label.font="$F_LABEL" icon.color=0xff00e5ff label.color=0xffd9f4ff padding_left=4 padding_right=4 icon.padding_left=8 icon.padding_right=4 label.padding_left=4 label.padding_right=8 background.height=24 background.corner_radius=$CHIP_RADIUS updates=when_shown $shadow
+sketchybar --default icon.font="$F_TAG" label.font="$F_LABEL" icon.color=0xff8794ad label.color=0xffd9f4ff padding_left=3 padding_right=3 icon.padding_left=7 icon.padding_right=3 label.padding_left=3 label.padding_right=7 background.height=24 background.corner_radius=$CHIP_RADIUS updates=when_shown
 POPUP="popup.background.color=0xff0e1524 popup.background.border_color=0xff26324a popup.background.border_width=1 popup.background.corner_radius=$RADIUS popup.y_offset=6 popup.height=26 popup.background.shadow.drawing=on popup.background.shadow.color=0xa0070a12 popup.background.shadow.distance=8"
 sketchybar --add event music_change com.apple.Music.playerInfo --add event spotify_change com.spotify.client.PlaybackStateChanged
 
@@ -65,7 +63,8 @@ case "$CHIP" in
   outline) chip="icon.color=0xfffcee09 label.color=0xfffcee09 background.drawing=on background.color=0x00000000 background.border_color=0xfffcee09 background.border_width=1" ;;
   text) chip="icon.color=0xfffcee09 label.color=0xfffcee09 background.drawing=off" ;;
 esac
-sketchybar --add item city left --set city icon='@@chip_icon@@' label='@@chip_label@@ ⌄' icon.font="$F_CHIP" label.font="$F_CHIP" $chip script="$P" $POPUP --subscribe city mouse.clicked mouse.exited.global
+chip_icon_drawing=on; [ -n "$CHIP_ICON" ] || chip_icon_drawing=off
+sketchybar --add item city left --set city icon="$CHIP_ICON" icon.drawing="$chip_icon_drawing" label='@@chip_label@@' icon.font="$F_CHIP" label.font="$F_CHIP" $chip script="$P" $POPUP --subscribe city mouse.clicked mouse.exited.global
 WSPOS=left; [ "$COMPOSE" = center ] && WSPOS=center
 for i in 0 1 2 3 4; do
   sketchybar --add item ws.$i $WSPOS --set ws.$i icon.font="$F_CHIP" icon.color=0xff76849c label.color=0xff76849c click_script="$B/rift-cli execute workspace switch $i"
@@ -92,18 +91,50 @@ fi
 sketchybar --add item app left --set app icon='@@app_glyph@@' icon.font="$F_LABEL" label='DESKTOP' label.max_chars=18 drawing="$SHOW_APP" script="$P" --subscribe app front_app_switched
 
 # right: tags lead, values follow; color only appears when something needs attention
-sketchybar --add item clock right --set clock icon.font="$F_LABEL" icon.color=0xff76849c update_freq=30 script="$P"
-sketchybar --add item battery right --set battery icon="${TAGS[4]}" update_freq=120 script="$P" --subscribe battery power_source_change system_woke
+CAL="$HOME/.config/sketchybar/plugins/calendar.sh"
+sketchybar --add item clock right --set clock icon.font="$F_LABEL" icon.color=0xff76849c update_freq=30 script="$P" \
+  click_script="/bin/bash \"$CAL\" toggle" $POPUP popup.y_offset=0 popup.align=right popup.height=25 --subscribe clock system_woke mouse.exited.global
+sketchybar --add item calendar.month popup.clock --set calendar.month icon.drawing=off label='Calendar' label.font="$F_LABEL" label.color=0xff00e5ff \
+  --add item calendar.days popup.clock --set calendar.days icon.drawing=off label=' Su  Mo  Tu  We  Th  Fr  Sa ' label.font="Menlo:Regular:11.0" label.color=0xff76849c
+for week in {0..5}; do
+  sketchybar --add item "calendar.week.$week" popup.clock --set "calendar.week.$week" icon.drawing=off label.font="Menlo:Regular:11.0"
+done
+sketchybar --add item calendar.open popup.clock --set calendar.open icon.drawing=off label='Open Calendar ↗' label.color=0xff00e5ff click_script="/bin/bash \"$CAL\" open-calendar"
+sketchybar --add item battery right --set battery icon="${TAGS[4]}" update_freq=180 script="$P" --subscribe battery power_source_change system_woke
 [ "$VOL_POS" = right ] && sketchybar --add item volume "$VOL_POS" --set volume icon="${TAGS[3]}" label='—' script="$P" --subscribe volume volume_change system_woke
-[ "$NET_POS" = right ] && sketchybar --add item net "$NET_POS" --set net icon="${TAGS[2]}" label='—' script="$P" --subscribe net wifi_change system_woke
+[ "$NET_POS" = right ] && sketchybar --add item net "$NET_POS" --set net icon="${TAGS[2]}" label='—' update_freq=90 script="$P" --subscribe net wifi_change system_woke
 [ "$CPU_POS" = right ] && [ "$SHOW_TEMP" = on ] && sketchybar --add item temp right --set temp icon="${TAGS[5]:-TEMP}" label='—'
 [ "$CPU_POS" = right ] && sketchybar --add item memory "$CPU_POS" --set memory icon="${TAGS[1]}" label='—'
 # CPU sparkline sits right of the CPU value (fed by the cpu script, no extra polling)
-sketchybar --add graph cpu.graph right 34 --set cpu.graph graph.color=0xff00e5ff graph.fill_color=0x3300e5ff graph.line_width=1.2 \
-  drawing="$SHOW_GRAPH" background.drawing=on background.color=0x00000000 background.height=16 padding_left=0 padding_right=6 icon.drawing=off label.drawing=off
-[ "$CPU_POS" = right ] && sketchybar --add item cpu "$CPU_POS" --set cpu icon="${TAGS[0]}" label='—' label.padding_right=4 update_freq="$CPU_FREQ" script="$P"
-sketchybar --add item music right --set music icon='󰝚' icon.font="$GLYPH" icon.color=0xffff4fbc label.max_chars=28 drawing=off updates=on script="$P" --subscribe music music_change spotify_change
-sketchybar --add item keys right --set keys icon='󰘥' icon.font="$GLYPH" icon.color=0xff76849c label="$KEYS_LABEL" label.drawing=on script="$P" click_script='sketchybar --set keys popup.drawing=toggle' $POPUP --subscribe keys mouse.exited.global
+if [ "$SHOW_GRAPH" = on ]; then
+  sketchybar --add graph cpu.graph right 34 --set cpu.graph graph.color=0xff00e5ff graph.fill_color=0x2000e5ff graph.line_width=1.2 \
+    background.drawing=on background.color=0x00000000 background.height=14 padding_left=0 padding_right=6 icon.drawing=off label.drawing=off
+fi
+[ "$CPU_POS" = right ] && sketchybar --add item cpu "$CPU_POS" --set cpu icon="${TAGS[0]}" label='—' label.padding_right=4 update_freq="$CPU_FREQ" script="$P $SHOW_GRAPH $SHOW_TEMP"
+# The bar entry remains available when no media app is playing. A track title is
+# shown only while playing, so the idle item takes the space of a single glyph.
+# Disable the whole music control with: veil feature disable music-popup
+MUSIC_ON=1; [ -f "$HOME/.config/veil/generated/features/disable-music-popup" ] && MUSIC_ON=0
+MUSIC_CLICK="\"$P\" music"
+if [ "$MUSIC_ON" = 1 ]; then
+  sketchybar --add item music right --set music icon='󰝚' icon.font="$GLYPH" icon.color=0xff8794ad \
+    label.max_chars=20 label.drawing=off script="$P" $POPUP popup.align=right popup.height=29 popup.y_offset=0 \
+    --subscribe music music_change spotify_change mouse.clicked mouse.exited.global \
+    --add item music.source popup.music --set music.source icon.drawing=off label='Now playing' label.font="$F_SMALL" \
+      label.color=0xff8794ad label.padding_left=14 label.padding_right=14 \
+    --add item music.track popup.music --set music.track icon.drawing=off label='Nothing playing' label.width=272 label.max_chars=34 \
+      label.padding_left=14 label.padding_right=14 label.font="$F_CHIP" label.color=0xffd9f4ff \
+    --add item music.detail popup.music --set music.detail icon.drawing=off drawing=off label.max_chars=40 \
+      label.padding_left=14 label.padding_right=14 label.font="$F_SMALL" label.color=0xff8794ad \
+    --add item music.previous popup.music --set music.previous icon='󰒮' icon.font="$GLYPH" icon.width=38 icon.align=center \
+      label='Previous track' click_script="$MUSIC_CLICK previous" drawing=off \
+    --add item music.toggle popup.music --set music.toggle icon='󰐊' icon.font="$GLYPH" icon.width=38 icon.align=center \
+      label='Play' click_script="$MUSIC_CLICK playpause" drawing=off \
+      background.drawing=on background.color=0xff151b2d background.corner_radius="$CHIP_RADIUS" \
+    --add item music.next popup.music --set music.next icon='󰒭' icon.font="$GLYPH" icon.width=38 icon.align=center \
+      label='Next track' click_script="$MUSIC_CLICK next" drawing=off
+fi
+sketchybar --add item keys right --set keys icon='󰘥' icon.font="$GLYPH" icon.color=0xff76849c label="$KEYS_LABEL" label.drawing=on script="$P" click_script='sketchybar --set city popup.drawing=off --set music popup.drawing=off --set clock popup.drawing=off --set keys popup.drawing=toggle' $POPUP --subscribe keys mouse.exited.global
 
 island="background.color=0x${ALPHA}090d17 background.border_color=0xff26324a background.border_width=$BORDER background.corner_radius=$RADIUS background.height=$ISLE_H"
 [ "$LAYOUT" = islands ] || island="background.drawing=off"
@@ -117,7 +148,8 @@ if [ "$COMPOSE" = center ]; then
 else
   sketchybar --add bracket island.l "${left_items[@]}" ws.0 ws.1 ws.2 ws.3 ws.4 mode --set island.l $island
 fi
-right_items=(keys music battery clock)
+right_items=(keys battery clock)
+[ "$MUSIC_ON" = 1 ] && right_items=(keys music battery clock)
 [ "$CPU_POS" = right ] && right_items+=(cpu memory)
 [ "$SHOW_TEMP" = on ] && right_items+=(temp)
 [ "$SHOW_GRAPH" = on ] && right_items+=(cpu.graph)
@@ -137,7 +169,7 @@ fi
 sketchybar --add item keys.title popup.keys --set keys.title icon='KEYS' icon.font="$F_SMALL" icon.color=0xfffcee09 label='SHORTCUTS' label.color=0xff76849c
 # workspace names with their numbers, so styles that show no numeral (diamond, rule, bracket) still map to ⌥N
 WSN=(@@ws@@); ws_line=''; for i in "${!WSN[@]}"; do ws_line="$ws_line${ws_line:+  }$((i + 1)) ${WSN[$i]}"; done
-keys=('⌘ Space|Launcher' 'Left chip|Control panel (click)' "⌥ 1-5|Go to  $ws_line" '⇧⌥ 1-5|Move window to workspace' '⌥ ← ↓ ↑ →|Focus left/down/up/right' '⇧⌥ ← ↓ ↑ →|Move window' '⌥ F|Fullscreen in gaps' '⌥ V|Float / tile window' '⌥ Z|Pause / resume tiling' '⌥ ⏎|New terminal' '⌥ Tab|Last workspace' '⌥ R|Resize tiles (arrows; esc leaves)' '⌃⌥ 1-4|Tiled / scrolling / split / master layout' '⇧⌥ R|Reload Rift config')
+keys=('⌘ Space|Launcher' 'Left chip|Control panel (click)' "⌥ 1-5|Go to  $ws_line" '⇧⌥ 1-5|Move window to workspace' '⌃⌥ ← ↓ ↑ →|Focus left/down/up/right' '⇧⌃⌥ ← ↓ ↑ →|Move window' '⌥ F|Fullscreen in gaps' '⌥ V|Float / tile window' '⌥ Z|Pause / resume tiling' '⌥ ⏎|New terminal' '⌥ Tab|Last workspace' '⌃⌥ M|Workspace overview' '⌥ R|Resize tiles (arrows; esc leaves)' '⌃⌥ 1-4|Tiled / scrolling / split / master layout' '⇧⌥ R|Reload Rift config')
 for i in "${!keys[@]}"; do sketchybar --add item keys.$i popup.keys --set keys.$i icon="${keys[$i]%%|*}" icon.font="$F_LABEL" icon.width=96 icon.align=center icon.padding_left=10 icon.padding_right=10 \
   icon.background.drawing=on icon.background.color=0xff151b2d icon.background.border_color=0xff334563 icon.background.border_width=1 \
   icon.background.corner_radius=$CHIP_RADIUS icon.background.height=20 icon.color=0xffd9f4ff label="${keys[$i]#*|}" click_script='sketchybar --set keys popup.drawing=off'; done
@@ -180,6 +212,7 @@ sketchybar --add item menu.title popup.city --set menu.title icon='@@title@@' ic
 # Readings that are not on the bar appear in the status line when the panel opens (no polling).
 window_controls() {
   header windows "$WINDOW_GROUP"
+  row overview 'Workspace overview' "$B/veil overview" '⌃⌥ M'
   row pause 'Pause / resume tiling' "$B/rift-cli execute space toggle-activated" '⌥ Z'
   row tile 'Tiled layout' "$B/rift-cli execute workspace set-layout traditional" '⌃⌥ 1'
   row scroll 'Scrolling layout' "$B/rift-cli execute workspace set-layout scrolling" '⌃⌥ 2'
@@ -207,7 +240,7 @@ row quit 'Quit window manager…' "osascript -e 'display dialog \"Quit the windo
 [ "$P_STATUS" = bottom ] && status_line
 # Each menu keeps the same usable actions but borrows its surface grammar from its environment.
 case "$THEME" in
-  night-city)  # sharp corners and roomier rows, matching the chamfered launcher; a neon edge like the focus glow
+  night-city)  # chamfered launcher, roomier menu rows and a cyan hairline
     sketchybar --set city popup.height=30 popup.background.corner_radius=2 popup.background.border_color=0x5900e5ff
     ;;
   factorio)
@@ -229,5 +262,7 @@ case "$THEME" in
     sketchybar --set city popup.height=29 popup.background.border_width=0
     ;;
 esac
+sketchybar --add item workspace.refresh left --set workspace.refresh drawing=off updates=on \
+  script="$HOME/.config/sketchybar/plugins/workspace-event.sh" --subscribe workspace.refresh display_change space_change system_woke
+printf '%s\n' "$$" > "$HOME/Library/Caches/veil-bar-epoch"
 sketchybar --update
-"$HOME/.config/sketchybar/plugins/workspace-event.sh" &  # initial workspace state

@@ -8,7 +8,7 @@ surface; `[strings]` drives text; `[colors]` drives color. Style values may name
 | Idea | neon city HUD | red corporate operations center | silk cathedral archive | quiet, pale kingdom | factory control room | MTA wayfinding | field desk | inked black-and-bone study | guidance and field atlas | fading-fire archive | shinobi field kit |
 | Bar grammar | two islands | compact red islands | gold hairline | text with no chrome | square instrument plates | full-width signage | bottom desk islands | split, sharp islands | gold-trimmed islands | bare type and diamonds | full-width tactical strip |
 | Workspace language | NET/CODE pills | OPS/EXEC/RND/INTEL/VAULT | WEB/FORGE/CHOIR | ◆ ◈ ◇ | RADAR/BUILD/COMMS | WEB/WORK/TALK | WALL/TROST/SCOUT/GATE | ● ◉ ○, active Roman name | GRACE/LIMGRAVE/LIURNIA/ALTUS/ASH | SHRINE/WALLS/CATHEDRAL/IRITHYLL/DREG | ASHINA/HIRATA/CASTLE/DEPTHS/FOUNTAIN |
-| Window system | cyan-to-magenta rounded border | close red corporate border | crimson/gold needle | pale, wide breathing gaps | dense orange square grid | taxi-yellow square | cloak-green rounded frame | bone square frame | warm gold rounded frame | ash and ember square frame | slate and rust square frame |
+| Window system | cyan contour, moderate gaps | red contour, close gaps | crimson contour, airy gaps | pale contour, wide gaps | orange contour, dense grid | taxi-yellow contour, close gaps | cloak-green contour, moderate gaps | crimson contour, moderate gaps | gold contour, wide gaps | ember contour, wide gaps | rust contour, close gaps |
 | Terminal | JetBrains Mono, hidden titlebar | compact corporate Mono | Monaspace Xenon | IBM Plex Mono | Monaspace Krypton | Monaspace Neon | Monaspace Radon | IBM Plex Mono | Monaspace Xenon | Victor Mono | Monaspace Argon |
 | Shell prompt | two-line city HUD | short command rail | right-side branch/status | centered mark | dense single-line console | route arrow with right-side status | three-part field prompt | cross-like ink mark | guidance glyph | ashen sigil | shinobi bracket |
 | Monitor / search | round braille, CPU graph | concise service summary | restrained graphs, tall cards | quiet tree, airy panes | block graphs, process tree, full instrument bar | compact, route-first bar | equipment labels | essential top bar; more data in panel | realm guidance | ember register | posture and selection index |
@@ -22,11 +22,26 @@ Some app settings have their own lifecycle: Ghostty reloads configuration where 
 
 Arasaka shares some of Night City's terminal foundation, but uses tighter rows, smaller gaps, a three-part security-directory launcher, unique OPS/EXEC/RND/INTEL/VAULT workspaces, corporate wording, a compact monitor and work-first status panel. It is intentionally a corporate workstation variant rather than a color swap.
 
-Wallpaper and splash use `art/<theme>.jpg` for every theme (not shipped; see the README). Each `art/*.notes.md` records the original source, crop and palette.
+Wallpaper and splash use `art/<theme>.jpg`. Umbra includes its credited NASA photograph. Each `art/*.notes.md` records the original source, crop and palette.
 
 Third-party game and product names are used as descriptive references for unofficial themes; the project is not affiliated with or endorsed by those rights holders.
 
-There is no ambient wallpaper animation: continuous motion costs battery, and the brief theme-change splash is the only animated surface.
+The desktop wallpaper is static. Motion runs during interactions, theme changes, and the active screen saver.
+
+
+## Umbra
+
+Umbra uses graphite surfaces and pearl type with cyan focus cues. Warm amber
+comes from the lunar photograph and marks the theme chip. The bottom bar
+centers named workspaces, leaving the top edge and the moon clear. The launcher
+uses an eclipse mark, split search and detail, and a solid card. A one-point
+focus contour and short window transitions accompany the master-and-stack
+layout. Ghostty uses Menlo, native tabs, and a centered quick terminal.
+The notes page uses a narrow sans-serif measure and lightly ruled headings,
+and the Neovim status line shows mode, diagnostics, encoding, and cursor
+location.
+
+[Wallpaper and credit](../art/umbra.notes.md)
 
 ## Environment behavior profiles (2026-10-27)
 
@@ -70,16 +85,6 @@ Implementation references: [VS Code interface settings](https://code.visualstudi
 [Obsidian CSS snippets](https://obsidian.md/help/snippets), and the local Rift protocol enum at
 Rift's `crates/rift-protocol/src/layout.rs`.
 
-## Unapproved border/symbol candidate round
-
-The 2026-10-27 border/symbol round changes native-window outlines to contour-following round
-geometry, a 1.25-point active cue and transparent inactive/background strokes for all themes.
-The older window-frame descriptions above record prior styling; they do not describe this
-candidate's border geometry. Color remains theme-specific. Eclipse also removes the launcher's
-redundant inset frame and reduces its launcher/bar strokes to a single point. These changes
-are unapproved candidates pending independent Claude visual review, not a new quality baseline.
-Read REVIEW-START-HERE.md for the independent two-phase review protocol.
-
 ## Panel, fastfetch and statusline forms (2026-10-29)
 
 These three surfaces now change structure per environment, not only colour. The control panel keeps the same actions,
@@ -107,3 +112,23 @@ is how it is organised. `python3 tools/compare_themes.py` counts them as the `pa
 - `ff_layout` tokens are `title`, `separator`, `break`, `colors:<symbol>` and `module[:Name]` (see `fastfetch_modules` in
   `bin/veil-theme`). Statusline forms are defined in `templates/nvim.lua`; `hud` keeps LazyVim's own.
 - Hallownest and Eclipse hide the statusline (`editor_statusline = 0`); their forms apply when it is turned on.
+
+## Motion and surfaces
+
+Window transitions use short, theme-specific durations. Theme changes use a
+single easing curve for the artwork and title reveal, inspired by Hyprland's
+event-triggered transitions. Focus uses a one-point window contour, and
+Ghostty and the status bar use solid backgrounds for predictable contrast.
+Each bar keeps its own placement, type, workspace indicators and selection of
+readings, following the range of approaches in JaKooLit's Waybar gallery.
+[end-4's usability-first dotfiles](https://github.com/end-4/dots-hyprland)
+were a reference for keeping frequently used controls visible and putting
+secondary details in the popup.
+
+- [Hyprland animations](https://wiki.hypr.land/0.47.0/Configuring/Animations/)
+- [JaKooLit Hyprland-Dots gallery](https://github.com/JaKooLit/Hyprland-Dots/wiki/Gallery)
+- [SYNOPTIK on r/unixporn](https://www.reddit.com/r/unixporn/comments/1vvik2t/hyprland_oc_please_enjoy_synoptik_shell_a_fun/), a reference for the on-demand workspace overview
+
+The [Veil screen saver](../screensaver/README.md) reads the active palette and
+artwork at launch. It drifts gently while active, and presents a still image
+with Reduce Motion enabled.
