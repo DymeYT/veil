@@ -58,16 +58,25 @@ def strings_for(theme):
     out["system_motion"] = "false" if rm == "1" else "true"
     out["rift_animate"] = "false" if (GEN / "quiet").exists() else out["system_motion"]
     # Usable tiling space follows the bar: reserve the bar edge; free the opposite edge.
-    # Always keep a few px under the notch so window chrome isn't clipped (all themes).
+    # Bottom bar → small top notch clearance only. Top bar → clear notch/menu safe area + bar strip
+    # so windows never sit under the Veil bar (VEI-61 theme parity). Never mutates Dock.
     notch_clear = 4
+    bar_h = 36  # SketchyBar EDGE_H / VeilBarController strip height
+    menu_safe = 37  # typical notch/menu safeAreaInsets.top on built-in; external displays still OK
     if out.get("bar_position", "top") == "bottom":
         out["gap_top"] = str(notch_clear)
     else:
         try:
-            out["gap_top"] = str(max(0, int(str(out.get("gap_top", "0") or "0"))) + notch_clear)
+            theme_top = max(0, int(str(out.get("gap_top", "0") or "0")))
         except ValueError:
-            out["gap_top"] = str(notch_clear)
+            theme_top = 0
+        # Bar is placed below safeArea; windows need safeArea + bar + pad.
+        min_top = menu_safe + bar_h + notch_clear
+        out["gap_top"] = str(max(theme_top, min_top))
         out["gap_bottom"] = "0"
+        # Opaque notch band for every top-bar theme (not Nothing/Night City only).
+        if out.get("notch_band", "").lower() not in ("true", "1", "yes"):
+            out["notch_band"] = "true"
     return out
 
 

@@ -1455,10 +1455,13 @@ final class VeilBarController: ObservableObject {
         let screen = NSScreen.main ?? NSScreen.screens[0]
         let h = barHeight
         // Bottom: lift by dockClearance so autohide Dock can peek (complaint #3).
+        // Top: sit under notch / menu safe area so chips never render behind the notch (theme parity).
+        let topInset = screen.safeAreaInsets.top
         let frame: NSRect = barOnBottom
             ? NSRect(x: screen.frame.minX, y: screen.frame.minY + Self.dockClearance,
                      width: screen.frame.width, height: h)
-            : NSRect(x: screen.frame.minX, y: screen.frame.maxY - h, width: screen.frame.width, height: h)
+            : NSRect(x: screen.frame.minX, y: screen.frame.maxY - topInset - h,
+                     width: screen.frame.width, height: h)
         if window == nil {
             let w = NSPanel(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
             w.isOpaque = false

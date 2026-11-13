@@ -47,6 +47,7 @@ logo = """          ██
 
 # Shape, type and layout (see ECOSYSTEMS.md). Values may name colors as %role%.
 [style]
+notch_band = "true"
 glyph_shell = "on"  # Glyph surfaces + Style + edge OSD available on every theme
 panel_headers = "text"  # control panel structure (sketchybarrc): text | rule | space
 panel_status = "top"
