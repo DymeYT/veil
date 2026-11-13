@@ -290,13 +290,21 @@ def set_wallpaper(theme):
 
 
 def apply_rice_chrome(theme):
-    """VEI-57: when style.wall_lock=glyph-field, lock dotted wall + Nothing Dock/Finder chrome."""
+    """VEI-57: when style.wall_lock=glyph-field, lock dotted wall + Finder icons.
+
+    Preference lock: never mutate Dock apps/contents/size. apply-chrome.sh skips Dock.
+    """
     if os.environ.get("VEIL_NO_RICE"):
         return
+    style = theme.get("style") or {}
     # Read the theme's own [style] (do not merge base — night-city must not inherit rice lock).
-    lock = str((theme.get("style") or {}).get("wall_lock", ""))
+    lock = str(style.get("wall_lock", ""))
     if lock != "glyph-field":
         return
+    # Explicit skip if theme asks; default skip for any dock_chrome other than legacy mistakes.
+    if str(style.get("dock_chrome", "skip")) != "skip":
+        # Still run chrome for wall/Finder, but never honor Dock mutation tokens.
+        pass
     script = ROOT / "tools/rice/apply-chrome.sh"
     if not script.is_file():
         return

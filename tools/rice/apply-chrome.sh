@@ -1,6 +1,7 @@
 #!/bin/bash
-# Nothing / Glyph-field desktop chrome: lock dotted wall, tame Dock, clear Finder icons.
-# Does not touch launcher/*.swift. Safe to re-run. Restore: tools/rice/restore-chrome.sh
+# Nothing / Glyph-field desktop chrome: lock dotted wall + optional Finder icon hide.
+# HARD RULE (preferences): NEVER mutate Dock apps, tilesize, static-only, or any Dock contents.
+# Does not touch launcher/*.swift. Restore Finder-only: tools/rice/restore-chrome.sh
 set -euo pipefail
 
 V="${VEIL_ROOT:-$HOME/.config/veil}"
@@ -17,6 +18,7 @@ while [ $# -gt 0 ]; do
     --from-theme=*) FROM_THEME="${1#*=}" ;;
     -h|--help)
       printf '%s\n' "usage: apply-chrome.sh [--quiet] [--from-theme THEME_ID]"
+      printf '%s\n' "Applies Glyph wallpaper + Finder desktop-icon hide. Never touches Dock."
       exit 0
       ;;
   esac
@@ -28,7 +30,7 @@ log() { [ "$QUIET" = 1 ] || printf '%s\n' "$*"; }
 mkdir -p "$GEN"
 [ -f "$ART" ] || { echo "missing $ART — run tools/make-nothing-wall.py" >&2; exit 1; }
 
-# Snapshot once so restore can put stock Dock/Finder prefs back.
+# Snapshot Finder prefs once (Dock intentionally omitted — preference lock).
 if [ ! -f "$STATE" ]; then
   python3 - "$STATE" <<'PY'
 import json, subprocess, sys
@@ -41,16 +43,8 @@ def defaults(domain, key, fallback=None):
     return r.stdout.strip()
 
 state = {
-    "version": 1,
-    "dock": {
-        "autohide": defaults("com.apple.dock", "autohide", "0"),
-        "tilesize": defaults("com.apple.dock", "tilesize", "48"),
-        "magnification": defaults("com.apple.dock", "magnification", "0"),
-        "show-recents": defaults("com.apple.dock", "show-recents", "1"),
-        "mineffect": defaults("com.apple.dock", "mineffect", "genie"),
-        "launchanim": defaults("com.apple.dock", "launchanim", "1"),
-        "static-only": defaults("com.apple.dock", "static-only", "0"),
-    },
+    "version": 2,
+    "dock": "skipped",  # preference lock — never backup/mutate Dock
     "finder": {
         "CreateDesktop": defaults("com.apple.finder", "CreateDesktop", "1"),
         "ShowExternalHardDrivesOnDesktop": defaults("com.apple.finder", "ShowExternalHardDrivesOnDesktop", "1"),
@@ -61,10 +55,10 @@ state = {
 }
 Path(sys.argv[1]).write_text(json.dumps(state, indent=2) + "\n")
 PY
-  log "backed up Dock/Finder chrome → $STATE"
+  log "backed up Finder chrome → $STATE (Dock skipped permanently)"
 fi
 
-# 1) Wallpaper: always re-pin the Glyph field (kills scenic / Style drift on Nothing).
+# 1) Wallpaper: re-pin the Glyph field (kills scenic / Style drift on Nothing).
 python3 - "$ART" <<'PY' | osascript -l JavaScript >/dev/null 2>&1 || true
 import json, sys
 art = sys.argv[1]
@@ -81,18 +75,8 @@ PY
 printf '%s\n' "$ART" > "$GEN/rice-wall-lock"
 log "wallpaper → art/nothing.jpg (Glyph dotted field)"
 
-# 2) Dock: autohide + small + no magnification/recents — bar owns the bottom edge.
-defaults write com.apple.dock autohide -bool true
-defaults write com.apple.dock tilesize -int 36
-defaults write com.apple.dock magnification -bool false
-defaults write com.apple.dock show-recents -bool false
-defaults write com.apple.dock mineffect -string scale
-defaults write com.apple.dock launchanim -bool false
-defaults write com.apple.dock static-only -bool true
-defaults write com.apple.dock autohide-delay -float 0.05
-defaults write com.apple.dock autohide-time-modifier -float 0.35
-killall Dock >/dev/null 2>&1 || true
-log "Dock → autohide, 36px, no magnify/recents (Nothing-friendly)"
+# 2) Dock: SKIPPED permanently (preference lock — never apps/size/static-only/autohide writes).
+log "Dock → skipped (preference: never mutate Dock contents)"
 
 # 3) Finder desktop icons: hide volume/device icons + desktop icon layer for clean Glyph field.
 defaults write com.apple.finder CreateDesktop -bool false
@@ -107,11 +91,13 @@ python3 - "$STATE" "$FROM_THEME" "$ART" <<'PY'
 import json, sys, time
 from pathlib import Path
 p = Path(sys.argv[1])
-data = json.loads(p.read_text()) if p.exists() else {"version": 1}
+data = json.loads(p.read_text()) if p.exists() else {"version": 2}
+data["version"] = 2
+data["dock"] = "skipped"
 data["applied_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
 data["from_theme"] = sys.argv[2] or None
 data["wallpaper"] = sys.argv[3]
 p.write_text(json.dumps(data, indent=2) + "\n")
 PY
 
-log "Nothing rice chrome applied. Restore: $V/tools/rice/restore-chrome.sh"
+log "Nothing rice chrome applied (wall + Finder only). Restore: $V/tools/rice/restore-chrome.sh"

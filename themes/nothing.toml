@@ -1,5 +1,6 @@
 # Glyph / Nothing OS: black, white dots, one red. Fonts: Doto, Space Grotesk, Space Mono, JM Nerd.
-# VEI-57 rice: wall_lock keeps art/nothing.jpg (dotted Glyph field); dock/desktop chrome via veil-rice.
+# VEI-57 rice: wall_lock keeps art/nothing.jpg (dotted Glyph field); veil-rice does Finder+wall only.
+# Preference lock: never mutate Dock apps/contents — dock_chrome=skip permanently.
 name = "Nothing"
 macos_accent = 0
 
@@ -69,7 +70,7 @@ display_font = "Doto"    # clock / big Glyph digits (Swift already special-cases
 clock_font = "Doto"
 # Rice chrome tokens (read by veil-theme → tools/rice/apply-chrome.sh):
 wall_lock = "glyph-field"  # re-pin art/nothing.jpg; reject scenic drift on apply
-dock_chrome = "autohide"   # Nothing-friendly Dock (hide + small tiles)
+dock_chrome = "skip"       # preference lock — never mutate Dock apps/size/static-only
 desktop_icons = "hidden"   # Finder CreateDesktop off for clean Glyph field
 
 bar_layout = "strip"
