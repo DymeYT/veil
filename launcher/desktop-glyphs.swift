@@ -360,6 +360,20 @@ final class DesktopGlyphBoard: ObservableObject {
     /// Agent/screenshot path — remove without relying on right-click delivery.
     func proveRemove(_ id: DesktopGlyphID) { removePin(id) }
 
+    /// Proof hook when CGEvent can't reach global monitors — same empty→Finder path as AX mouseDown.
+    func proveEmptyClickThrough(at screenPt: CGPoint? = nil) {
+        window?.ignoresMouseEvents = true
+        syncGeometryIfNeeded()
+        let f = window?.frame ?? liveFrame()
+        // Prefer far-right mid desktop — left spine often has Glyphs on Nothing.
+        let pt = screenPt ?? CGPoint(x: f.minX + f.width - 120, y: f.minY + f.height * 0.55)
+        let hit = pinAtScreen(pt)?.id.rawValue ?? "none"
+        try? Data("prove pt=\(pt) pin=\(hit) win=\(Int(f.width))x\(Int(f.height))\n".utf8)
+            .write(to: URL(fileURLWithPath: ncRoot + "/generated/clickthrough-proof.txt"), options: .atomic)
+        guard pinAtScreen(pt) == nil else { return }
+        activateFinderIfDesktopClick(at: pt)
+    }
+
     func endResize(commit: Bool) {
         let id = resizing; let span = resizeSpan
         if commit, let id, let span { resize(id, cols: span.cols, rows: span.rows) }
@@ -542,19 +556,43 @@ final class DesktopGlyphBoard: ObservableObject {
 
     /// Empty wallpaper click → Finder frontmost when no foreign window owns the point.
     private func activateFinderIfDesktopClick(at pt: CGPoint) {
+        // Re-assert pass-through before any activate — never leave a sticky sheet (VEI-42).
+        window?.ignoresMouseEvents = true
         let num = NSWindow.windowNumber(at: pt, belowWindowWithWindowNumber: 0)
         if num != 0 {
             if let win = window, num == win.windowNumber {
+                // Glyph host incorrectly reported as hit target — force pass-through, then Finder.
                 window?.ignoresMouseEvents = true
-            } else if let info = CGWindowListCopyWindowInfo([.optionIncludingWindow], CGWindowID(num)) as? [[String: Any]],
-                      let owner = info.first?[kCGWindowOwnerName as String] as? String,
-                      owner != "Finder" {
-                return // Real app window under cursor — don't steal.
+            } else {
+                return // Bar / panel / real app owns the point — don't steal.
             }
         }
-        DispatchQueue.main.async {
-            NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.finder")
-                .first?.activate(options: [.activateIgnoringOtherApps])
+        // Off main: waitUntilExit must not stall the bar/Glyph UI.
+        DispatchQueue.global(qos: .userInitiated).async {
+            // macOS 14+ ignores `.activateIgnoringOtherApps`. `open -a Finder` reliably fronts Finder.
+            let p = Process()
+            p.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+            p.arguments = ["-a", "Finder"]
+            try? p.run()
+            p.waitUntilExit()
+            if p.terminationStatus != 0 {
+                let ascript = Process()
+                ascript.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+                ascript.arguments = ["-e", "tell application \"Finder\" to activate"]
+                try? ascript.run()
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? "?"
+                let line = "front=\(front)\n"
+                if let handle = FileHandle(forWritingAtPath: ncRoot + "/generated/clickthrough-proof.txt") {
+                    handle.seekToEndOfFile()
+                    handle.write(Data(line.utf8))
+                    try? handle.close()
+                } else {
+                    try? Data(line.utf8)
+                        .write(to: URL(fileURLWithPath: ncRoot + "/generated/clickthrough-proof.txt"), options: .atomic)
+                }
+            }
         }
     }
 
@@ -1093,22 +1131,30 @@ struct DesktopGlyphCanvas: View {
         }
     }
 
+    /// One ring = one device part. Icon always matches the % shown (L/R/Case/Max/Mac…).
+    private struct BatteryRingItem: Identifiable {
+        let id: String
+        let title: String
+        let symbol: String
+        let level: Int?
+    }
+
     /// Small = Mac-only compact metric; ≥2 cells → Apple-style circular device rings (VEI-32 / UX-loop).
     @ViewBuilder
     private func batteryWidget(_ pin: DesktopGlyphPin) -> some View {
         let large = pin.spanCols >= 2 || pin.spanRows >= 2
         Group {
             if large {
-                let devices = Array(VeilPanelHost.shared.batteryDevices.prefix(max(4, pin.spanCols * pin.spanRows)))
+                let slots = max(4, pin.spanCols * pin.spanRows)
+                let items = Array(batteryRingItems(from: VeilPanelHost.shared.batteryDevices).prefix(slots))
                 let cols = min(3, max(2, pin.spanCols))
                 VStack(alignment: .leading, spacing: 6) {
                     Text("BATTERY").font(mono(7)).foregroundStyle(p["comment"])
-                    if devices.isEmpty {
+                    if items.isEmpty {
                         batteryRingCell(
                             title: "Mac",
                             symbol: BatteryDevice.Kind.mac.symbol,
-                            level: Int(board.batteryText.filter(\.isNumber)),
-                            detail: nil
+                            level: Int(board.batteryText.filter(\.isNumber))
                         )
                         .frame(maxWidth: .infinity)
                     } else {
@@ -1116,13 +1162,8 @@ struct DesktopGlyphCanvas: View {
                             columns: Array(repeating: GridItem(.flexible(minimum: 44), spacing: 8), count: cols),
                             spacing: 8
                         ) {
-                            ForEach(devices) { d in
-                                batteryRingCell(
-                                    title: batteryShortName(d),
-                                    symbol: batteryRingSymbol(d),
-                                    level: d.level,
-                                    detail: d.detail
-                                )
+                            ForEach(items) { item in
+                                batteryRingCell(title: item.title, symbol: item.symbol, level: item.level)
                             }
                         }
                     }
@@ -1142,8 +1183,69 @@ struct DesktopGlyphCanvas: View {
         }
     }
 
+    /// Expand BT devices into rings. In-case AirPods → Case only (no separate buds row).
+    private func batteryRingItems(from devices: [BatteryDevice]) -> [BatteryRingItem] {
+        var items: [BatteryRingItem] = []
+        for d in devices {
+            switch d.kind {
+            case .mac:
+                items.append(.init(id: d.id, title: "Mac", symbol: "laptopcomputer", level: d.level))
+            case .watch:
+                items.append(.init(id: d.id, title: "Watch", symbol: "applewatch", level: d.level))
+            case .phone:
+                let ipad = d.name.lowercased().contains("ipad")
+                items.append(.init(id: d.id, title: ipad ? "iPad" : "iPhone",
+                                   symbol: ipad ? "ipad" : "iphone", level: d.level))
+            case .other:
+                let t = d.name.trimmingCharacters(in: .whitespaces)
+                items.append(.init(id: d.id, title: t.count <= 8 ? t : String(t.prefix(7)),
+                                   symbol: d.kind.symbol, level: d.level))
+            case .buds:
+                items.append(contentsOf: expandBudsRings(d))
+            }
+        }
+        return items
+    }
+
+    private func expandBudsRings(_ d: BatteryDevice) -> [BatteryRingItem] {
+        let pro = d.name.lowercased().contains("pro")
+        let leftSym = pro ? "airpodpro.left" : "airpod.left"
+        let rightSym = pro ? "airpodpro.right" : "airpod.right"
+        let caseSymbol = pro ? "airpodspro.chargingcase.fill" : "airpods.chargingcase.fill"
+
+        // In case: hide separate AirPods — Case ring only, case icon + case %.
+        if d.budsInCase, let c = d.caseLevel {
+            return [.init(id: d.id + "-case", title: "Case", symbol: caseSymbol, level: c)]
+        }
+        // AirPods Max / headset — one headphones ring with the single %.
+        if d.isHeadsetBuds {
+            let pct = d.single ?? d.level
+            let title = d.name.lowercased().contains("max") ? "Max" : "Buds"
+            return [.init(id: d.id, title: title, symbol: "headphones", level: pct)]
+        }
+        // Out of case: L / R / Case each get their own icon + matching %.
+        var out: [BatteryRingItem] = []
+        if let l = d.left {
+            out.append(.init(id: d.id + "-L", title: "L", symbol: leftSym, level: l))
+        }
+        if let r = d.right {
+            out.append(.init(id: d.id + "-R", title: "R", symbol: rightSym, level: r))
+        }
+        if let c = d.caseLevel {
+            out.append(.init(id: d.id + "-case", title: "Case", symbol: caseSymbol, level: c))
+        }
+        if out.isEmpty {
+            // Fallback combined — still match icon to product.
+            let n = d.name.lowercased()
+            let sym = n.contains("max") ? "headphones" : (pro ? "airpodspro" : "airpods")
+            let title = n.contains("max") ? "Max" : (pro ? "Pro" : "Buds")
+            out.append(.init(id: d.id, title: title, symbol: sym, level: d.level))
+        }
+        return out
+    }
+
     /// Apple Battery-widget grammar: opaque circular ring, device glyph inside, short % under.
-    private func batteryRingCell(title: String, symbol: String, level: Int?, detail: String?) -> some View {
+    private func batteryRingCell(title: String, symbol: String, level: Int?) -> some View {
         let pct = level.map { min(1, max(0, Double($0) / 100)) } ?? 0
         let known = level != nil
         let ring = known ? batteryRingColor(level!) : p["dim"]
@@ -1176,46 +1278,8 @@ struct DesktopGlyphCanvas: View {
                     .font(mono(9))
                     .foregroundStyle(p["dim"])
             }
-            if let detail, !detail.isEmpty {
-                Text(detail)
-                    .font(mono(6))
-                    .foregroundStyle(p["dim"])
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.6)
-            }
         }
         .frame(maxWidth: .infinity)
-    }
-
-    private func batteryShortName(_ d: BatteryDevice) -> String {
-        switch d.kind {
-        case .mac: return "Mac"
-        case .buds:
-            let n = d.name.lowercased()
-            if n.contains("max") { return "Max" }
-            if n.contains("pro") { return "Pro" }
-            return "Buds"
-        case .watch: return "Watch"
-        case .phone:
-            return d.name.lowercased().contains("ipad") ? "iPad" : "iPhone"
-        case .other:
-            let t = d.name.trimmingCharacters(in: .whitespaces)
-            return t.count <= 8 ? t : String(t.prefix(7))
-        }
-    }
-
-    private func batteryRingSymbol(_ d: BatteryDevice) -> String {
-        switch d.kind {
-        case .mac: return "laptopcomputer"
-        case .buds:
-            let n = d.name.lowercased()
-            if n.contains("max") { return "headphones" }
-            return "airpodspro"
-        case .watch: return "applewatch"
-        case .phone:
-            return d.name.lowercased().contains("ipad") ? "ipad" : "iphone"
-        case .other: return d.kind.symbol
-        }
     }
 
     private func batteryRingColor(_ level: Int) -> Color {

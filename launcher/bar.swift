@@ -276,6 +276,7 @@ final class VeilPanelHost: ObservableObject {
             dismiss()
             return
         }
+        OutsideClick.closeOthers(keep: "veil-panel")
         // Idempotent — Lane A also registers at launch when present.
         OutsideClick.register("veil-panel") { VeilPanelHost.shared.dismissImmediate() }
         OutsideClick.register("glyph") { GlyphShell.shared.dismiss() }
@@ -294,6 +295,8 @@ final class VeilPanelHost: ObservableObject {
             }
         }
         installOutsideClick()
+        // VEI-64: session-wide outside-click (bar / desktop / apps) → dismissAll, incl. Glyph Quick.
+        OutsideClick.armOverlayDismiss(ignoreFor: 0.35)
         installEscDismiss()
         startOverlayDismissWatch()
     }
@@ -471,14 +474,13 @@ final class VeilPanelHost: ObservableObject {
         }()
         var x = anchor.midX - width / 2
         x = min(max(x, screen.visibleFrame.minX + 8), screen.visibleFrame.maxX - width - 8)
+        // AppKit y grows upward: "above" the bar is anchor.maxY, "below" is anchor.minY - height.
         if barBottom {
-            // Open above the button when the bar is at the bottom.
-            let above = anchor.minY - gap - height
-            return NSRect(x: x, y: max(above, screen.visibleFrame.minY + 4), width: width, height: height)
+            let above = anchor.maxY + gap
+            return NSRect(x: x, y: min(above, screen.visibleFrame.maxY - height - 4), width: width, height: height)
         } else {
-            // Open below the button when the bar is at the top.
-            let below = anchor.maxY + gap
-            return NSRect(x: x, y: min(below, screen.visibleFrame.maxY - height - 4), width: width, height: height)
+            let below = anchor.minY - gap - height
+            return NSRect(x: x, y: max(below, screen.visibleFrame.minY + 4), width: width, height: height)
         }
     }
 
@@ -811,7 +813,8 @@ final class VeilPanelHost: ObservableObject {
         DispatchQueue.global(qos: .utility).async { [weak self] in
             var devices: [BatteryDevice] = [
                 BatteryDevice(id: "mac", name: Host.current().localizedName ?? "Mac",
-                              kind: .mac, level: macLevel, detail: nil)
+                              kind: .mac, level: macLevel, detail: nil,
+                              left: nil, right: nil, caseLevel: nil, single: nil)
             ]
             devices.append(contentsOf: Self.parseBluetoothBatteries())
             // Prefer devices with a known level; keep a few named peers without levels last.
@@ -868,6 +871,8 @@ final class VeilPanelHost: ObservableObject {
                 detail = parts.isEmpty ? nil : parts.joined(separator: " ")
                 let vals = [left, right].compactMap { $0 }
                 if level == nil, !vals.isEmpty { level = vals.min() }
+                // In-case only (case % present, no L/R/single) — ring shows case %.
+                if level == nil, let caseLvl { level = caseLvl }
             }
 
             let lower = name.lowercased()
@@ -889,7 +894,10 @@ final class VeilPanelHost: ObservableObject {
             if kind == .phone, level == nil { return } // Continuity often lists phones without %
 
             seen.insert(addr)
-            out.append(BatteryDevice(id: addr, name: Self.shortName(name), kind: kind, level: level, detail: detail))
+            out.append(BatteryDevice(
+                id: addr, name: Self.shortName(name), kind: kind, level: level, detail: detail,
+                left: left, right: right, caseLevel: caseLvl, single: single
+            ))
         }
 
         for block in items {
@@ -976,6 +984,22 @@ struct BatteryDevice: Identifiable, Equatable {
     var kind: Kind
     var level: Int?
     var detail: String?
+    /// Structured bud levels (nil for Mac/Watch/Phone).
+    var left: Int? = nil
+    var right: Int? = nil
+    var caseLevel: Int? = nil
+    var single: Int? = nil
+
+    /// Case % only — buds are stowed; do not paint a separate AirPods row.
+    var budsInCase: Bool {
+        kind == .buds && caseLevel != nil && left == nil && right == nil && single == nil
+    }
+
+    var isHeadsetBuds: Bool {
+        guard kind == .buds else { return false }
+        let n = name.lowercased()
+        return n.contains("max") || n.contains("headphone") || (single != nil && left == nil && right == nil && caseLevel == nil)
+    }
 }
 
 private extension String {
@@ -1627,6 +1651,8 @@ struct VeilBarView: View {
 
     private func workspaceButton(_ ws: (index: Int, name: String, active: Bool)) -> some View {
         Button {
+            // VEI-64: workspace chip counts as outside-click — bury Control/Quick husks.
+            OutsideClick.dismissAll()
             animateClick {
                 let proc = Process()
                 proc.executableURL = URL(fileURLWithPath: home + "/.local/bin/rift-cli")

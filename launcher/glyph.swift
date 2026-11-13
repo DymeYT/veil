@@ -42,6 +42,9 @@ final class GlyphShell: ObservableObject {
     }
 
     func present(_ k: GlyphKind) {
+        OutsideClick.closeOthers(keep: "glyph")
+        OutsideClick.register("glyph") { GlyphShell.shared.dismiss() }
+        OutsideClick.armOverlayDismiss(ignoreFor: 0.35)
         // VEI-56: never show the old Cal stub timer; route to Quick settings.
         let target = k == .cal ? GlyphKind.quick : k
         kind = target
@@ -78,16 +81,20 @@ final class GlyphShell: ObservableObject {
 
     private func ensureWindow() {
         let screen = NSScreen.main ?? NSScreen.screens[0]
+        // Usable area minus the Veil bar, so edge-docked Glyphs never sit on the strip.
+        var vf = screen.visibleFrame
+        if let b = VeilBarController.shared.barWindowFrame, b.intersects(vf) {
+            if b.midY < screen.frame.midY { vf = NSRect(x: vf.minX, y: b.maxY, width: vf.width, height: vf.maxY - b.maxY) }
+            else { vf = NSRect(x: vf.minX, y: vf.minY, width: vf.width, height: b.minY - vf.minY) }
+        }
         let frame: NSRect
         switch kind {
         case .quick:
-            let w: CGFloat = 470, h: CGFloat = 620
-            frame = NSRect(x: screen.visibleFrame.maxX - w - 14,
-                           y: screen.visibleFrame.minY + 14, width: w, height: h)
+            let w: CGFloat = 470, h: CGFloat = min(620, vf.height - 28)
+            frame = NSRect(x: vf.maxX - w - 14, y: vf.minY + 8, width: w, height: h)
         case .deck:
-            let w = min(980, screen.visibleFrame.width - 40), h: CGFloat = 280
-            frame = NSRect(x: screen.visibleFrame.midX - w / 2,
-                           y: screen.visibleFrame.minY + 18, width: w, height: h)
+            let w = min(980, vf.width - 40), h: CGFloat = 280
+            frame = NSRect(x: vf.midX - w / 2, y: vf.minY + 8, width: w, height: h)
         case .power, .lockMock, .loginMock, .home, .style:
             frame = screen.frame
         case .prefs, .walls, .vpn, .cal, .buds, .shot, .charms:

@@ -6,6 +6,8 @@ default_disable = false
 focus_follows_mouse = false
 mouse_follows_focus = false
 mouse_hides_on_focus = false
+# Empty-desktop clicks activate Finder; don't let that jump to Finder's window on another workspace.
+auto_focus_blacklist = ["com.apple.finder"]
 hot_reload = true
 run_on_start = ["@@home@@/.config/sketchybar/plugins/subscribe-rift.sh"]
 

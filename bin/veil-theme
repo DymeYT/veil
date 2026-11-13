@@ -62,7 +62,6 @@ def strings_for(theme):
     # so windows never sit under the Veil bar (VEI-61 theme parity). Never mutates Dock.
     notch_clear = 4
     bar_h = 36  # SketchyBar EDGE_H / VeilBarController strip height
-    menu_safe = 37  # typical notch/menu safeAreaInsets.top on built-in; external displays still OK
     if out.get("bar_position", "top") == "bottom":
         out["gap_top"] = str(notch_clear)
     else:
@@ -70,8 +69,9 @@ def strings_for(theme):
             theme_top = max(0, int(str(out.get("gap_top", "0") or "0")))
         except ValueError:
             theme_top = 0
-        # Bar is placed below safeArea; windows need safeArea + bar + pad.
-        min_top = menu_safe + bar_h + notch_clear
+        # Rift's top gap is measured from visibleFrame, which already excludes the notch/menu row
+        # the bar sits under — so only the strip + pad (counting safeArea again left a ~40pt dead band).
+        min_top = bar_h + notch_clear
         out["gap_top"] = str(max(theme_top, min_top))
         out["gap_bottom"] = "0"
         # Opaque notch band for every top-bar theme (not Nothing/Night City only).

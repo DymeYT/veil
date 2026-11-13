@@ -484,14 +484,29 @@ extension GlyphRoot {
             HStack(spacing: 16) {
                 budCell(info.name.lowercased().contains("max") ? "MAX" : "BATTERY",
                         info.single.map { "\($0)%" } ?? "—",
+                        symbol: "headphones",
                         wide: true)
                 Spacer(minLength: 0)
             }
         case .earbuds:
-            HStack(spacing: 20) {
-                budCell("L", info.left.map { "\($0)%" } ?? "—")
-                budCell("R", info.right.map { "\($0)%" } ?? "—")
-                budCell("CASE", info.caseLevel.map { "\($0)%" } ?? "—")
+            // In case: hide separate AirPods L/R — Case only, case icon + case %.
+            let inCase = info.caseLevel != nil && info.left == nil && info.right == nil
+            if inCase {
+                HStack(spacing: 16) {
+                    budCell("CASE", info.caseLevel.map { "\($0)%" } ?? "—",
+                            symbol: "airpods.chargingcase.fill", wide: true)
+                    Spacer(minLength: 0)
+                }
+            } else {
+                let pro = info.name.lowercased().contains("pro")
+                HStack(spacing: 20) {
+                    budCell("L", info.left.map { "\($0)%" } ?? "—",
+                            symbol: pro ? "airpodpro.left" : "airpod.left")
+                    budCell("R", info.right.map { "\($0)%" } ?? "—",
+                            symbol: pro ? "airpodpro.right" : "airpod.right")
+                    budCell("CASE", info.caseLevel.map { "\($0)%" } ?? "—",
+                            symbol: "airpods.chargingcase.fill")
+                }
             }
         case .none:
             EmptyView()
@@ -510,8 +525,14 @@ extension GlyphRoot {
         .padding(.vertical, 8)
     }
 
-    func budCell(_ label: String, _ pct: String, wide: Bool = false) -> some View {
-        VStack {
+    func budCell(_ label: String, _ pct: String, symbol: String? = nil, wide: Bool = false) -> some View {
+        VStack(spacing: 6) {
+            if let symbol {
+                Image(systemName: symbol)
+                    .font(.system(size: wide ? 22 : 16, weight: .semibold))
+                    .foregroundStyle(fg)
+                    .symbolRenderingMode(.hierarchical)
+            }
             Text(label).font(mono(10)).foregroundStyle(muted)
             Text(pct).font(doto(28)).foregroundStyle(fg)
         }

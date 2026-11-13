@@ -2643,6 +2643,9 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             self.model.ncCache = ncItems(liveWorkspaceNames(paletteWS: self.model.wsNames))
             self.band.reload(self.model.palette)
             Task { @MainActor in
+                // Open Quick/Control/music outlive a theme swap as unstyled, undismissable husks — bury them.
+                GlyphShell.shared.dismiss()
+                VeilPanelHost.shared.dismissImmediate()
                 if veilIsOff || !VeilFeature.veilBar { VeilBarController.shared.stop() } else { VeilBarController.shared.start() }
                 if !veilIsOff { VeilHost.shared.reloadBorders() }
             }
@@ -2724,6 +2727,9 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
                     DesktopGlyphBoard.shared.proveDrag(.cava, toCol: 14, toRow: 7)
                 case "prove-remove":
                     DesktopGlyphBoard.shared.proveRemove(.cava)
+                case "prove-clickthrough":
+                    // Empty desktop → Finder; CGEvent often never reaches global monitors.
+                    DesktopGlyphBoard.shared.proveEmptyClickThrough()
                 case "dismiss-panels":
                     OutsideClick.dismissAll()
                 default: DesktopGlyphBoard.shared.start()
