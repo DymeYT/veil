@@ -66,9 +66,9 @@ cat > "$agent" <<PLIST
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
   <key>Label</key><string>app.veil.search</string>
-  <key>ProgramArguments</key><array><string>$HOME/Applications/Veil Search.app/Contents/MacOS/veil-search</string></array>
+  <key>ProgramArguments</key><array><string>$HOME/Applications/Veil Search.app/Contents/MacOS/veil-search</string><string>--background</string></array>
   <key>RunAtLoad</key><true/>
-  <key>KeepAlive</key><true/>
+  <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>
   <key>ProcessType</key><string>Interactive</string>
 </dict></plist>
 PLIST
@@ -76,6 +76,8 @@ pkill -x veil-search 2>/dev/null || true
 launchctl bootout "gui/$(id -u)/app.veil.search" 2>/dev/null || true
 launchctl bootstrap "gui/$(id -u)" "$agent" || { sleep 1; launchctl bootstrap "gui/$(id -u)" "$agent"; }  # bootout can lag
 "$NC/bin/veil" agents   # SketchyBar + borders as Veil LaunchAgents (no Homebrew services: no repeat background-item notices)
+"$NC/screensaver/build.sh" "$HOME/Library/Screen Savers" "$NC"
+python3 "$NC/screensaver/sync.py" "$NC"
 
 line='[ -f ~/.config/veil/generated/shell.zsh ] && source ~/.config/veil/generated/shell.zsh'
 grep -qF "$line" "$HOME/.zshrc" 2>/dev/null || printf '\n# Veil theme colors (fzf, bat)\n%s\n' "$line" >> "$HOME/.zshrc"
@@ -85,6 +87,7 @@ Installed. One-time macOS steps, if not already done:
   - System Settings → Privacy & Security → Accessibility: allow Rift and Veil Search
   - System Settings → Keyboard → Keyboard Shortcuts → Spotlight: turn off ⌘Space (Veil Search uses it)
   - System Settings → Menu Bar: turn on "Show menu bar background" (so the revealed menu bar covers the bar cleanly)
+  - System Settings → Wallpaper → Screen Saver → Custom → Other: select Veil
   - First ⌥Return: allow rift to control Ghostty (opens new terminal windows)
 Then run: veil selftest
 EOF

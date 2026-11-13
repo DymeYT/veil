@@ -58,10 +58,13 @@ POPUP="popup.background.color=0xff0e1524 popup.background.border_color=0xff26324
 sketchybar --add event music_change com.apple.Music.playerInfo --add event spotify_change com.spotify.client.PlaybackStateChanged
 
 # left: brand, workspaces, focused app
+# Chip accents follow the theme yellow/cyan via recolor of the Night City base hexes.
 case "$CHIP" in
-  filled) chip="icon.color=0xff090d17 label.color=0xff090d17 background.drawing=on background.color=0xfffcee09" ;;
-  outline) chip="icon.color=0xfffcee09 label.color=0xfffcee09 background.drawing=on background.color=0x00000000 background.border_color=0xfffcee09 background.border_width=1" ;;
-  text) chip="icon.color=0xfffcee09 label.color=0xfffcee09 background.drawing=off" ;;
+  # Dark ink on the theme yellow plate (yellow stays the loud contrast signal on dark bars).
+  filled) chip="icon.color=0xff090d17 label.color=0xff090d17 background.drawing=on background.color=0xfffcee09 background.border_color=0xfffcee09 background.border_width=1 background.height=24" ;;
+  # Yellow mark + light label — prefer this when filled plate contrast is soft after recolor.
+  outline) chip="icon.color=0xfffcee09 label.color=0xffd9f4ff background.drawing=on background.color=0x00000000 background.border_color=0xfffcee09 background.border_width=1" ;;
+  text) chip="icon.color=0xfffcee09 label.color=0xffd9f4ff background.drawing=off" ;;
 esac
 chip_icon_drawing=on; [ -n "$CHIP_ICON" ] || chip_icon_drawing=off
 sketchybar --add item city left --set city icon="$CHIP_ICON" icon.drawing="$chip_icon_drawing" label='@@chip_label@@' icon.font="$F_CHIP" label.font="$F_CHIP" $chip script="$P" $POPUP --subscribe city mouse.clicked mouse.exited.global
@@ -117,9 +120,10 @@ fi
 MUSIC_ON=1; [ -f "$HOME/.config/veil/generated/features/disable-music-popup" ] && MUSIC_ON=0
 MUSIC_CLICK="\"$P\" music"
 if [ "$MUSIC_ON" = 1 ]; then
+  # click_script always refreshes NP (media-control first); bare popup.drawing=on stays stale — use `veil music-popup`.
   sketchybar --add item music right --set music icon='󰝚' icon.font="$GLYPH" icon.color=0xff8794ad \
-    label.max_chars=20 label.drawing=off script="$P" $POPUP popup.align=right popup.height=29 popup.y_offset=0 \
-    --subscribe music music_change spotify_change mouse.clicked mouse.exited.global \
+    label.max_chars=20 label.drawing=off script="$P" click_script="$MUSIC_CLICK mouse.clicked" $POPUP popup.align=right popup.height=34 popup.y_offset=0 \
+    --subscribe music music_change spotify_change mouse.exited.global \
     --add item music.source popup.music --set music.source icon.drawing=off label='Now playing' label.font="$F_SMALL" \
       label.color=0xff8794ad label.padding_left=14 label.padding_right=14 \
     --add item music.track popup.music --set music.track icon.drawing=off label='Nothing playing' label.width=272 label.max_chars=34 \
@@ -169,7 +173,7 @@ fi
 sketchybar --add item keys.title popup.keys --set keys.title icon='KEYS' icon.font="$F_SMALL" icon.color=0xfffcee09 label='SHORTCUTS' label.color=0xff76849c
 # workspace names with their numbers, so styles that show no numeral (diamond, rule, bracket) still map to ⌥N
 WSN=(@@ws@@); ws_line=''; for i in "${!WSN[@]}"; do ws_line="$ws_line${ws_line:+  }$((i + 1)) ${WSN[$i]}"; done
-keys=('⌘ Space|Launcher' 'Left chip|Control panel (click)' "⌥ 1-5|Go to  $ws_line" '⇧⌥ 1-5|Move window to workspace' '⌃⌥ ← ↓ ↑ →|Focus left/down/up/right' '⇧⌃⌥ ← ↓ ↑ →|Move window' '⌥ F|Fullscreen in gaps' '⌥ V|Float / tile window' '⌥ Z|Pause / resume tiling' '⌥ ⏎|New terminal' '⌥ Tab|Last workspace' '⌃⌥ M|Workspace overview' '⌥ R|Resize tiles (arrows; esc leaves)' '⌃⌥ 1-4|Tiled / scrolling / split / master layout' '⇧⌥ R|Reload Rift config')
+keys=('⌘ Space|Launcher' '⌃⌥T|Theme gallery' '⌘T|Gallery in launcher' 'Esc|Dismiss popups' 'Left chip|Control panel (click)' "⌥ 1-5|Go to  $ws_line" '⇧⌥ 1-5|Move window to workspace' '⌃⌥ ← ↓ ↑ →|Focus left/down/up/right' '⇧⌃⌥ ← ↓ ↑ →|Move window' '⌥ F|Fullscreen in gaps' '⌥ V|Float / tile window' '⌥ Z|Pause / resume tiling' '⌥ ⏎|New terminal' '⌥ Tab|Last workspace' '⌃⌥M|Workspace overview' '⌥ R|Resize tiles (arrows; esc leaves)' '⌃⌥ 1-4|Tiled / scrolling / split / master layout' '⇧⌥ R|Reload Rift config')
 for i in "${!keys[@]}"; do sketchybar --add item keys.$i popup.keys --set keys.$i icon="${keys[$i]%%|*}" icon.font="$F_LABEL" icon.width=96 icon.align=center icon.padding_left=10 icon.padding_right=10 \
   icon.background.drawing=on icon.background.color=0xff151b2d icon.background.border_color=0xff334563 icon.background.border_width=1 \
   icon.background.corner_radius=$CHIP_RADIUS icon.background.height=20 icon.color=0xffd9f4ff label="${keys[$i]#*|}" click_script='sketchybar --set keys popup.drawing=off'; done
@@ -242,24 +246,56 @@ row quit 'Quit window manager…' "osascript -e 'display dialog \"Quit the windo
 case "$THEME" in
   night-city)  # chamfered launcher, roomier menu rows and a cyan hairline
     sketchybar --set city popup.height=30 popup.background.corner_radius=2 popup.background.border_color=0x5900e5ff
+    sketchybar --set music.track label.font="$F_CHIP" --set music.source label.color=0xff00e5ff
+    ;;
+  arasaka)
+    sketchybar --set city popup.height=28 popup.background.border_width=2 popup.background.corner_radius=0
+    sketchybar --set music.track label.font="$F_CHIP" --set music.source label.color=0xffff5370
     ;;
   factorio)
     sketchybar --set city popup.height=28 popup.background.border_width=2
     sketchybar --set '/menu\..*/' background.corner_radius=1
+    sketchybar --set music.track label.font="$F_CHIP"
     ;;
   hallownest)
-    sketchybar --set city popup.height=30 popup.background.shadow.drawing=off
-    sketchybar --set music label.max_chars=16
+    sketchybar --set city popup.height=30 popup.background.shadow.drawing=off popup.background.corner_radius=18
+    sketchybar --set music label.max_chars=16 --set music.track label.font="$F_CHIP"
     ;;
   eclipse)  # a lifted sheet of paper: hairline edge and a soft drop, so the ink menu separates from ink windows
     sketchybar --set city popup.height=30 popup.background.corner_radius=10 popup.background.shadow.color=0xd0070a12 popup.background.shadow.distance=10
     sketchybar --set city popup.y_offset=10 background.border_color=0x66fcee09  # the wordmark's outline recedes; the dots carry the state
-    sketchybar --set music label.max_chars=16
+    sketchybar --set music label.max_chars=16 --set music.track label.font="$F_CHIP"
     ;;
-  pharloom) sketchybar --set city popup.height=30 popup.background.border_width=1 ;;
+  pharloom)
+    sketchybar --set city popup.height=30 popup.background.border_width=1 popup.background.corner_radius=3
+    sketchybar --set music.track label.font="$F_CHIP"
+    ;;
   nyc)
     sketchybar --set menu.title background.drawing=on background.color=0xff151b2d background.height=30
     sketchybar --set city popup.height=29 popup.background.border_width=0
+    sketchybar --set music.track label.font="$F_CHIP" --set music.source label.color=0xfffcee09
+    ;;
+  paradis)
+    sketchybar --set city popup.height=30 popup.background.border_color=0xfffcee09 popup.background.border_width=1
+    sketchybar --set music.track label.font="$F_CHIP" --set music.source label.color=0xfffcee09
+    ;;
+  umbra)  # quiet luxury: taller music sheet + pearl hairline
+    sketchybar --set city popup.height=32 popup.background.corner_radius=12 popup.background.border_color=0x6691cee0
+    sketchybar --set music popup.height=36 \
+      --set music.track label.font="$F_CHIP" label.padding_left=16 label.padding_right=16 \
+      --set music.source label.color=0xff91cee0
+    ;;
+  elden-ring)
+    sketchybar --set city popup.height=32 popup.background.corner_radius=12 popup.background.border_color=0x66fcee09
+    sketchybar --set music.track label.font="$F_CHIP"
+    ;;
+  dark-souls-3)
+    sketchybar --set city popup.height=30 popup.background.corner_radius=2
+    sketchybar --set music.track label.font="$F_CHIP"
+    ;;
+  sekiro)
+    sketchybar --set city popup.height=28 popup.background.border_width=1 popup.background.corner_radius=0
+    sketchybar --set music.track label.font="$F_CHIP" --set music.source label.color=0xffff5370
     ;;
 esac
 sketchybar --add item workspace.refresh left --set workspace.refresh drawing=off updates=on \

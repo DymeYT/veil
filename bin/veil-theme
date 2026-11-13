@@ -296,11 +296,30 @@ def system_accents(theme):
 
 
 
+def _ghostty_running():
+    return subprocess.run(["pgrep", "-xq", "ghostty"], capture_output=True).returncode == 0
+
+
+def _wait_sketchybar_music(timeout=0.35):
+    """Settle after --reload so mid-apply `music` queries do not race the recreate."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        r = subprocess.run(["sketchybar", "--query", "music"], capture_output=True, text=True, timeout=2)
+        if r.returncode == 0 and r.stdout.strip().startswith("{"):
+            return True
+        time.sleep(0.03)
+    return False
+
+
 def reload_configs(commands, theme_id):
     """Record command outcomes separately from file deployment; never imply live verification."""
     outcomes = []
     for live, command in commands:
         if not isinstance(command, list):
+            continue
+        # Skip Ghostty Automation when Ghostty is not running — saves hundreds of ms per apply.
+        if command and command[0] == "osascript" and "Ghostty" in " ".join(command) and not _ghostty_running():
+            outcomes.append({"target": str(live), "command": command, "returncode": 0, "skipped": "ghostty not running"})
             continue
         try:
             result = subprocess.run(command, capture_output=True, text=True, timeout=8)
@@ -311,6 +330,9 @@ def reload_configs(commands, theme_id):
         outcomes.append(outcome)
         if outcome.get("returncode") != 0:
             print(f"  reload not confirmed: {live} (see generated/reload-status.json)")
+        if command[:2] == ["sketchybar", "--reload"]:
+            settled = _wait_sketchybar_music()
+            outcomes.append({"target": "sketchybar-music-settle", "settled": settled})
     write_atomic(GEN / "reload-status.json", json.dumps({"theme": theme_id, "time": time.time(),
                  "scope": "command outcomes only; no visual or service-state certification", "outcomes": outcomes}, indent=2) + "\n", 0o600)
     return outcomes

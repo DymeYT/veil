@@ -123,7 +123,31 @@ PLIST
  keys)
   sed -n '/^\[keys\]/,/^\[binding_modes/p' "$HOME/.config/rift/config.toml" | grep '^"' \
     | sed -E 's/^"([^"]+)" = (.*)$/\1\t\2/; s/Alt/⌥/g; s/Shift/⇧/g; s/Ctrl/⌃/g; s/ \+ //g' | column -t -s $'\t' ;;
- overview) exec rift-cli execute mission-control show-all ;;
+ overview)
+  # Visible product surface: Rift mission control (with window previews) PLUS Veil Search overview grid.
+  if ! pgrep -xq veil-search; then
+    open -a "$HOME/Applications/Veil Search.app" || true
+    sleep 0.35
+  fi
+  rift-cli execute mission-control show-all >/dev/null 2>&1 || true
+  osascript -l JavaScript -e "ObjC.import('Foundation'); \$.NSDistributedNotificationCenter.defaultCenter.postNotificationNameObjectUserInfoDeliverImmediately('app.veil.search.show', 'overview', \$(), true)" >/dev/null 2>&1 || true
+  ;;
+ dismiss-popups)
+  sketchybar --set music popup.drawing=off --set clock popup.drawing=off --set keys popup.drawing=off --set city popup.drawing=off 2>/dev/null || true
+  rift-cli execute mission-control dismiss >/dev/null 2>&1 || true
+  ;;
+ themes)
+  # Reliable gallery opener when Cursor steals ⌘T (also: ⌃⌥T global hotkey, Search → theme).
+  osascript -l JavaScript -e "ObjC.import('Foundation'); \$.NSDistributedNotificationCenter.defaultCenter.postNotificationNameObjectUserInfoDeliverImmediately('app.veil.search.show', 'theme', \$(), true)" >/dev/null 2>&1 || true
+  ;;
+ music-popup)
+  # Fresh Now Playing open (media-control first). Prefer this over bare popup.drawing=on.
+  exec "$HOME/.config/sketchybar/plugins/veil.sh" music mouse.clicked
+  ;;
+ saver-preview)
+  # Safe in-process preview — never launches ScreenSaverEngine / never locks.
+  exec "$HOME/.config/veil/tools/saver-preview/run.sh" "${2:-}"
+  ;;
  launch)
   if pgrep -xq veil-search; then
    osascript -l JavaScript -e "ObjC.import('Foundation'); \$.NSDistributedNotificationCenter.defaultCenter.postNotificationNameObjectUserInfoDeliverImmediately('app.veil.search.show', \$(), \$(), true)"
@@ -236,5 +260,5 @@ PLIST
     fi ;;
    *) echo "usage: veil feature [list|enable NAME|disable NAME]"; exit 1 ;;
   esac ;;
- *) printf '%s\n' 'Veil: veil off | on [THEME] | toggle | quiet | normal | toggle-quiet | feature | pause | reload | recover | quit | keys | overview | launch | term | btop | status | selftest' ;;
+  *) printf '%s\n' 'Veil: veil off | on [THEME] | toggle | quiet | normal | toggle-quiet | feature | pause | reload | recover | quit | keys | overview | themes | music-popup | dismiss-popups | saver-preview | launch | term | btop | status | selftest' ;;
 esac

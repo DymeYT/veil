@@ -164,9 +164,9 @@ term_pad_y = "8"
 
 term_size = "13"
 
-term_opacity = "0.92"  # the focused terminal is made opaque by Veil Search; the rest stay just translucent
+term_opacity = "1.0"
 
-term_blur = "10"
+term_blur = "0"
 
 bar_compose = "split"
 
@@ -174,9 +174,9 @@ bar_layout = "strip"
 
 bar_border = "2"
 
-border_width = "1.0"
+border_width = "1.5"
 
-border_active = "0xe6%cyan%"
+border_active = "0xf0%red%"
 
 border_inactive = "0x00000000"
 ws_style = "rule"

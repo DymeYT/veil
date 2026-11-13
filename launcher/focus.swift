@@ -28,16 +28,35 @@ final class FocusPulse {
     private var panel: NSPanel?
     private var observer: AXObserver?
     private var pending: DispatchWorkItem?
+    private var fade: DispatchWorkItem?
+    private var cleanup: DispatchWorkItem?
+    private var enabled = false
     private var opaqueTerminal: String?  // the Ghostty window currently toggled solid
     private let terminalQueue = DispatchQueue(label: "app.veil.search.terminal-opacity")
 
     func start() {
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] n in
-            guard let app = n.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
+            guard self?.enabled == true, let app = n.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
             self?.watch(app.processIdentifier)
             self?.focusChanged()
         }
-        if let app = NSWorkspace.shared.frontmostApplication { watch(app.processIdentifier) }
+        setEnabled(!veilIsOff)
+    }
+
+    func setEnabled(_ enabled: Bool) {
+        self.enabled = enabled
+        if enabled, let app = NSWorkspace.shared.frontmostApplication {
+            watch(app.processIdentifier)
+        } else {
+            if let observer { CFRunLoopRemoveSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .defaultMode) }
+            observer = nil
+            pending?.cancel()
+            fade?.cancel()
+            cleanup?.cancel()
+            model.on = false
+            panel?.orderOut(nil)
+            syncTerminalOpacity(forceTranslucent: true)
+        }
     }
 
     /// Window switches inside one app (two Ghostty windows) don't activate an app, so follow its focused window too.
@@ -50,23 +69,23 @@ final class FocusPulse {
             Unmanaged<FocusPulse>.fromOpaque(refcon).takeUnretainedValue().focusChanged()
         }
         guard AXObserverCreate(pid, callback, &created) == .success, let o = created else { return }
-        AXObserverAddNotification(o, AXUIElementCreateApplication(pid), kAXFocusedWindowChangedNotification as CFString,
-                                  Unmanaged.passUnretained(self).toOpaque())
+        guard AXObserverAddNotification(o, AXUIElementCreateApplication(pid), kAXFocusedWindowChangedNotification as CFString,
+                                        Unmanaged.passUnretained(self).toOpaque()) == .success else { return }
         CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(o), .defaultMode)
         observer = o
     }
 
     func focusChanged() {
-        guard !veilIsOff else { return }
+        guard enabled else { return }
         syncTerminalOpacity()
         pulse()
     }
 
     // a Ghostty config reload keeps a toggled window solid, so theme switches need no resync
 
-    private func syncTerminalOpacity() {
+    private func syncTerminalOpacity(forceTranslucent: Bool = false) {
         guard NSRunningApplication.runningApplications(withBundleIdentifier: "com.mitchellh.ghostty").first != nil else { return }
-        let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.mitchellh.ghostty"
+        let front = !forceTranslucent && NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.mitchellh.ghostty"
         terminalQueue.async { [weak self] in
             guard let self, front || self.opaqueTerminal != nil else { return }
             // toggle_background_opacity flips one window between solid and its configured translucency
@@ -131,7 +150,9 @@ final class FocusPulse {
     }
 
     private func bloom() {
-        guard let f = focusedFrame() else { return }
+        guard enabled, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion, let f = focusedFrame() else { return }
+        fade?.cancel()
+        cleanup?.cancel()
         let frame = f.insetBy(dx: -10, dy: -10)
         let w = panel ?? {
             let p = NSPanel(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
@@ -146,11 +167,13 @@ final class FocusPulse {
         model.on = false
         w.orderFrontRegardless()
         withAnimation(.spring(response: 0.22, dampingFraction: 0.82)) { model.on = true }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) { [weak self] in
+        let fade = DispatchWorkItem { [weak self] in
             withAnimation(.easeIn(duration: 0.34)) { self?.model.on = false }
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.62) { [weak self] in
-            if self?.model.on == false { self?.panel?.orderOut(nil) }
-        }
+        let cleanup = DispatchWorkItem { [weak self] in self?.panel?.orderOut(nil) }
+        self.fade = fade
+        self.cleanup = cleanup
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.22, execute: fade)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.62, execute: cleanup)
     }
 }

@@ -9,6 +9,11 @@ O="$NC/backups/original"
 launchctl bootout "gui/$(id -u)/app.veil.search" 2>/dev/null
 rm -f "$HOME/Library/LaunchAgents/app.veil.search.plist"
 rm -rf "$HOME/Applications/Veil Search.app"
+saver="$HOME/Library/Screen Savers/Veil.saver"
+if [ "$(plutil -extract CFBundleIdentifier raw "$saver/Contents/Info.plist" 2>/dev/null)" = app.veil.screensaver ]; then
+  rm -rf "$saver"
+  python3 "$NC/screensaver/sync.py" "$NC" --remove
+fi
 for name in sketchybar borders; do
   launchctl bootout "gui/$(id -u)/app.veil.$name" 2>/dev/null
   rm -f "$HOME/Library/LaunchAgents/app.veil.$name.plist"

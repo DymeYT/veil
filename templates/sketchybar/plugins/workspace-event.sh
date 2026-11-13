@@ -1,14 +1,56 @@
 #!/bin/bash
 # Rift workspace/window events: draw the active, occupied and empty workspaces in the theme's style.
-# One query and one sketchybar call per event; widths stay fixed so the bar never shifts.
-# Workspace switches redraw at once. windows_changed comes in bursts while windows move, and only changes which
-# workspaces are occupied, so only the last event of a 150 ms burst queries Rift and redraws.
-if [ "$RIFT_EVENT_TYPE" = windows_changed ]; then
-  tok="${TMPDIR:-/tmp}/veil-windows-event"; me="$$"
-  echo "$me" > "$tok"; sleep 0.15; [ "$(cat "$tok" 2>/dev/null)" = "$me" ] || exit 0
+# Let the last window event in a burst refresh occupancy. A workspace switch updates
+# immediately and supersedes an older window refresh, even if its Rift query is in flight.
+cache="$HOME/Library/Caches/veil-workspaces"
+token="$cache.event"
+printf '%s\n' "$$" > "$token" || exit 0
+[ "$RIFT_EVENT_TYPE" != windows_changed ] || sleep 0.12
+read -r latest < "$token"
+[ "$latest" = "$$" ] || exit 0
+
+RIFT="$HOME/.local/bin/rift-cli"
+# Cache CLI capability, which stays valid even if Rift is starting up or asleep.
+# A newer installed CLI invalidates the probe.
+if [[ "$RIFT" -nt "$cache.query" || ! -f "$cache.query" ]]; then
+  query=workspaces
+  if "$RIFT" query workspace-summary --help >/dev/null 2>&1; then
+    query=workspace-summary
+  fi
+  printf '%s\n' "$query" > "$cache.query"
+else
+  read -r query < "$cache.query"
+  [[ "$query" = workspace-summary ]] || query=workspaces
 fi
-names=(@@ws@@)
+rows=$("$RIFT" query "$query" 2>/dev/null) || exit 0
+rows=$(/usr/bin/jq -r '.[] | [.index, (if .is_active then (if .window_count > 0 then "active-busy" else "active" end) elif .window_count > 0 then "busy" else "empty" end)] | @tsv' <<<"$rows") || exit 0
+read -r latest < "$token"
+[ "$latest" = "$$" ] || exit 0
+
+# SketchyBar starts with blank items after a reload. Discard the previous render
+# state when its configuration has a new epoch, and repaint without animation.
+epoch=''
+read -r epoch 2>/dev/null < "$HOME/Library/Caches/veil-bar-epoch"
+previous=()
+if [[ -s "$cache" ]]; then
+  {
+    read -r prior_epoch
+    if [[ "$epoch" = "$prior_epoch" ]]; then
+      read -r -a previous
+    fi
+  } < "$cache"
+fi
 STYLE='@@ws_style@@'
+next=(empty empty empty empty empty)
+while IFS=$'\t' read -r i state; do
+  case "$STYLE:$state" in
+    pill:*|slot:*) ;;
+    *:active-busy) state=active ;;
+  esac
+  case "$i:$state" in [0-4]:active|[0-4]:active-busy|[0-4]:busy|[0-4]:empty) next[$i]=$state ;; esac
+done <<<"$rows"
+
+names=(@@ws@@)
 THEME='@@theme_id@@'
 WS_RADIUS='@@ws_radius@@'
 lines=(@@ws_colors@@)      # bullet style: one color per workspace (subway lines)
@@ -16,13 +58,17 @@ roman=(I II III IV V)
 kanji=(一 二 三 四 五)
 bullets=(1 4 A N 7)    # real MTA lines in each bullet's color: 1 red, 4 green, A blue, N yellow, 7 purple
 args=()
-while IFS=$'\t' read -r i active count; do
-  [ "$i" -ge 0 ] 2>/dev/null && [ "$i" -le 4 ] || continue
-  count=${count:-0}; n=${names[$i]}; s="ws.$i"
-  if [ "$active" = true ]; then state=active; elif [ "$count" -gt 0 ]; then state=busy; else state=empty; fi
+for i in 0 1 2 3 4; do
+  state=${next[$i]}; n=${names[$i]}; s="ws.$i"
+  [ "$state" != "${previous[$i]}" ] || continue
+  occupied=false
+  case "$state" in
+    busy) occupied=true ;;
+    active-busy) occupied=true; state=active ;;
+  esac
   case "$STYLE" in
     pill|slot)
-      dot='  '; [ "$count" -gt 0 ] && dot=' •'
+      dot='  '; [ "$occupied" = false ] || dot=' •'
       num="0$((i+1))"; [ "$STYLE" = slot ] && num="$((i+1))"
       # Field-desk (Paradis) and field-guide (Guidance) tabs are names; the factory keeps numbered shortcut slots.
       case "$THEME" in paradis|elden-ring) num='' ;; esac
@@ -89,6 +135,14 @@ while IFS=$'\t' read -r i active count; do
         empty) args+=(--set "$s" icon=● icon.color=0x4076849c label="$n" label.drawing=on label.color=0xccd9f4ff background.drawing=off) ;;
       esac ;;
   esac
-done < <("$HOME/.local/bin/rift-cli" query workspaces 2>/dev/null | /usr/bin/jq -r '.[] | [.index, .is_active, .window_count] | @tsv')
-[ ${#args[@]} -gt 0 ] && /opt/homebrew/bin/sketchybar "${args[@]}"
-exit 0
+done
+[ ${#args[@]} -gt 0 ] || exit 0
+read -r latest < "$token"
+[ "$latest" = "$$" ] || exit 0
+motion=()
+if [ '@@system_motion@@' = true ] && [ ${#previous[@]} -gt 0 ] && [ ! -f "$HOME/.config/veil/generated/quiet" ]; then
+  motion=(--animate tanh 9)
+fi
+if /opt/homebrew/bin/sketchybar "${motion[@]}" "${args[@]}"; then
+  printf '%s\n' "$epoch" "${next[*]}" > "$cache"
+fi

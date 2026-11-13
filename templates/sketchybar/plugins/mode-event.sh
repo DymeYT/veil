@@ -1,17 +1,26 @@
 #!/bin/bash
-# Rift binding mode changed: show the mode name (e.g. RESIZE) beside the workspaces; hide it in the default mode.
-# Switching apps leaves the mode, so a stray ⌥R never keeps eating typed letters (sketchybar front_app_switched).
+# Keep a mode indicator until Rift exits the mode. A mode left on for a while
+# is dropped on app switch so it cannot keep intercepting normal typing.
 SB=/opt/homebrew/bin/sketchybar
-# Only a mode left on for a while is dropped: a resize that moves focus into another app (Tab, ⌥HJKL) keeps going.
-since="${TMPDIR:-/tmp}/veil-mode-since"
+since="$HOME/Library/Caches/veil-mode-since"
 if [ "$SENDER" = front_app_switched ]; then
-  [ "$($SB --query mode 2>/dev/null | /usr/bin/jq -r '.geometry.drawing')" = on ] || exit 0
-  [ $(( $(date +%s) - $(cat "$since" 2>/dev/null || echo 0) )) -ge 15 ] && "$HOME/.local/bin/rift-cli" execute binding-mode default >/dev/null 2>&1
+  [ -s "$since" ] || exit 0
+  read -r started < "$since"
+  [[ "$started" =~ ^[0-9]+$ ]] || exit 0
+  [ $(( $(date +%s) - started )) -lt 15 ] || exec "$HOME/.local/bin/rift-cli" execute binding-mode default
   exit 0
 fi
-if [ -z "$RIFT_BINDING_MODE" ] || [ "$RIFT_BINDING_MODE" = default ]; then
-  $SB --set mode drawing=off
-else
-  date +%s > "$since"
-  $SB --set mode drawing=on label="$(printf '%s' "$RIFT_BINDING_MODE" | tr '[:lower:]' '[:upper:]') · ESC"
+mode="$RIFT_BINDING_MODE"
+if [ "$SENDER" = forced ]; then
+  mode=$("$HOME/.local/bin/rift-cli" query binding-mode 2>/dev/null) || exit 0
+  mode=${mode#\"}; mode=${mode%\"}
 fi
+if [ -z "$mode" ] || [ "$mode" = default ]; then
+  if [ -f "$since" ]; then
+    : > "$since"
+  fi
+  exec "$SB" --set mode drawing=off
+fi
+[ "$SENDER" = forced ] && [ -s "$since" ] || date +%s > "$since"
+label=$(printf '%s' "$mode" | tr '[:lower:]' '[:upper:]')
+exec "$SB" --set mode drawing=on label="$label · ESC"

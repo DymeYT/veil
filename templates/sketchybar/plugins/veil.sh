@@ -84,12 +84,25 @@ music_media_control() {
     '{source:$source, state:$state, title:$title, artist:$artist, album:$album}'
 }
 music_snapshot() {
-  local selected="$1" action="$2" snapshot=""
-  if [ "$selected" = Cider ]; then
-    music_media_control "$action"
-    return
+  # Prefer media-control / SIP helper for ALL players (incl. Music). Never open
+  # an AppleScript Automation prompt just to paint the popup — that path is only
+  # a last resort when Now Playing is empty and the user named Music/Spotify.
+  local selected="$1" action="$2" now=""
+  now=$(music_media_control "$action") || now=""
+  if [ -n "$now" ] && jq -e '(.title | length) > 0' >/dev/null 2>&1 <<<"$now"; then
+    printf '%s\n' "$now"
+    return 0
   fi
-  # Cap AppleScript so a stuck Music/Spotify Automation prompt cannot freeze the bar.
+  if [ -z "$action" ] || [ "$selected" = Cider ]; then
+    printf '%s\n' '{"source":"","state":"stopped","title":"","message":"Nothing playing"}'
+    return 0
+  fi
+  # Control-only fallback for Music/Spotify when Now Playing is empty.
+  case "$selected" in
+    Music|Spotify) ;;
+    *) printf '%s\n' '{"source":"","state":"stopped","title":"","message":"Nothing playing"}'; return 0 ;;
+  esac
+  local snapshot
   snapshot=$(perl -e 'alarm 2; exec @ARGV' /usr/bin/osascript -l JavaScript - "$selected" "$action" <<'JXA'
 ObjC.import("AppKit");
 function run(args) {
@@ -98,55 +111,33 @@ function run(args) {
         { source: "Spotify", id: "com.spotify.client" }
     ];
     const [selected, action] = args;
-    const candidates = players.filter(player => !selected || player.source === selected);
-    const snapshots = [];
-    let unavailable = "";
-    for (const player of candidates) {
-        const running = $.NSRunningApplication.runningApplicationsWithBundleIdentifier(player.id);
-        if (!Number(running.count)) continue;
-        try {
-            const app = Application(ObjC.unwrap(running.objectAtIndex(0).bundleURL.path));
-            switch (action) {
-                case "previous": app.previousTrack(); break;
-                case "next": app.nextTrack(); break;
-                case "playpause": app.playpause(); break;
-            }
-            const state = String(app.playerState());
-            if (state === "stopped") continue;
-            const track = app.currentTrack;
-            const title = String(track.name() || "");
-            const artist = String(track.artist() || "");
-            let album = "";
-            try { album = String(track.album() || ""); } catch (_) {}
-            if (title) snapshots.push({ source: player.source, state, title, artist, album });
-        } catch (error) {
-            unavailable = String(error).includes("-1743") ? "Allow SketchyBar to control " + player.source + " in Automation." : "Playback details unavailable.";
+    const player = players.find(p => p.source === selected);
+    if (!player) return JSON.stringify({ source: "", state: "stopped", title: "" });
+    const running = $.NSRunningApplication.runningApplicationsWithBundleIdentifier(player.id);
+    if (!Number(running.count)) return JSON.stringify({ source: "", state: "stopped", title: "" });
+    try {
+        const app = Application(ObjC.unwrap(running.objectAtIndex(0).bundleURL.path));
+        switch (action) {
+            case "previous": app.previousTrack(); break;
+            case "next": app.nextTrack(); break;
+            case "playpause": app.playpause(); break;
         }
+        const state = String(app.playerState());
+        if (state === "stopped") return JSON.stringify({ source: "", state: "stopped", title: "" });
+        const track = app.currentTrack;
+        return JSON.stringify({
+            source: player.source, state,
+            title: String(track.name() || ""),
+            artist: String(track.artist() || ""),
+            album: (function () { try { return String(track.album() || ""); } catch (_) { return ""; } })()
+        });
+    } catch (error) {
+        return JSON.stringify({ source: "", state: "stopped", title: "", message: "Playback details unavailable." });
     }
-    return JSON.stringify(snapshots.find(item => item.state === "playing") || snapshots[0] ||
-        { source: "", state: "stopped", title: "", artist: "", album: "", message: unavailable });
 }
 JXA
-) || snapshot=""
-  # Merge AppleScript players with Now Playing (Cider). A paused Music track must
-  # not hide an actively playing Cider session.
-  local now=""
-  if [ -z "$selected" ] || [ "$selected" = Cider ]; then
-    now=$(music_media_control "") || now=""
-  fi
-  if [ -n "$now" ] && jq -e '.state == "playing" and (.title | length) > 0' >/dev/null 2>&1 <<<"$now"; then
-    printf '%s\n' "$now"
-    return 0
-  fi
-  if [ -n "$snapshot" ] && jq -e '(.title | length) > 0' >/dev/null 2>&1 <<<"$snapshot"; then
-    printf '%s\n' "$snapshot"
-    return 0
-  fi
-  if [ -n "$now" ]; then
-    printf '%s\n' "$now"
-    return 0
-  fi
-  printf '%s\n' "${snapshot:-{\"source\":\"\",\"state\":\"stopped\",\"title\":\"\"}}"
+) || snapshot='{"source":"","state":"stopped","title":""}'
+  printf '%s\n' "$snapshot"
 }
 music_read() {
   player=; state=; track=; detail=; message=
@@ -163,12 +154,13 @@ music_draw() {
   if [ "$state" = playing ] && [ -n "$track" ]; then
     show=on; color=0xff00e5ff; glyph=󰏤; toggle='Pause'
   fi
+  # Soft-fail during theme reload races when the music item is briefly absent.
   sketchybar --set music label="$track" label.drawing="$show" icon.color="$color" \
     --set music.source label="${player:-Now playing}" \
     --set music.track label="${track:-${message:-Nothing playing}}" \
     --set music.detail label="$detail" drawing="$detail_drawing" \
     --set music.previous drawing="$controls" --set music.toggle drawing="$controls" icon="$glyph" label="$toggle" \
-    --set music.next drawing="$controls" "$@"
+    --set music.next drawing="$controls" "$@" 2>/dev/null || return 0
 }
 music_panel() {
   local event="${1:-$SENDER}" cache="$CACHE/veil-bar-music"
@@ -212,12 +204,8 @@ music_panel() {
       snapshot=$(music_snapshot "" "") || snapshot="$cached"
       ;;
     previous|next|playpause)
-      [ -n "$player" ] || return
-      if [ "$player" = Cider ]; then
-        snapshot=$(music_media_control "$event") || return
-      else
-        snapshot=$(music_snapshot "$player" "$event") || return
-      fi
+      # Always drive controls through Now Playing — never AppleScript on open/control.
+      snapshot=$(music_media_control "$event") || snapshot=$(music_snapshot "${player:-}" "$event") || return
       ;;
     *) return ;;
   esac

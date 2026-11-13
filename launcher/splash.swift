@@ -1,5 +1,4 @@
-// Boot splash scenes: one illustrated, briefly animated scene per theme (style key `scene`).
-// Drawn with Canvas; motion runs only while the 1.8 s splash is on screen.
+// Theme transitions use one animated artwork and title reveal. Missing artwork falls back to a static scene.
 import SwiftUI
 
 struct RNG {
@@ -16,7 +15,7 @@ struct SplashView: View {
     var size: CGSize = splashSize
     @Environment(\.accessibilityReduceMotion) var reduceMotion
     var fixedT: Double? = nil  // offscreen renders pass a moment; live splashes animate
-    @State var start = Date()
+    @State private var revealed = false
     let artImage: NSImage?
 
     init(p: Palette, fixedT: Double? = nil, size: CGSize = splashSize) {
@@ -32,7 +31,12 @@ struct SplashView: View {
         } else if reduceMotion {
             frame(1)
         } else {
-            TimelineView(.animation) { tl in frame(min(tl.date.timeIntervalSince(start) / 1.8, 1)) }
+            frame(revealed ? 1 : 0)
+                .onAppear {
+                    withAnimation(.timingCurve(0.16, 1, 0.30, 1, duration: 0.34)) {
+                        revealed = true
+                    }
+                }
         }
     }
 
@@ -43,25 +47,25 @@ struct SplashView: View {
     }
 
     func frame(_ t: Double) -> some View {
-        let reveal = min(max((t - 0.08) / 0.45, 0), 1)
-        let ease = 1 - pow(1 - reveal, 3)
+        let progress = min(max(t, 0), 1)
+        let inset = max(22, min(86, size.width * 0.055))
+        let bottom = max(20, min(90, size.height * 0.095))
         let left = p.s("title_pos", "left") == "left"
         return ZStack {
             if let img = artImage {
-                // slow push-in across the splash
+                // A shallow scale settles with the title.
                 Image(nsImage: img).resizable().interpolation(.high).aspectRatio(contentMode: .fill)
                     .frame(width: size.width, height: size.height)
-                    .scaleEffect(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 1 : 1.07 - 0.07 * (1 - pow(1 - t, 2)), anchor: .center)
+                    .scaleEffect(1.025 - 0.025 * progress, anchor: .center)
                 // legibility: darken toward the title corner, keep the art breathing elsewhere
                 LinearGradient(stops: [.init(color: .clear, location: 0.35), .init(color: p["bg_dark"].opacity(0.88), location: 1)],
                                startPoint: left ? .topTrailing : .top, endPoint: left ? .bottomLeading : .bottom)
-                RadialGradient(colors: [.clear, .black.opacity(0.5)], center: .center, startRadius: 700, endRadius: 1500)
-                TitleBlock(p: p, t: t, ease: ease, align: left ? .leading : .center)
+                TitleBlock(p: p, progress: progress, align: left ? .leading : .center)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: left ? .bottomLeading : .bottom)
-                    .padding(.leading, left ? 150 : 0).padding(.bottom, 170)
+                    .padding(.horizontal, inset).padding(.bottom, bottom)
             } else {
-                Canvas { ctx, size in SceneArt.draw(p.s("scene", "neon"), ctx: &ctx, size: size, t: t, p: p) }
-                TitleBlock(p: p, t: t, ease: ease)
+                Canvas { ctx, size in SceneArt.draw(p.s("scene", "neon"), ctx: &ctx, size: size, t: 1, p: p) }
+                TitleBlock(p: p, progress: progress)
                     .position(x: size.width / 2, y: SceneArt.titleY(p.s("scene", "neon")) * size.height / 1329)
             }
         }
@@ -70,124 +74,23 @@ struct SplashView: View {
     }
 }
 
-// The theme's mark, name and tagline, treated per scene.
 struct TitleBlock: View {
     let p: Palette
-    let t: Double
-    let ease: Double
+    let progress: Double
     var align: HorizontalAlignment = .center
-    var scene: String { p.s("scene", "neon") }
-    var brand: String { p.s("brand", "VEIL") }
 
     var body: some View {
-        VStack(alignment: align, spacing: 22) {
-            mark
-            title
-            rule
-            Text(p.s("tagline", "")).font(code(14, "Medium")).tracking(4).foregroundStyle(p["fg"].opacity(0.75))
-                .opacity(ease)
+        VStack(alignment: align, spacing: 14) {
+            Rectangle()
+                .fill(p["cyan"])
+                .frame(width: 30, height: 2)
+            Text(p.s("title", p.s("brand", "Veil")))
+                .font(mono(45, "Bold"))
+                .tracking(4)
+                .foregroundStyle(p["white"])
         }
-        .offset(y: (1 - ease) * 18)
-        .opacity(min(ease * 1.4, 1))
-    }
-
-    @ViewBuilder var title: some View {
-        let font = mono(scene == "skyline" ? 54 : 50, "Bold")
-        switch scene {
-        case "neon", "tower":
-            // chromatic split that settles as the title locks in
-            let off = (1 - ease) * 10 + 1.5
-            ZStack {
-                Text(brand).font(font).tracking(12).foregroundStyle(p["cyan"].opacity(0.85)).offset(x: -off)
-                Text(brand).font(font).tracking(12).foregroundStyle(p["magenta"].opacity(0.85)).offset(x: off)
-                Text(brand).font(font).tracking(12).foregroundStyle(p["white"])
-            }
-            .overlay { HUDBrackets(color: p["cyan"]).padding(-26) }
-        case "cabin":
-            // typewriter: letters arrive one at a time
-            let n = Int(Double(brand.count) * min(t / 0.6, 1))
-            Text(String(brand.prefix(n)) + (n < brand.count ? "▌" : "")).font(font).tracking(10).foregroundStyle(p["white"])
-                .frame(width: 900)
-        case "skyline":
-            HStack(spacing: 18) {
-                Text(brand.capitalized).font(font).foregroundStyle(.white)
-                Spacer(minLength: 30)
-                HStack(spacing: 8) {
-                    ForEach(Array(zip(["1", "4", "A", "N", "7"], ["red", "green", "blue", "yellow", "magenta"])), id: \.0) { l, c in
-                        Text(l).font(mono(24, "Bold")).foregroundStyle(c == "yellow" ? .black : .white)
-                            .frame(width: 44, height: 44).background(Circle().fill(p[c]))
-                    }
-                }
-            }
-            .padding(.horizontal, 30).frame(width: 760, height: 96)
-            .background(RoundedRectangle(cornerRadius: 6).fill(.black))
-            .overlay(alignment: .top) { Rectangle().fill(.white).frame(height: 3).padding(.horizontal, 30).offset(y: 12) }
-        case "cathedral":
-            HStack(spacing: 26) {
-                Text("❦").font(.system(size: 26)).foregroundStyle(p["yellow"]).scaleEffect(x: -1)
-                Text(brand).font(font).tracking(14).foregroundStyle(p["white"])
-                Text("❦").font(.system(size: 26)).foregroundStyle(p["yellow"])
-            }
-        case "art":
-            Text(brand).font(font).tracking(8).foregroundStyle(p["white"])
-        default:
-            Text(brand).font(font).tracking(scene == "cavern" ? 16 : 10).foregroundStyle(p["white"])
-                .shadow(color: p["cyan"].opacity(scene == "cavern" ? 0.5 : 0.25), radius: 18)
-        }
-    }
-
-    @ViewBuilder var mark: some View {
-        let shape = RoundedRectangle(cornerRadius: max(p.num("chip_radius", 5) * 2, 2), style: .continuous)
-        let t = Text(p.s("chip", "NC//")).font(mono(26, "ExtraBold"))
-        switch scene {
-        case "skyline", "art": EmptyView()  // signage and quiet art need no extra badge
-        default:
-            switch p.s("chip_style", "filled") {
-            case "outline": t.foregroundStyle(p["yellow"]).padding(.horizontal, 18).padding(.vertical, 8).overlay(shape.stroke(p["yellow"], lineWidth: 1.5))
-            case "text": t.font(mono(54, "Bold")).foregroundStyle(p["yellow"]).shadow(color: p["yellow"].opacity(0.45), radius: 18)
-            default: t.foregroundStyle(p["bg_dark"]).padding(.horizontal, 18).padding(.vertical, 8).background(shape.fill(p["yellow"]))
-                    .shadow(color: p["yellow"].opacity(0.35), radius: 16)
-            }
-        }
-    }
-
-    @ViewBuilder var rule: some View {
-        switch scene {
-        case "art": EmptyView()
-        case "factory":
-            // research progress
-            VStack(spacing: 8) {
-                HStack {
-                    Text("RESEARCH").font(mono(12, "Bold")).tracking(3).foregroundStyle(p["dim"])
-                    Spacer()
-                    Text("\(Int(min(t / 0.9, 1) * 100))%").font(code(12, "Bold")).foregroundStyle(p["cyan"])
-                }
-                ZStack(alignment: .leading) {
-                    Rectangle().fill(p["surface"]).overlay(Rectangle().stroke(p["line"], lineWidth: 1))
-                    Rectangle().fill(p["cyan"]).frame(width: 420 * min(t / 0.9, 1)).padding(2)
-                }
-                .frame(height: 14)
-            }
-            .frame(width: 420)
-        default:
-            LinearGradient(colors: [.clear, p["cyan"], p["magenta"], .clear], startPoint: .leading, endPoint: .trailing)
-                .frame(width: 80 + 300 * ease, height: 1.5)
-        }
-    }
-}
-
-struct HUDBrackets: View {
-    let color: Color
-    var body: some View {
-        GeometryReader { g in
-            Path { path in
-                let a: CGFloat = 22, w = g.size.width, h = g.size.height
-                for (x, y, dx, dy) in [(0.0, 0.0, 1.0, 1.0), (w, 0.0, -1.0, 1.0), (0.0, h, 1.0, -1.0), (w, h, -1.0, -1.0)] {
-                    path.move(to: CGPoint(x: x, y: y + dy * a)); path.addLine(to: CGPoint(x: x, y: y)); path.addLine(to: CGPoint(x: x + dx * a, y: y))
-                }
-            }
-            .stroke(color, lineWidth: 2)
-        }
+        .offset(y: (1 - progress) * 14)
+        .opacity(progress)
     }
 }
 

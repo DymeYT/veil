@@ -537,6 +537,18 @@ final class Model: NSObject, ObservableObject {
             })
             return
         }
+        if choosingOverview {
+            cancelFileSearch()
+            // Live workspace cards — theme-aware Veil Search surface (pairs with Rift mission control).
+            ncCache = ncItems(wsNames)
+            var cards = ncCache.filter { $0.symbol == "square.grid.2x2" || $0.symbol == "rectangle.grid.2x2" }
+            if cards.isEmpty {
+                cards = [Item(kind: .answer, title: "No workspaces", subtitle: "Rift did not report virtual workspaces",
+                              symbol: "rectangle.grid.2x2", action: .copy(""), score: 0)]
+            }
+            publish(cards)
+            return
+        }
         if let entries = folderItems(q) {  // "~/Dev/": browse instead of search
             cancelFileSearch()
             publish(entries); return
@@ -753,7 +765,12 @@ final class Model: NSObject, ObservableObject {
 
     /// Columns in the result grid (Foundry's console and Cinder's register are two-up); 1 for lists.
     var choosingTheme: Bool { mode == 0 && query.trimmingCharacters(in: .whitespaces).lowercased() == "theme" }
-    var gridColumns: Int { choosingTheme ? 3 : ["console", "embers"].contains(palette.s("layout", "")) ? 2 : 1 }
+    var choosingOverview: Bool { mode == 0 && query.trimmingCharacters(in: .whitespaces).lowercased() == "overview" }
+    var gridColumns: Int {
+        if choosingTheme { return 3 }
+        if choosingOverview { return 2 }
+        return ["console", "embers"].contains(palette.s("layout", "")) ? 2 : 1
+    }
 
     func toggleThemePicker() {
         let next = choosingTheme ? "" : "theme"
@@ -1418,6 +1435,49 @@ struct Texture: View {
     }
 }
 
+struct OverviewCard: View {
+    let item: Item
+    let palette: Palette
+    let selected: Bool
+    let index: Int
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(String(format: "%02d", index + 1))
+                    .font(.system(size: 22, weight: .bold, design: .monospaced))
+                    .foregroundStyle(selected ? palette["bg_dark"] : palette["yellow"])
+                    .padding(.horizontal, 8).padding(.vertical, 4)
+                    .background(RoundedRectangle(cornerRadius: 6).fill(selected ? palette["yellow"] : palette["surface"]))
+                Spacer(minLength: 6)
+                Image(systemName: item.symbol)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(selected ? palette["cyan"] : palette["dim"])
+            }
+            Text(item.title)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(palette["fg"])
+                .lineLimit(2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Text(item.subtitle)
+                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .foregroundStyle(palette["dim"])
+                .lineLimit(2)
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, minHeight: 128, alignment: .topLeading)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(selected ? palette["selection"] : palette["surface"])
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(selected ? palette["cyan"] : palette["border"], lineWidth: selected ? 2 : 1)
+        )
+    }
+}
+
 struct ThemePreview: View {
     let item: Item
     let palette: Palette
@@ -1525,7 +1585,7 @@ struct LauncherView: View {
                             .padding(8)
                     }
                     .buttonStyle(.plain)
-                    .help("Browse themes (⌘T)")
+                    .help("Browse themes (⌃⌥T · ⌘T in launcher · Search “theme”)")
                     .accessibilityLabel("Browse themes")
                 }
                 if m.searchingFiles {
@@ -1546,11 +1606,14 @@ struct LauncherView: View {
             if !m.items.isEmpty {
                 if p.s("frame", "none") == "station" { p["white"].opacity(0.85).frame(height: 2) } else { divider(p) }
                 if m.choosingTheme { themePicker(p).frame(height: 412) }
+                else if m.choosingOverview { overviewPicker(p).frame(height: 412) }
                 else { results(p).frame(height: 412) }
                 HStack(spacing: 16) {
                     // four hints at most (the rest live in ⌘K); narrow launchers drop to two
                     if m.choosingTheme {
                         hint("↑↓←→", "navigate"); hint("↵", "apply"); hint("esc", "back")
+                    } else if m.choosingOverview {
+                        hint("↑↓", "workspace"); hint("↵", "switch"); hint("esc", "close")
                     } else { ViewThatFits(in: .horizontal) {
                         HStack(spacing: 16) { hint("↵", "open"); hint("⌘K", "actions"); hint("⌘C", "copy"); hint("esc", "close") }
                         HStack(spacing: 16) { hint("↵", "open"); hint("⌘K", "actions") }
@@ -1742,6 +1805,41 @@ struct LauncherView: View {
         }
     }
 
+    /// Theme-aware workspace overview surface (pairs with Rift mission control on ⌃⌥M).
+    func overviewPicker(_ p: Palette) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 10) {
+                Text(p.cased("Workspace Overview"))
+                    .font(mono(13, "Bold")).tracking(1.6).foregroundStyle(p["yellow"])
+                Text(p.cased("⌃⌥M · Esc dismisses"))
+                    .font(mono(11, "Bold")).tracking(0.8).foregroundStyle(p["dim"])
+                Spacer(minLength: 8)
+                Text(p.cased("\(m.items.count) spaces"))
+                    .font(mono(11, "Bold")).tracking(1.2).foregroundStyle(p["comment"])
+            }
+            .padding(.horizontal, 16).frame(height: 36)
+            .overlay(alignment: .bottom) { p["border"].frame(height: 1) }
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 2), spacing: 12) {
+                        ForEach(Array(m.items.enumerated()), id: \.element.id) { index, item in
+                            Button { m.activate(index) } label: {
+                                OverviewCard(item: item, palette: p, selected: index == m.selected, index: index)
+                            }
+                            .buttonStyle(.plain)
+                            .id(index)
+                            .accessibilityAddTraits(index == m.selected ? .isSelected : [])
+                        }
+                    }
+                    .padding(14)
+                }
+                .onChange(of: m.selected) { _, index in
+                    withAnimation(reduceMotion ? nil : .easeOut(duration: 0.14)) { proxy.scrollTo(index) }
+                }
+            }
+        }
+    }
+
     func sectionTitle(_ text: String, _ p: Palette) -> some View {
         Text(text).font(mono(11, "Bold")).tracking(2).foregroundStyle(p["dim"])
             .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 16).frame(height: 30)
@@ -1916,6 +2014,31 @@ struct VisualEffect: NSViewRepresentable {
     func updateNSView(_ v: NSVisualEffectView, context: Context) {}
 }
 
+/// Esc → `veil dismiss-popups` (SketchyBar music/calendar/control/keys + Rift overview).
+/// NSEvent global monitor (Veil Search needs Accessibility). Never locks; never ScreenSaverEngine.
+enum EscDismiss {
+    private static var veilBin = NSString(string: "~/.local/bin/veil").expandingTildeInPath
+
+    static func install(veilBin: String) {
+        Self.veilBin = veilBin
+        NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { e in
+            guard e.keyCode == UInt16(kVK_Escape) else { return }
+            run()
+        }
+    }
+
+    static func run() {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let task = Process()
+            task.executableURL = URL(fileURLWithPath: veilBin)
+            task.arguments = ["dismiss-popups"]
+            task.standardOutput = FileHandle.nullDevice
+            task.standardError = FileHandle.nullDevice
+            try? task.run()
+        }
+    }
+}
+
 // MARK: panel + app
 
 final class Panel: NSPanel {
@@ -2055,16 +2178,26 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             var hk = EventHotKeyID()
             let status = GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID), nil,
                                            MemoryLayout<EventHotKeyID>.size, nil, &hk)
-            guard status == noErr, hk.signature == OSType(0x4E43_5348), [1, 2].contains(hk.id) else { return OSStatus(eventNotHandledErr) }
+            guard status == noErr, hk.signature == OSType(0x4E43_5348), [1, 2, 3].contains(hk.id) else { return OSStatus(eventNotHandledErr) }
             let id = hk.id
-            DispatchQueue.main.async { if id == 2 { VeilMode.toggle() } else { (NSApp.delegate as? App)?.toggle() } }
+            DispatchQueue.main.async {
+                if id == 2 { VeilMode.toggle() }
+                else if id == 3 { (NSApp.delegate as? App)?.show(query: "theme") }  // ⌃⌥T — reliable when Cursor steals ⌘T
+                else { (NSApp.delegate as? App)?.toggle() }
+            }
             return noErr
         }, 1, &spec, nil, nil)
         // ⌃⌥⌘V turns Veil on or off; it stays registered while Veil is off, so the way back is always there
         var toggleKey: EventHotKeyRef?
         RegisterEventHotKey(UInt32(kVK_ANSI_V), UInt32(cmdKey | optionKey | controlKey), EventHotKeyID(signature: OSType(0x4E43_5348), id: 2),
                             GetApplicationEventTarget(), 0, &toggleKey)
+        // ⌃⌥T opens the theme gallery even when Cursor owns ⌘T
+        var themesKey: EventHotKeyRef?
+        RegisterEventHotKey(UInt32(kVK_ANSI_T), UInt32(controlKey | optionKey), EventHotKeyID(signature: OSType(0x4E43_5348), id: 3),
+                            GetApplicationEventTarget(), 0, &themesKey)
         if !veilIsOff { registerSearchKey() }
+        // Esc dismisses SketchyBar popups (and Rift overview) without locking anything.
+        EscDismiss.install(veilBin: home + "/.local/bin/veil")
         // veil off / on: step aside or come back
         DistributedNotificationCenter.default().addObserver(forName: Notification.Name("app.veil.search.mode"), object: nil, queue: .main) { [weak self] n in
             guard let self else { return }
@@ -2272,7 +2405,9 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         // Opening can briefly resign key (scrim / first-responder shuffle); do not treat that as dismiss.
         ignoreResignUntil = Date().addingTimeInterval(0.35)
         Scrim.shared.show(on: screen, enabled: p.flag("scrim"))
+        NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
+        panel.orderFrontRegardless()
         DispatchQueue.main.async {
             guard self.panel.isVisible else { return }
             self.model.shown = true

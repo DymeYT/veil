@@ -31,8 +31,25 @@ index a41d07d..148c25c 100644
  }
  
  #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+diff --git a/crates/rift-protocol/src/transport.rs b/crates/rift-protocol/src/transport.rs
+index 6d78bc2..20247bf 100644
+--- a/crates/rift-protocol/src/transport.rs
++++ b/crates/rift-protocol/src/transport.rs
+@@ -1,3 +1,4 @@
++// Modified by Veil (2026): workspace summary IPC. See rift/README.md in the Veil repository.
+ use serde::{Deserialize, Serialize};
+ use serde_json::Value;
+ 
+@@ -14,6 +15,7 @@ pub enum RiftRequest {
+     GetWorkspacesForDisplay {
+         display_uuid: String,
+     },
++    GetWorkspaceSummary,
+     GetDisplays,
+     GetWindows {
+         space_id: Option<u64>,
 diff --git a/src/actor/reactor.rs b/src/actor/reactor.rs
-index e6e033f..85cecb0 100644
+index e6e033f..1c4b48f 100644
 --- a/src/actor/reactor.rs
 +++ b/src/actor/reactor.rs
 @@ -1,3 +1,4 @@
@@ -52,8 +69,20 @@ index e6e033f..85cecb0 100644
              state: RiftState::default(),
              space_state: ForwardedSpaceState::default(),
              last_screen_frames: HashMap::default(),
+@@ -3072,6 +3076,11 @@ impl Reactor {
+         }
+     }
+ 
++    fn queryable_window(&self, window_id: WindowId) -> bool {
++        self.state.windows.window(window_id).is_some_and(|window| window.is_admitted())
++            && self.app_manager.apps.contains_key(&window_id.pid)
++    }
++
+     fn create_window_data(&self, window_id: WindowId) -> Option<RuntimeWindowData> {
+         let window_state = self.state.windows.window(window_id)?;
+         if !window_state.is_admitted() {
 diff --git a/src/actor/reactor/animation.rs b/src/actor/reactor/animation.rs
-index 950043b..37c0090 100644
+index 950043b..77e726d 100644
 --- a/src/actor/reactor/animation.rs
 +++ b/src/actor/reactor/animation.rs
 @@ -1,3 +1,4 @@
@@ -170,7 +199,7 @@ index 950043b..37c0090 100644
                  set_size: (previous < 0.5 && t >= 0.5) || t == 1.0,
              },
              frames,
-@@ -1507,14 +1579,43 @@ fn interpolate_frame(a: CGRect, b: CGRect, s: f64) -> CGRect {
+@@ -1507,14 +1579,44 @@ fn interpolate_frame(a: CGRect, b: CGRect, s: f64) -> CGRect {
      }
  }
  
@@ -201,7 +230,8 @@ index 950043b..37c0090 100644
 +        }
 +        // x(u) is monotonic for these control points, so bisection finds u for time t.
 +        let (mut lo, mut hi) = (0.0, 1.0);
-+        for _ in 0..32 {
++        // 16 subdivisions keep the position error below a pixel on desktop displays.
++        for _ in 0..16 {
 +            let mid = (lo + hi) / 2.0;
 +            if bezier(x1, x2, mid) < t {
 +                lo = mid
@@ -219,7 +249,7 @@ index 950043b..37c0090 100644
  fn blend(a: f64, b: f64, s: f64) -> f64 { (1.0 - s) * a + s * b }
  
  #[cfg(test)]
-@@ -1693,7 +1794,9 @@ mod tests {
+@@ -1693,7 +1795,9 @@ mod tests {
                  assert!(collect_requests(&mut rx).is_empty());
              }
              assert_eq!(frames.len(), 3);
@@ -230,7 +260,7 @@ index 950043b..37c0090 100644
              assert_eq!(frames[2], rect(100.0, 50.0, 20.0, 30.0));
              assert!(transition_state(&manager).is_none());
              results.push(frames);
-@@ -2564,6 +2667,18 @@ mod tests {
+@@ -2564,6 +2668,18 @@ mod tests {
          assert!(!animation_contains(&manager, wid2));
      }
  
@@ -333,6 +363,48 @@ index 60665a0..67cbe87 100644
  
      fn rect(x: f64, y: f64, w: f64, h: f64) -> CGRect {
          CGRect::new(CGPoint::new(x, y), CGSize::new(w, h))
+diff --git a/src/actor/reactor/query.rs b/src/actor/reactor/query.rs
+index 6b9a8ac..57cf734 100644
+--- a/src/actor/reactor/query.rs
++++ b/src/actor/reactor/query.rs
+@@ -1,3 +1,4 @@
++// Modified by Veil (2026): layout-free workspace summary. See rift/README.md in the Veil repository.
+ use std::sync::mpsc::{RecvError, SyncSender, sync_channel};
+ 
+ use objc2_core_foundation::CGRect;
+@@ -427,6 +428,32 @@ impl Reactor {
+         self.resolve_menu_bar_space_with_preferred(preferred_space)
+     }
+ 
++    pub fn query_workspace_summary(&self) -> Vec<serde_json::Value> {
++        let Some(focused_space) = self.default_query_space() else {
++            return Vec::new();
++        };
++        let store = self.layout_manager.layout_engine.workspaces();
++        self.visible_workspace_view(focused_space, None)
++            .into_iter()
++            .map(|(index, id)| {
++                let space = store[id].space;
++                let is_active = store.active_workspace(space) == Some(id);
++                let window_count = self
++                    .state
++                    .windows
++                    .workspace_window_ids(id)
++                    .filter(|&wid| self.queryable_window(wid))
++                    .count();
++                serde_json::json!({
++                    "index": index,
++                    "is_active": is_active,
++                    "is_focused": is_active && space == focused_space,
++                    "window_count": window_count,
++                })
++            })
++            .collect()
++    }
++
+     pub fn query_workspaces(
+         &mut self,
+         space_id_param: Option<SpaceId>,
 diff --git a/src/actor/reactor/tests.rs b/src/actor/reactor/tests.rs
 index 16dbcdf..49f1af3 100644
 --- a/src/actor/reactor/tests.rs
@@ -351,7 +423,7 @@ index 16dbcdf..49f1af3 100644
  
      let requests = apps.requests();
 diff --git a/src/bin/rift-cli.rs b/src/bin/rift-cli.rs
-index d20c96f..1c1358e 100644
+index d20c96f..00861e2 100644
 --- a/src/bin/rift-cli.rs
 +++ b/src/bin/rift-cli.rs
 @@ -1,3 +1,4 @@
@@ -359,7 +431,16 @@ index d20c96f..1c1358e 100644
  use std::io::{self, Write};
  use std::path::PathBuf;
  use std::process::{self};
-@@ -251,6 +252,10 @@ enum CliResizeOrientation {
+@@ -86,6 +87,8 @@ enum QueryCommands {
+         #[command(flatten)]
+         scope: SpaceScopeArgs,
+     },
++    /// List workspace indices, active states, and window counts
++    WorkspaceSummary,
+     /// List windows (optionally filtered by space)
+     Windows {
+         #[command(flatten)]
+@@ -251,6 +254,10 @@ enum CliResizeOrientation {
      Horizontal,
      Vertical,
      Smart,
@@ -370,7 +451,7 @@ index d20c96f..1c1358e 100644
  }
  
  impl From<CliResizeOrientation> for rift_wm::layout_engine::ResizeOrientation {
-@@ -259,6 +264,10 @@ impl From<CliResizeOrientation> for rift_wm::layout_engine::ResizeOrientation {
+@@ -259,6 +266,10 @@ impl From<CliResizeOrientation> for rift_wm::layout_engine::ResizeOrientation {
              CliResizeOrientation::Horizontal => Self::Horizontal,
              CliResizeOrientation::Vertical => Self::Vertical,
              CliResizeOrientation::Smart => Self::Smart,
@@ -381,6 +462,32 @@ index d20c96f..1c1358e 100644
          }
      }
  }
+@@ -638,6 +649,7 @@ fn build_query_request(query: QueryCommands) -> Result<RiftRequest, String> {
+             Some(display_uuid) => Ok(RiftRequest::GetWindowsForDisplay { display_uuid }),
+             None => Ok(RiftRequest::GetWindows { space_id }),
+         },
++        QueryCommands::WorkspaceSummary => Ok(RiftRequest::GetWorkspaceSummary),
+         QueryCommands::Displays => Ok(RiftRequest::GetDisplays),
+         QueryCommands::Window { window_id } => {
+             let window_id = protocol_window_id(&parse_window_id(&window_id)?)?;
+diff --git a/src/ipc.rs b/src/ipc.rs
+index 24c80ed..e6a6144 100644
+--- a/src/ipc.rs
++++ b/src/ipc.rs
+@@ -1,3 +1,4 @@
++// Modified by Veil (2026): workspace summary IPC. See rift/README.md in the Veil repository.
+ use std::cell::RefCell;
+ use std::ffi::c_char;
+ use std::rc::Rc;
+@@ -260,6 +261,8 @@ fn encode_reactor_response(reactor: &mut reactor::Reactor, request: RiftRequest)
+             )
+         }
+ 
++        RiftRequest::GetWorkspaceSummary => encode_success(reactor.query_workspace_summary()),
++
+         RiftRequest::GetDisplays => {
+             let displays = reactor.query_displays();
+             encode_success(
 diff --git a/src/layout_engine/systems/bsp.rs b/src/layout_engine/systems/bsp.rs
 index 089a516..7e94f34 100644
 --- a/src/layout_engine/systems/bsp.rs
@@ -611,6 +718,40 @@ index 4af2b04..6db0dd1 100644
      #[test]
      fn manual_resize_ignores_cross_axis_jitter_when_hitting_edge() {
          let mut system = TraditionalLayoutSystem::default();
+diff --git a/src/model/window_store.rs b/src/model/window_store.rs
+index 716ec9d..5c02138 100644
+--- a/src/model/window_store.rs
++++ b/src/model/window_store.rs
+@@ -1,3 +1,4 @@
++// Modified by Veil (2026): unsorted workspace window iteration. See rift/README.md in the Veil repository.
+ use crate::actor::app::WindowId;
+ use crate::common::collections::{HashMap, HashSet};
+ use crate::model::VirtualWorkspaceId;
+@@ -1151,16 +1152,18 @@ impl WindowStore {
+     }
+ 
+     pub fn workspace_windows(&self, workspace_id: VirtualWorkspaceId) -> Vec<WindowId> {
+-        let mut windows: Vec<_> = self
+-            .workspace_windows
+-            .get(&workspace_id)
+-            .into_iter()
+-            .flat_map(|windows| windows.iter().copied())
+-            .collect();
++        let mut windows: Vec<_> = self.workspace_window_ids(workspace_id).collect();
+         windows.sort_unstable_by_key(|wid| (wid.pid, wid.idx.get()));
+         windows
+     }
+ 
++    pub fn workspace_window_ids(
++        &self,
++        workspace_id: VirtualWorkspaceId,
++    ) -> impl Iterator<Item = WindowId> + '_ {
++        self.workspace_windows.get(&workspace_id).into_iter().flatten().copied()
++    }
++
+     pub fn workspace_window_count(&self, workspace_id: VirtualWorkspaceId) -> usize {
+         self.workspace_windows.get(&workspace_id).map_or(0, HashSet::len)
+     }
 diff --git a/src/ui/settings/commands.rs b/src/ui/settings/commands.rs
 index 05ddb11..413ab7b 100644
 --- a/src/ui/settings/commands.rs
