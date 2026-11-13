@@ -1,0 +1,63 @@
+#!/bin/bash
+# Veil rice CLI — Nothing / Glyph-field Dock + wallpaper + desktop icons (VEI-57).
+# No launcher Swift edits. See tools/rice/README.md.
+set -euo pipefail
+export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+V="${VEIL_ROOT:-$HOME/.config/veil}"
+RICE="$V/tools/rice"
+
+cmd="${1:-help}"
+shift || true
+
+case "$cmd" in
+  apply|on)
+    exec "$RICE/apply-chrome.sh" "$@"
+    ;;
+  restore|off)
+    exec "$RICE/restore-chrome.sh" "$@"
+    ;;
+  dock)
+    exec "$RICE/dock-nothing.sh" "$@"
+    ;;
+  icons|desktop-icons)
+    exec "$RICE/desktop-icons.sh" "$@"
+    ;;
+  wall|wallpaper)
+    # Force Glyph field wall without Dock/Finder changes.
+    ART="$V/art/nothing.jpg"
+    [ -f "$ART" ] || python3 "$V/tools/make-nothing-wall.py"
+    python3 - "$ART" <<'PY' | osascript -l JavaScript >/dev/null 2>&1 || true
+import json, sys
+art = sys.argv[1]
+print(
+    "ObjC.import('Foundation'); $.NSDistributedNotificationCenter.defaultCenter"
+    ".postNotificationNameObjectUserInfoDeliverImmediately("
+    f"'app.veil.search.desktop', {json.dumps(art)}, $(), true)"
+)
+PY
+    python3 - "$ART" <<'PY' | osascript >/dev/null 2>&1 || true
+import json, sys
+print(f'tell application "System Events" to tell every desktop to set picture to {json.dumps(sys.argv[1])}')
+PY
+    printf '%s\n' "$ART" > "$V/generated/rice-wall-lock"
+    echo "wallpaper → $ART"
+    ;;
+  status)
+    echo "theme=$(cat "$V/current" 2>/dev/null || echo unset)"
+    echo "wall-lock=$(cat "$V/generated/rice-wall-lock" 2>/dev/null || echo unset)"
+    "$RICE/dock-nothing.sh" status
+    "$RICE/desktop-icons.sh" status
+    ;;
+  help|-h|--help|*)
+    printf '%s\n' \
+      'veil-rice: Nothing Glyph-field chrome' \
+      '  apply | on          lock dotted wall + Dock autohide + hide desktop icons' \
+      '  restore | off       restore Dock/Finder from generated/rice-chrome.json' \
+      '  wall                re-pin art/nothing.jpg only' \
+      '  dock hide|show|status' \
+      '  icons hide|show|status' \
+      '  status'
+    [ "$cmd" = help ] || [ "$cmd" = -h ] || [ "$cmd" = --help ] && exit 0
+    exit 1
+    ;;
+esac

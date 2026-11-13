@@ -72,9 +72,9 @@
     "semantic_hash": ""
   },
   "bin/veil": {
-    "mtime": 1794592251.1150935,
-    "seen": 1794593151.535135,
-    "ast_hash": "d2ecd8b3487e2451b3d3188394c1b0ca",
+    "mtime": 1794595410.3179436,
+    "seen": 1794595456.9986649,
+    "ast_hash": "c5eacc1d78dbf7ab5f8bc12e8f723e83",
     "semantic_hash": ""
   },
   "bin/veil-baseline": {
@@ -84,9 +84,9 @@
     "semantic_hash": ""
   },
   "bin/veil-theme": {
-    "mtime": 1794592230.1071804,
-    "seen": 1794593151.535137,
-    "ast_hash": "13a87d69e04a5c2cabb92278206965c7",
+    "mtime": 1794595431.9883502,
+    "seen": 1794595456.9986691,
+    "ast_hash": "86ed9f671d80cbf76bdbb2bbb0b4d94b",
     "semantic_hash": ""
   },
   "install.sh": {
@@ -102,8 +102,8 @@
     "semantic_hash": ""
   },
   "launcher/bar.swift": {
-    "mtime": 1794594816.8499074,
-    "seen": 1794594871.160299,
+    "mtime": 1794595497.0425832,
+    "seen": 1794595533.311832,
     "ast_hash": "9f6cd64f51694703ae44a66859b77f40",
     "semantic_hash": ""
   },
@@ -132,8 +132,8 @@
     "semantic_hash": ""
   },
   "launcher/main.swift": {
-    "mtime": 1794593232.6678166,
-    "seen": 1794594871.160304,
+    "mtime": 1794595497.0431998,
+    "seen": 1794595533.311838,
     "ast_hash": "1dcb662069e80fa607b67edf8ae868f6",
     "semantic_hash": ""
   },
@@ -552,21 +552,21 @@
     "semantic_hash": ""
   },
   "launcher/glyph.swift": {
-    "mtime": 1794594037.8792007,
-    "seen": 1794594871.1603022,
+    "mtime": 1794595359.7540534,
+    "seen": 1794595456.998673,
     "ast_hash": "fff386b410f6799ebef90aebb934054f",
     "semantic_hash": ""
   },
   "tools/make-nothing-wall.py": {
-    "mtime": 1794586404.21336,
-    "seen": 1794586950.1367989,
-    "ast_hash": "87b19f220a0f6235a410489e99a18215",
+    "mtime": 1794595520.23607,
+    "seen": 1794595533.311852,
+    "ast_hash": "6de4135e0ae3d215630a6d10463b9e85",
     "semantic_hash": ""
   },
   "art/nothing.notes.md": {
-    "mtime": 1794586400.2752492,
-    "seen": 1794586950.1368058,
-    "ast_hash": "573e5a5d287d341400bd53bec58ab312",
+    "mtime": 1794595399.5502675,
+    "seen": 1794595456.998697,
+    "ast_hash": "1e251c0292bca992cd4b9d34589c08bf",
     "semantic_hash": ""
   },
   "fonts/glyph/OFL.txt": {
@@ -576,15 +576,15 @@
     "semantic_hash": ""
   },
   "launcher/desktop-glyphs.swift": {
-    "mtime": 1794593973.9969065,
-    "seen": 1794594871.160301,
+    "mtime": 1794595530.0715752,
+    "seen": 1794595533.311834,
     "ast_hash": "b9ddf2ec38a8600e59df996033bb7062",
     "semantic_hash": ""
   },
   "art/nothing.jpg": {
-    "mtime": 1794586392.6180356,
-    "seen": 1794587809.031903,
-    "ast_hash": "5dd3de52cf6a2790b40c6762ca918f17",
+    "mtime": 1794595524.912794,
+    "seen": 1794595533.3119202,
+    "ast_hash": "74d461439a96ee740002243884bfd16e",
     "semantic_hash": ""
   },
   "launcher/host.swift": {
@@ -594,15 +594,15 @@
     "semantic_hash": ""
   },
   "launcher/buds.swift": {
-    "mtime": 1794592585.362966,
-    "seen": 1794593151.535139,
+    "mtime": 1794595409.6275077,
+    "seen": 1794595456.99867,
     "ast_hash": "dbb70e5fe36d7e91908b203ff2447115",
     "semantic_hash": ""
   },
   "launcher/outside-click.swift": {
-    "mtime": 1794592089.3087575,
-    "seen": 1794593151.535146,
-    "ast_hash": "09dbdcd6c3b0ab178e68f89aff5d4af9",
+    "mtime": 1794595515.8909276,
+    "seen": 1794595533.31184,
+    "ast_hash": "2cad4462174214b44026f0178dade046",
     "semantic_hash": ""
   },
   "launcher/vpn.swift": {
@@ -633,6 +633,42 @@
     "mtime": 1794592208.9017162,
     "seen": 1794593151.53516,
     "ast_hash": "6d30602da1d3a2c57b5c14682bb436eb",
+    "semantic_hash": ""
+  },
+  "bin/veil-rice": {
+    "mtime": 1794595441.789188,
+    "seen": 1794595456.998667,
+    "ast_hash": "4c983bdf59f7e5d028fd08a382db8105",
+    "semantic_hash": ""
+  },
+  "tools/rice/apply-chrome.sh": {
+    "mtime": 1794595439.8352323,
+    "seen": 1794595456.998687,
+    "ast_hash": "f91b2a47dd8dc7f469dd2f523d60d7e7",
+    "semantic_hash": ""
+  },
+  "tools/rice/desktop-icons.sh": {
+    "mtime": 1794595355.1166089,
+    "seen": 1794595456.998688,
+    "ast_hash": "965dbb936a9188a4e3d44436638f5ff1",
+    "semantic_hash": ""
+  },
+  "tools/rice/dock-nothing.sh": {
+    "mtime": 1794595360.7016869,
+    "seen": 1794595456.998688,
+    "ast_hash": "b15456233e105c8951bd4689d7ff351a",
+    "semantic_hash": ""
+  },
+  "tools/rice/restore-chrome.sh": {
+    "mtime": 1794595348.2505677,
+    "seen": 1794595456.998689,
+    "ast_hash": "7720772ea66e3f8db6b085bd4ed5d332",
+    "semantic_hash": ""
+  },
+  "tools/rice/README.md": {
+    "mtime": 1794595367.302007,
+    "seen": 1794595456.9987059,
+    "ast_hash": "877a8ddda1c53de44289edafd2ba3d28",
     "semantic_hash": ""
   }
 }
