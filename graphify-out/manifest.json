@@ -72,9 +72,9 @@
     "semantic_hash": ""
   },
   "bin/veil": {
-    "mtime": 1794574664.9866927,
-    "seen": 1794574764.2363882,
-    "ast_hash": "bf88fd711169fe0e298649f450414a60",
+    "mtime": 1794589231.3748653,
+    "seen": 1794589273.124942,
+    "ast_hash": "121354d00abc131afbb65930aa9435ff",
     "semantic_hash": ""
   },
   "bin/veil-baseline": {
@@ -102,9 +102,9 @@
     "semantic_hash": ""
   },
   "launcher/bar.swift": {
-    "mtime": 1794588820.1355975,
-    "seen": 1794588867.136937,
-    "ast_hash": "15ec9bb852c56d8bd7d849ae632f434e",
+    "mtime": 1794589119.8595843,
+    "seen": 1794589273.124945,
+    "ast_hash": "03ce8d28f4352078cf6467f3f0dc88f6",
     "semantic_hash": ""
   },
   "launcher/build.sh": {
@@ -132,9 +132,9 @@
     "semantic_hash": ""
   },
   "launcher/main.swift": {
-    "mtime": 1794588441.5265763,
-    "seen": 1794588867.136941,
-    "ast_hash": "59b95193ce5ab40a0745d12496c760a5",
+    "mtime": 1794589255.475376,
+    "seen": 1794589273.124949,
+    "ast_hash": "90e1a743f8d6432c7bea0eac8179a7ab",
     "semantic_hash": ""
   },
   "launcher/make-signing-identity.sh": {
@@ -576,9 +576,9 @@
     "semantic_hash": ""
   },
   "launcher/desktop-glyphs.swift": {
-    "mtime": 1794588865.478956,
-    "seen": 1794588867.136938,
-    "ast_hash": "fe3dd3802df4d1d2efc26ac3b6624878",
+    "mtime": 1794589252.2539504,
+    "seen": 1794589273.1249459,
+    "ast_hash": "2ed7793f6501acd9219bb392acc9473d",
     "semantic_hash": ""
   },
   "art/nothing.jpg": {

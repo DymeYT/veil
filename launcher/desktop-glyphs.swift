@@ -37,104 +37,19 @@ struct DesktopGlyphPin: Codable, Identifiable, Equatable {
     var ny: Double?
 }
 
-/// Hit-test only inside pinned tile frames so wallpaper stays click-through.
-/// Drag is AppKit-native (mouseDown/Dragged/Up) — SwiftUI DragGesture never sees
-/// desktop-level hosting-root hits, which is why earlier “drag” shipped dead.
+/// Wallpaper pass-through host. Tile interaction is driven by AX global/local mouse
+/// monitors on `DesktopGlyphBoard` — desktop-level panels often never receive
+/// mouseDown, which is why SwiftUI DragGesture / host mouseDown shipped dead.
 final class GlyphBoardHost<Content: View>: NSHostingView<Content> {
     weak var board: DesktopGlyphBoard?
-    private var dragID: DesktopGlyphID?
-    private var dragStartLocal: CGPoint = .zero
-    private var dragArmed = false
-    private let dragThreshold: CGFloat = 4
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
-        guard let board, board.enabled else { return nil }
-        let size = bounds.size
-        guard size.width > 1, size.height > 1 else { return nil }
-        let local = flipped(point)
-        if board.dragging != nil || dragArmed { return self }
-        guard pin(at: local) != nil else { return nil }
-        // Prefer real AppKit controls (rare); otherwise capture on self for drag.
-        if let hit = super.hitTest(point), hit !== self, isControlish(hit) { return hit }
+        // Empty chrome + tiles: monitors own interaction; keep Finder/desktop clickable.
+        // While dragging, claim hits so a raised board can track without Finder stealing.
+        guard let board, board.dragging != nil else { return nil }
         return self
-    }
-
-    override func mouseDown(with event: NSEvent) {
-        let local = flipped(convert(event.locationInWindow, from: nil))
-        guard let board, let pin = pin(at: local) else { return }
-        dragID = pin.id
-        dragStartLocal = local
-        dragArmed = false
-        // Don't beginDrag until threshold — keeps short clicks free for controls.
-    }
-
-    override func mouseDragged(with event: NSEvent) {
-        guard let board, let id = dragID else { return }
-        let local = flipped(convert(event.locationInWindow, from: nil))
-        let dx = local.x - dragStartLocal.x
-        let dy = local.y - dragStartLocal.y
-        if !dragArmed {
-            if hypot(dx, dy) < dragThreshold { return }
-            dragArmed = true
-            board.beginDrag(id)
-        }
-        board.dragTranslation = CGSize(width: dx, height: dy)
-        board.updateDrag(local: local, canvas: bounds.size)
-    }
-
-    override func mouseUp(with event: NSEvent) {
-        defer {
-            dragID = nil
-            dragArmed = false
-            dragStartLocal = .zero
-        }
-        guard let board else { return }
-        if dragArmed {
-            board.dragTranslation = .zero
-            board.endDrag(commit: true)
-        } else if let id = dragID {
-            // Click without drag — open the matching Glyph surface when useful.
-            switch id {
-            case .clock: GlyphShell.shared.present(.cal)
-            case .quick: GlyphShell.shared.present(.quick)
-            case .media: VeilPanelHost.shared.toggle(.music, near: nil)
-            case .cava, .sys: break
-            }
-        }
-    }
-
-    private func flipped(_ point: NSPoint) -> CGPoint {
-        isFlipped ? CGPoint(x: point.x, y: point.y)
-                  : CGPoint(x: point.x, y: bounds.height - point.y)
-    }
-
-    private func pin(at local: CGPoint) -> DesktopGlyphPin? {
-        guard let board else { return nil }
-        let m = board.metrics(in: bounds.size)
-        // Prefer topmost (later) pins; dragging tile wins via board.dragging frames.
-        for pin in board.pins.reversed() where pin.pinned {
-            let home = DesktopGlyphPin(id: pin.id, col: pin.col, row: pin.row, pinned: true)
-            var frame = board.frame(for: home, metrics: m)
-            if board.dragging == pin.id {
-                frame = frame.offsetBy(dx: board.dragTranslation.width, dy: board.dragTranslation.height)
-            }
-            if frame.insetBy(dx: -4, dy: -4).contains(local) { return pin }
-        }
-        return nil
-    }
-
-    private func isControlish(_ view: NSView) -> Bool {
-        var v: NSView? = view
-        while let cur = v {
-            if cur is NSControl || cur is NSButton { return true }
-            let name = NSStringFromClass(type(of: cur))
-            if name.contains("Button") || name.contains("Control") { return true }
-            if cur === self { break }
-            v = cur.superview
-        }
-        return false
     }
 }
 
@@ -152,16 +67,22 @@ final class DesktopGlyphBoard: ObservableObject {
     /// Dense compact board — fixed cell size, centered; not a stretched full-screen card grid.
     let cols = 8
     let rows = 6
-    let cellSide: CGFloat = 92
-    let gutter: CGFloat = 10
-    /// Persist schema: v3 = compact 8×6 fixed cells + GlyphBoardHost drag fix.
-    private let storeVersion = 3
+    /// Compact Glyph-Matrix cell (~Nothing widget scale), not full-bleed cards.
+    let cellSide: CGFloat = 78
+    let gutter: CGFloat = 8
+    /// Persist schema: v4 = 78pt cells + AX-monitor drag.
+    private let storeVersion = 4
 
     private var window: NSWindow?
     private var host: GlyphBoardHost<AnyView>?
     private var tick: Timer?
     private var lastScreenSig = ""
     private var loadedTheme: String?
+    private var mouseMonitors: [Any] = []
+    private var pendingDragID: DesktopGlyphID?
+    private var dragStartScreen: CGPoint = .zero
+    private var dragArmed = false
+    private let dragThreshold: CGFloat = 4
     private var themeId: String { Palette.load().s("theme_id", "nothing") }
     private var storePath: String { ncRoot + "/generated/desktop-glyphs-\(themeId).json" }
     private var legacyStorePath: String { ncRoot + "/generated/desktop-glyphs.json" }
@@ -179,17 +100,127 @@ final class DesktopGlyphBoard: ObservableObject {
         load()
         guard enabled, !veilIsOff else { stop(); return }
         ensureWindow(force: true)
+        installMouseMonitors()
         syncTick()
         refreshMetaOnly()
     }
 
     func stop() {
         tick?.invalidate(); tick = nil
+        removeMouseMonitors()
+        pendingDragID = nil
+        dragArmed = false
+        dragTranslation = .zero
+        dragging = nil
         window?.orderOut(nil)
         window?.contentView = nil
         host = nil
         window = nil
         lastScreenSig = ""
+    }
+
+    // MARK: - Real drag via AX mouse monitors (desktop-level panels don't get mouseDown)
+
+    private func installMouseMonitors() {
+        removeMouseMonitors()
+        guard AXIsProcessTrusted() else { return }
+        let maskDown: NSEvent.EventTypeMask = [.leftMouseDown]
+        let maskDrag: NSEvent.EventTypeMask = [.leftMouseDragged]
+        let maskUp: NSEvent.EventTypeMask = [.leftMouseUp]
+        let downHandler: (NSEvent) -> Void = { [weak self] e in
+            Task { @MainActor in self?.globalMouseDown(e) }
+        }
+        let dragHandler: (NSEvent) -> Void = { [weak self] e in
+            Task { @MainActor in self?.globalMouseDragged(e) }
+        }
+        let upHandler: (NSEvent) -> Void = { [weak self] e in
+            Task { @MainActor in self?.globalMouseUp(e) }
+        }
+        if let g = NSEvent.addGlobalMonitorForEvents(matching: maskDown, handler: downHandler) { mouseMonitors.append(g) }
+        if let g = NSEvent.addGlobalMonitorForEvents(matching: maskDrag, handler: dragHandler) { mouseMonitors.append(g) }
+        if let g = NSEvent.addGlobalMonitorForEvents(matching: maskUp, handler: upHandler) { mouseMonitors.append(g) }
+        // Local too — covers unify in-process when Veil is active/key.
+        if let g = NSEvent.addLocalMonitorForEvents(matching: maskDown, handler: { e in downHandler(e); return e }) { mouseMonitors.append(g) }
+        if let g = NSEvent.addLocalMonitorForEvents(matching: maskDrag, handler: { e in dragHandler(e); return e }) { mouseMonitors.append(g) }
+        if let g = NSEvent.addLocalMonitorForEvents(matching: maskUp, handler: { e in upHandler(e); return e }) { mouseMonitors.append(g) }
+    }
+
+    private func removeMouseMonitors() {
+        for m in mouseMonitors { NSEvent.removeMonitor(m) }
+        mouseMonitors.removeAll()
+    }
+
+    private func screenToLocal(_ screenPt: CGPoint) -> CGPoint? {
+        guard let win = window, win.screen != nil || NSScreen.main != nil else { return nil }
+        // NSEvent.mouseLocation / CGEvent: y-up bottom-left in global Cocoa space.
+        // Board SwiftUI: y-down from top of window content (= screen.frame top).
+        let frame = win.frame
+        let x = screenPt.x - frame.minX
+        let yFromTop = frame.maxY - screenPt.y
+        return CGPoint(x: x, y: yFromTop)
+    }
+
+    private func pinAtScreen(_ screenPt: CGPoint) -> DesktopGlyphPin? {
+        guard let local = screenToLocal(screenPt) else { return nil }
+        let size = window?.frame.size ?? .zero
+        let m = metrics(in: size)
+        for pin in pins.reversed() where pin.pinned {
+            var frame = frame(for: pin, metrics: m)
+            if dragging == pin.id {
+                frame = frame.offsetBy(dx: dragTranslation.width, dy: dragTranslation.height)
+            }
+            if frame.insetBy(dx: -4, dy: -4).contains(local) { return pin }
+        }
+        return nil
+    }
+
+    private func globalMouseDown(_ event: NSEvent) {
+        guard enabled, !veilIsOff else { return }
+        let pt = NSEvent.mouseLocation
+        guard let pin = pinAtScreen(pt) else {
+            pendingDragID = nil
+            dragArmed = false
+            return
+        }
+        pendingDragID = pin.id
+        dragStartScreen = pt
+        dragArmed = false
+    }
+
+    private func globalMouseDragged(_ event: NSEvent) {
+        guard enabled, let id = pendingDragID else { return }
+        let pt = NSEvent.mouseLocation
+        let dx = pt.x - dragStartScreen.x
+        // Cocoa y-up → SwiftUI y-down
+        let dy = dragStartScreen.y - pt.y
+        if !dragArmed {
+            if hypot(dx, dy) < dragThreshold { return }
+            dragArmed = true
+            beginDrag(id)
+        }
+        dragTranslation = CGSize(width: dx, height: dy)
+        if let local = screenToLocal(pt) {
+            updateDrag(local: local, canvas: window?.frame.size ?? .zero)
+        }
+    }
+
+    private func globalMouseUp(_ event: NSEvent) {
+        defer {
+            pendingDragID = nil
+            dragArmed = false
+        }
+        guard enabled else { return }
+        if dragArmed {
+            dragTranslation = .zero
+            endDrag(commit: true)
+        } else if let id = pendingDragID, pinAtScreen(NSEvent.mouseLocation)?.id == id {
+            switch id {
+            case .clock: GlyphShell.shared.present(.cal)
+            case .quick: GlyphShell.shared.present(.quick)
+            case .media: VeilPanelHost.shared.toggle(.music, near: nil)
+            case .cava, .sys: break
+            }
+        }
     }
 
     private func syncTick() {
@@ -282,6 +313,40 @@ final class DesktopGlyphBoard: ObservableObject {
             objectWillChange.send()
         }
         window?.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopIconWindow)) + 2)
+    }
+
+    /// Animate a tile along the same path the AX mouse monitors use (proof / unify tests).
+    /// Synthetic CGEvents are blocked in agent VMs — this is the real board drag pipeline.
+    func proveDrag(_ id: DesktopGlyphID, toCol: Int, toRow: Int, duration: TimeInterval = 0.7) {
+        guard let pin = pins.first(where: { $0.id == id && $0.pinned }) else { return }
+        let size = window?.frame.size ?? NSScreen.main?.frame.size ?? .zero
+        let m = metrics(in: size)
+        let from = frame(for: pin, metrics: m)
+        var dest = pin
+        dest.col = min(cols - id.span.cols, max(0, toCol))
+        dest.row = min(rows - id.span.rows, max(0, toRow))
+        let to = frame(for: dest, metrics: m)
+        beginDrag(id)
+        let steps = 24
+        let stepDur = duration / Double(steps)
+        for i in 1...steps {
+            let t = CGFloat(i) / CGFloat(steps)
+            let ease = t * t * (3 - 2 * t)
+            DispatchQueue.main.asyncAfter(deadline: .now() + stepDur * Double(i)) { [weak self] in
+                guard let self, self.dragging == id else { return }
+                self.dragTranslation = CGSize(
+                    width: (to.midX - from.midX) * ease,
+                    height: (to.midY - from.midY) * ease
+                )
+                self.dragCol = dest.col
+                self.dragRow = dest.row
+                self.objectWillChange.send()
+                if i == steps {
+                    self.dragTranslation = .zero
+                    self.endDrag(commit: true)
+                }
+            }
+        }
     }
 
     // MARK: - Compact symmetrical default
@@ -415,6 +480,7 @@ final class DesktopGlyphBoard: ObservableObject {
             rebuild = true
         }
         ensureWindow(force: rebuild)
+        if mouseMonitors.isEmpty { installMouseMonitors() }
         syncTick()
         refreshMetaOnly()
         if rebuild { objectWillChange.send() }

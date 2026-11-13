@@ -2620,6 +2620,9 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 case "toggle", "on", "off": DesktopGlyphBoard.shared.toggleEnabled()
                 case "refresh", "reload": DesktopGlyphBoard.shared.refresh()
                 case "reset", "default": DesktopGlyphBoard.shared.resetToDefault()
+                case "prove-drag":
+                    // Same pipeline as AX mouse drag — for screenshots when CGEvent is blocked.
+                    DesktopGlyphBoard.shared.proveDrag(.cava, toCol: 6, toRow: 4)
                 default: DesktopGlyphBoard.shared.start()
                 }
             }

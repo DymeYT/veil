@@ -271,8 +271,12 @@ final class VeilPanelHost: ObservableObject {
         }
     }
 
-    /// SketchyBar `bounding_rects` use top-left display coords → AppKit bottom-left.
+    /// Prefer in-process Veil bar anchors when that strip owns chrome (SketchyBar parks
+    /// `bounding_rects` at -9999 while `hidden=on`, which previously threw panels off-screen).
     static func sketchybarItemRect(for kind: VeilPanelKind) -> NSRect? {
+        if VeilFeature.veilBar, let r = VeilBarController.shared.itemRect(for: kind) {
+            return r
+        }
         let item: String
         switch kind {
         case .music: item = "music"
@@ -288,11 +292,13 @@ final class VeilPanelHost: ObservableObject {
         let pipe = Pipe()
         p.standardOutput = pipe
         p.standardError = FileHandle.nullDevice
-        guard (try? p.run()) != nil else { return nil }
+        guard (try? p.run()) != nil else { return VeilBarController.shared.itemRect(for: kind) }
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
         p.waitUntilExit()
         guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let rects = obj["bounding_rects"] as? [String: Any] else { return nil }
+              let rects = obj["bounding_rects"] as? [String: Any] else {
+            return VeilBarController.shared.itemRect(for: kind)
+        }
         // Prefer the display under the mouse; else first rect.
         let mouse = NSEvent.mouseLocation
         var chosen: (origin: [Double], size: [Double])?
@@ -300,11 +306,12 @@ final class VeilPanelHost: ObservableObject {
             guard let r = v as? [String: Any],
                   let origin = r["origin"] as? [Double], origin.count == 2,
                   let size = r["size"] as? [Double], size.count == 2 else { continue }
+            // Hidden SketchyBar parks items at (-9999,-9999) — ignore.
+            if origin[0] < -1000 || origin[1] < -1000 { continue }
             if chosen == nil { chosen = (origin, size) }
-            // Heuristic match: same X band as mouse on that display
             if abs(origin[0] + size[0] / 2 - mouse.x) < 400 { chosen = (origin, size); break }
         }
-        guard let chosen else { return nil }
+        guard let chosen else { return VeilBarController.shared.itemRect(for: kind) }
         let screen = NSScreen.screens.first(where: { NSMouseInRect(mouse, $0.frame, false) })
             ?? NSScreen.main ?? NSScreen.screens[0]
         // SketchyBar Y is measured downward from the top of the display.
@@ -861,7 +868,8 @@ final class VeilBarController: ObservableObject {
 
     func reload(forceLayout: Bool = false) {
         let p = Palette.load()
-        let nextChip = p.s("chip_label", "VEIL")
+        // launcher.json ships `brand` (NOTHING); chip_label is SketchyBar-template-only.
+        let nextChip = p.s("brand", p.s("chip_label", "VEIL"))
         let nextLayout = p.s("bar_layout", "strip")
         let nextBottom = p.s("bar_position", "top") == "bottom"
         let nextWSStyle = p.s("ws_style", "text")
@@ -979,6 +987,20 @@ final class VeilBarController: ObservableObject {
             }
         }
         window?.orderFrontRegardless()
+    }
+
+    /// Synthetic bar-button frames for panel anchoring while SketchyBar is hidden.
+    func itemRect(for kind: VeilPanelKind) -> NSRect? {
+        guard let window else { return nil }
+        let f = window.frame
+        switch kind {
+        case .control:
+            return NSRect(x: f.minX + 20, y: f.minY, width: 80, height: f.height)
+        case .keys:
+            return NSRect(x: f.maxX - 200, y: f.minY, width: 28, height: f.height)
+        case .music:
+            return NSRect(x: f.maxX - 168, y: f.minY, width: 28, height: f.height)
+        }
     }
 
     /// Temporarily show the stock macOS menu bar (autohide off), then restore Veil's preference.
