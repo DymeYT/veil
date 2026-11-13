@@ -228,8 +228,10 @@ PLIST
   # SIP-gated features may be fully implemented now; they stay off overnight and
   # activate after wake when SIP is off — see tools/sip-nowplaying/README.md
   V="$HOME/.config/veil"; F="$V/generated/features"; mkdir -p "$F"
-  on_by_default='music-popup clock-calendar cider-bridge screensaver-sync animated-panels veil-bar'
-  off_by_default='sip-nowplaying sketchybar-popups'
+  # veil-bar is opt-in: SketchyBar keeps the themed strip (Umbra islands). Animated panels
+  # still open from SketchyBar clicks when animated-panels is on.
+  on_by_default='music-popup clock-calendar cider-bridge screensaver-sync animated-panels'
+  off_by_default='sip-nowplaying sketchybar-popups veil-bar'
   known="$on_by_default $off_by_default"
   is_known() { echo " $known " | grep -q " $1 "; }
   is_opt_in() { echo " $off_by_default " | grep -q " $1 "; }
@@ -244,7 +246,8 @@ PLIST
       if [ -f "$F/enable-$name" ]; then state=on; else state=off; fi
       printf '  %-20s %s  (opt-in' "$name" "$state"
       [ "$name" = sip-nowplaying ] && printf '; SIP-gated — see tools/sip-nowplaying/README.md'
-      [ "$name" = sketchybar-popups ] && printf '; SketchyBar popup fallback during Veil-bar transition'
+      [ "$name" = sketchybar-popups ] && printf '; SketchyBar popup menus (skips animated panels)'
+      [ "$name" = veil-bar ] && printf '; experimental SwiftUI strip — SketchyBar is the default chrome'
       printf ')\n'
     done ;;
    disable)
@@ -252,7 +255,8 @@ PLIST
     if is_opt_in "$name"; then
       rm -f "$F/enable-$name"
       case "$name" in
-       sketchybar-popups)
+       sketchybar-popups|veil-bar)
+        sketchybar --bar hidden=off 2>/dev/null || true
         osascript -l JavaScript -e "ObjC.import('Foundation'); \$.NSDistributedNotificationCenter.defaultCenter.postNotificationNameObjectUserInfoDeliverImmediately('app.veil.search.theme', \$(), \$(), true)" >/dev/null 2>&1 || true
         ;;
       esac
@@ -261,10 +265,6 @@ PLIST
       case "$name" in
        music-popup|clock-calendar) veil-theme apply "$(cat "$V/current")" ;;
        screensaver-sync) python3 "$V/screensaver/sync.py" "$V" --remove 2>/dev/null || true ;;
-       veil-bar)
-        sketchybar --bar hidden=off 2>/dev/null || true
-        osascript -l JavaScript -e "ObjC.import('Foundation'); \$.NSDistributedNotificationCenter.defaultCenter.postNotificationNameObjectUserInfoDeliverImmediately('app.veil.search.theme', \$(), \$(), true)" >/dev/null 2>&1 || true
-        ;;
       esac
     fi
     echo "disabled $name" ;;
@@ -284,12 +284,15 @@ PLIST
       elif [ "$name" = sketchybar-popups ]; then
         sketchybar --bar hidden=off 2>/dev/null || true
         echo "enabled sketchybar-popups (SketchyBar strip + popups; animated Veil panels step aside)"
+      elif [ "$name" = veil-bar ]; then
+        echo "enabled veil-bar (experimental SwiftUI strip — may hide SketchyBar)"
+        osascript -l JavaScript -e "ObjC.import('Foundation'); \$.NSDistributedNotificationCenter.defaultCenter.postNotificationNameObjectUserInfoDeliverImmediately('app.veil.search.theme', \$(), \$(), true)" >/dev/null 2>&1 || true
       fi
     else
       rm -f "$F/disable-$name"
       case "$name" in
        music-popup|clock-calendar|screensaver-sync) veil-theme apply "$(cat "$V/current")" ;;
-       veil-bar|animated-panels)
+       animated-panels)
         osascript -l JavaScript -e "ObjC.import('Foundation'); \$.NSDistributedNotificationCenter.defaultCenter.postNotificationNameObjectUserInfoDeliverImmediately('app.veil.search.theme', \$(), \$(), true)" >/dev/null 2>&1 || true
         ;;
       esac

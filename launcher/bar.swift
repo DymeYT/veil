@@ -17,8 +17,9 @@ enum VeilFeature {
             || !animatedPanels
     }
 
-    /// Default-on custom Veil status bar. Disable → keep SketchyBar as the strip.
-    static var veilBar: Bool { !FileManager.default.fileExists(atPath: root + "/disable-veil-bar") }
+    /// Opt-in custom Veil status strip. Default is SketchyBar chrome (Umbra islands look + clicks).
+    /// Animated panels still ride on SketchyBar item clicks when `animated-panels` is on.
+    static var veilBar: Bool { FileManager.default.fileExists(atPath: root + "/enable-veil-bar") }
 }
 
 // MARK: - Window thumbnails (ScreenCaptureKit; falls back to app icons)
@@ -302,7 +303,33 @@ final class VeilPanelHost: ObservableObject {
     private func loadStatus() {
         let quiet = FileManager.default.fileExists(atPath: ncRoot + "/generated/quiet")
         let motionOff = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-        var parts = ["CPU · MEM · VOL"]
+        var cpu = "?", mem = "?", vol = "?"
+        let metrics = Process()
+        metrics.executableURL = URL(fileURLWithPath: home + "/.local/bin/veil-metrics")
+        metrics.arguments = [home + "/Library/Caches/veil-cpu", "--instant"]
+        let pipe = Pipe()
+        metrics.standardOutput = pipe
+        metrics.standardError = FileHandle.nullDevice
+        if (try? metrics.run()) != nil {
+            let out = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            metrics.waitUntilExit()
+            let bits = out.split(whereSeparator: { $0.isWhitespace }).map(String.init)
+            if bits.count >= 2 { cpu = bits[0]; mem = bits[1] }
+        }
+        let vp = Process()
+        vp.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        vp.arguments = ["-e", "if output muted of (get volume settings) then return \"MUTE\"",
+                        "-e", "return (output volume of (get volume settings) as text) & \"%\""]
+        let vpPipe = Pipe()
+        vp.standardOutput = vpPipe
+        vp.standardError = FileHandle.nullDevice
+        if (try? vp.run()) != nil {
+            vol = String(data: vpPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? "?"
+            vp.waitUntilExit()
+        }
+        var parts = ["CPU \(cpu)%", "MEM \(mem)G", "VOL \(vol)"]
         if quiet { parts.append("QUIET") }
         if motionOff { parts.append("MOTION OFF") }
         statusLine = parts.joined(separator: "  ·  ")
@@ -467,13 +494,19 @@ struct VeilPanelView: View {
     }
 }
 
-/// NSHostingView that ignores hits on fully transparent pixels so the Dock / desktop stay clickable between islands.
+/// NSHostingView that ignores hits on empty chrome so the Dock stays clickable between islands.
+/// Never return nil for descendant hits — SwiftUI buttons often resolve through the hosting root.
 final class PassThroughHost<Content: View>: NSHostingView<Content> {
     override func hitTest(_ point: NSPoint) -> NSView? {
         guard let hit = super.hitTest(point) else { return nil }
-        // Only swallow events that land on a real subview (buttons), not empty root chrome.
         if hit === self { return nil }
-        return hit
+        // Walk up: if anything under the host is a control-ish view, keep the hit.
+        var v: NSView? = hit
+        while let cur = v {
+            if cur !== self { return hit }
+            v = cur.superview
+        }
+        return nil
     }
 }
 
