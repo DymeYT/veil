@@ -34,8 +34,35 @@ music_bundle_source() {
     *) [ -n "$1" ] && echo "$1" || echo "" ;;
   esac
 }
+music_sip_nowplaying() {
+  # Opt-in SIP-gated helper (default off). Usable overnight as a no-op fallback.
+  [ -f "$HOME/.config/veil/generated/features/enable-sip-nowplaying" ] || return 1
+  local bin="$HOME/.config/veil/bin/veil-nowplaying-sip" action="${1:-}" raw
+  [ -x "$bin" ] || return 1
+  case "$action" in
+    previous) "$bin" previous >/dev/null 2>&1 || true ;;
+    next) "$bin" next >/dev/null 2>&1 || true ;;
+    playpause) "$bin" toggle >/dev/null 2>&1 || true ;;
+  esac
+  raw=$("$bin" get 2>/dev/null) || return 1
+  [ -n "$raw" ] && [ "$raw" != '{}' ] || return 1
+  local bundle source playing title artist album
+  bundle=$(jq -r '.bundleIdentifier // empty' <<<"$raw" 2>/dev/null) || return 1
+  source=$(music_bundle_source "$bundle")
+  [ -n "$source" ] || source="Now playing"
+  playing=$(jq -r 'if (.playing == true) or ((.playbackRate // 0) > 0) then "playing" else "paused" end' <<<"$raw")
+  title=$(jq -r '.title // empty' <<<"$raw")
+  artist=$(jq -r '.artist // empty' <<<"$raw")
+  album=$(jq -r '.album // empty' <<<"$raw")
+  [ -n "$title" ] || return 1
+  jq -nc --arg source "$source" --arg state "$playing" --arg title "$title" --arg artist "$artist" --arg album "$album" \
+    '{source:$source, state:$state, title:$title, artist:$artist, album:$album}'
+}
 music_media_control() {
   music_feature_off cider-bridge && return 1
+  # Prefer SIP helper only when opted in and it actually returns data; else media-control.
+  local via_sip=""
+  via_sip=$(music_sip_nowplaying "${1:-}") && { printf '%s\n' "$via_sip"; return 0; }
   command -v media-control >/dev/null || return 1
   local action="${1:-}" raw bundle source state title artist album playing
   case "$action" in

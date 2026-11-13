@@ -178,32 +178,62 @@ PLIST
   if [ "$n" = 0 ]; then msg="All checks passed"; else msg="$n failed: $(grep '^FAIL' <<<"$out" | cut -c7- | paste -sd, -)"; fi
   osascript -e "display notification \"$msg\" with title \"Veil self-test\"" ;;
  feature)
-  # Major additions ship on by default. Disable individually without removing themes.
-  # Flags live in ~/.config/veil/generated/features/disable-<name>
+  # Default-on additions: disable via generated/features/disable-<name>
+  # Default-off (incl. SIP-gated): enable via generated/features/enable-<name>
+  # SIP-gated features may be fully implemented now; they stay off overnight and
+  # activate after wake when SIP is off — see tools/sip-nowplaying/README.md
   V="$HOME/.config/veil"; F="$V/generated/features"; mkdir -p "$F"
-  known='music-popup clock-calendar cider-bridge screensaver-sync'
+  on_by_default='music-popup clock-calendar cider-bridge screensaver-sync'
+  off_by_default='sip-nowplaying'
+  known="$on_by_default $off_by_default"
+  is_known() { echo " $known " | grep -q " $1 "; }
+  is_opt_in() { echo " $off_by_default " | grep -q " $1 "; }
   case "${2:-}" in
    list|"")
-    echo "Veil features (disable with: veil feature disable NAME)"
-    for name in $known; do
+    echo "Veil features (veil feature enable|disable NAME)"
+    for name in $on_by_default; do
       if [ -f "$F/disable-$name" ]; then state=off; else state=on; fi
       printf '  %-20s %s\n' "$name" "$state"
+    done
+    for name in $off_by_default; do
+      if [ -f "$F/enable-$name" ]; then state=on; else state=off; fi
+      printf '  %-20s %s  (opt-in' "$name" "$state"
+      [ "$name" = sip-nowplaying ] && printf '; SIP-gated — see tools/sip-nowplaying/README.md'
+      printf ')\n'
     done ;;
    disable)
-    name=${3:?feature name}; echo " $known " | grep -q " $name " || { echo "unknown feature: $name (want: $known)"; exit 1; }
-    touch "$F/disable-$name"
-    case "$name" in
-     music-popup|clock-calendar) veil-theme apply "$(cat "$V/current")" ;;
-     screensaver-sync) python3 "$V/screensaver/sync.py" "$V" --remove 2>/dev/null || true ;;
-    esac
+    name=${3:?feature name}; is_known "$name" || { echo "unknown feature: $name (want: $known)"; exit 1; }
+    if is_opt_in "$name"; then
+      rm -f "$F/enable-$name"
+    else
+      touch "$F/disable-$name"
+      case "$name" in
+       music-popup|clock-calendar) veil-theme apply "$(cat "$V/current")" ;;
+       screensaver-sync) python3 "$V/screensaver/sync.py" "$V" --remove 2>/dev/null || true ;;
+      esac
+    fi
     echo "disabled $name" ;;
    enable)
-    name=${3:?feature name}; echo " $known " | grep -q " $name " || { echo "unknown feature: $name (want: $known)"; exit 1; }
-    rm -f "$F/disable-$name"
-    case "$name" in
-     music-popup|clock-calendar|screensaver-sync) veil-theme apply "$(cat "$V/current")" ;;
-    esac
-    echo "enabled $name" ;;
+    name=${3:?feature name}; is_known "$name" || { echo "unknown feature: $name (want: $known)"; exit 1; }
+    if is_opt_in "$name"; then
+      touch "$F/enable-$name"
+      if [ "$name" = sip-nowplaying ]; then
+        if [ ! -x "$V/bin/veil-nowplaying-sip" ]; then
+          "$V/tools/sip-nowplaying/build.sh" "$V/bin/veil-nowplaying-sip" || true
+        fi
+        if /usr/bin/csrutil status 2>/dev/null | /usr/bin/grep -qi 'enabled'; then
+          echo "enabled sip-nowplaying (flag on). SIP is still enabled — helper stays fallback until SIP is off after wake; music dropdown keeps media-control."
+        else
+          echo "enabled sip-nowplaying (SIP disabled — helper preferred when it returns data)"
+        fi
+      fi
+    else
+      rm -f "$F/disable-$name"
+      case "$name" in
+       music-popup|clock-calendar|screensaver-sync) veil-theme apply "$(cat "$V/current")" ;;
+      esac
+      echo "enabled $name"
+    fi ;;
    *) echo "usage: veil feature [list|enable NAME|disable NAME]"; exit 1 ;;
   esac ;;
  *) printf '%s\n' 'Veil: veil off | on [THEME] | toggle | quiet | normal | toggle-quiet | feature | pause | reload | recover | quit | keys | overview | launch | term | btop | status | selftest' ;;
