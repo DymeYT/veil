@@ -1,17 +1,17 @@
-# Graph Report - veil  (2026-11-13)
+# Graph Report - veil-lane-d  (2026-11-13)
 
 ## Corpus Check
-- 93 files · ~117,536 words
+- 93 files · ~117,681 words
 - Verdict: corpus is large enough that graph structure adds value.
-- Unclassified: 39 file(s) not represented in the graph (top: .toml 14, (none) 6, .otf 5)
+- Unclassified: 40 file(s) not represented in the graph (top: .toml 14, (none) 7, .otf 5)
 
 ## Summary
-- 1357 nodes · 3498 edges · 87 communities (52 shown, 35 thin omitted)
-- Extraction: 94% EXTRACTED · 6% INFERRED · 0% AMBIGUOUS · INFERRED: 202 edges (avg confidence: 0.85)
+- 1357 nodes · 3496 edges · 85 communities (51 shown, 34 thin omitted)
+- Extraction: 94% EXTRACTED · 6% INFERRED · 0% AMBIGUOUS · INFERRED: 209 edges (avg confidence: 0.85)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `be692486`
+- Built from commit: `cf47ac88`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -23,22 +23,21 @@
 - DriftView
 - .fill
 - .quick
-- extras.swift
-- .run
-- .search
+- Rates
+- Model
+- Item
 - Snapshot
 - Veil
-- VeilBarController
+- Bool
 - metrics.c
 - .controlBody
 - GlyphRoot
 - RecoveryTests
-- ClipHistory
+- VPNService
 - VeilFeature
 - veil.sh
 - Kind
-- Kind
-- Model
+- .applicationDidFinishLaunching
 - Darksign — Cinder (dark-souls-3)
 - Elden Ring sigil — Guidance (elden-ring)
 - VeilBarView
@@ -76,25 +75,24 @@
 - workspace-event.sh
 - sip-nowplaying/build.sh
 - uninstall.sh
-- Item
+- CalendarSource
 - sync.py
 - test_theme.py
 - NoiseMode
 - VeilHost
 - CompanionApp
 - VeilScreenSaverView
-- Bool
+- SystemControls
 - NSView
 - GlyphShell
-- Weather
 - Theme
 - GlyphKind
 - nothing.notes.md
 - AppKit
 - DriftView
 - .styleCreator
-- .dismiss
-- Action
+- .install
+- main.swift
 - saver-companion/build.sh
 - ws-chrome/build.sh
 
@@ -104,7 +102,7 @@
 3. `Model` - 66 edges
 4. `Palette` - 65 edges
 5. `GlyphRoot` - 53 edges
-6. `VeilPanelHost` - 50 edges
+6. `VeilPanelHost` - 51 edges
 7. `DesktopGlyphID` - 41 edges
 8. `DesktopGlyphPin` - 39 edges
 9. `SystemControls` - 30 edges
@@ -125,15 +123,15 @@
 ## Import Cycles
 - None detected.
 
-## Communities (87 total, 35 thin omitted)
+## Communities (85 total, 34 thin omitted)
 
 ### Community 1 - "Palette"
-Cohesion: 0.05
-Nodes (61): Carbon.HIToolbox, ImageIO, .panelRadius, acquireInstanceLock(), ActionPanel, .body, code(), Detail (+53 more)
+Cohesion: 0.07
+Nodes (40): ActionPanel, .body, code(), Detail, .actionButton, .body, .content, .fullBody (+32 more)
 
 ### Community 2 - "VeilPanelHost"
 Cohesion: 0.14
-Nodes (5): BatteryDevice, .wifiDevice, .wifiOn, VeilPanelHost, .reduceMotion
+Nodes (7): VeilPanelHost, .reduceMotion, VeilPanelKind, control, keys, music, .mediaStrip
 
 ### Community 3 - "OSDView"
 Cohesion: 0.05
@@ -144,16 +142,20 @@ Cohesion: 0.12
 Nodes (4): FocusPulse, FocusPulseModel, FocusPulseView, .body
 
 ### Community 6 - ".fill"
-Cohesion: 0.20
-Nodes (9): .lit, RNG, SceneArt, SplashView, .body, TitleBlock, .body, WallpaperView (+1 more)
+Cohesion: 0.21
+Nodes (8): RNG, SceneArt, SplashView, .body, TitleBlock, .body, WallpaperView, .body
 
-### Community 8 - "extras.swift"
-Cohesion: 0.14
-Nodes (12): CoreServices, add(), currencyAnswers(), defaultTargets(), glyphSurfaceItems(), prefixSearch(), Rates, .stale (+4 more)
+### Community 8 - "Rates"
+Cohesion: 0.33
+Nodes (3): currencyAnswers(), Rates, .stale
 
-### Community 10 - ".search"
-Cohesion: 0.14
-Nodes (18): CryptoKit, definitionAnswer(), renderReviewFixtureIfRequested(), aliasItems(), dictURL(), emojiItems(), finderSearchItem(), folderItems() (+10 more)
+### Community 9 - "Model"
+Cohesion: 0.16
+Nodes (7): kindFilter(), Model, .choosingOverview, .choosingTheme, .currentActions, .overviewActive, .query
+
+### Community 10 - "Item"
+Cohesion: 0.09
+Nodes (37): CoreServices, CryptoKit, add(), defaultTargets(), definitionAnswer(), glyphSurfaceItems(), prefixSearch(), runningAppActions() (+29 more)
 
 ### Community 11 - "Snapshot"
 Cohesion: 0.18
@@ -163,9 +165,9 @@ Nodes (10): CoreGraphics, imageURL(), options(), RecoveryError, .description, in
 Cohesion: 0.10
 Nodes (16): Umbra wallpaper, Battery, Credits, Daily use, How theming works, Install, Remove, Rift patch (+8 more)
 
-### Community 13 - "VeilBarController"
-Cohesion: 0.18
-Nodes (5): VeilBarController, .barHeight, .barLevel, .barWindowFrame, DateFormatter
+### Community 13 - "Bool"
+Cohesion: 0.22
+Nodes (4): VeilBarController, .barHeight, .barLevel, .barWindowFrame
 
 ### Community 14 - "metrics.c"
 Cohesion: 0.17
@@ -176,12 +178,12 @@ Cohesion: 0.33
 Nodes (7): VeilPanelView, .body, .controlBody, .keysBody, .musicBody, .p, .themeCorner
 
 ### Community 16 - "GlyphRoot"
-Cohesion: 0.15
-Nodes (21): DotField, .body, GlyphBtn, GlyphRoot, .bg, .body, .cal, .charms (+13 more)
+Cohesion: 0.14
+Nodes (19): DotRing, .body, GlyphBtn, GlyphRoot, .bg, .body, .charms, .deck (+11 more)
 
-### Community 18 - "ClipHistory"
-Cohesion: 0.15
-Nodes (9): contactActions(), Clip, ClipHistory, .enabled, copyText(), SecondaryAction, .id, secondaryActions() (+1 more)
+### Community 18 - "VPNService"
+Cohesion: 0.18
+Nodes (7): Surface, overview, search, themes, .vpn, VPNService, .id
 
 ### Community 19 - "VeilFeature"
 Cohesion: 0.22
@@ -195,13 +197,9 @@ Nodes (13): cased(), music_bundle_source(), music_draw(), music_feature_off(), m
 Cohesion: 0.18
 Nodes (10): Kind, action, answer, app, calc, file, nc, setting (+2 more)
 
-### Community 23 - "Kind"
-Cohesion: 0.25
-Nodes (8): Kind, buds, mac, other, phone, .sortRank, .symbol, watch
-
-### Community 24 - "Model"
+### Community 24 - ".applicationDidFinishLaunching"
 Cohesion: 0.09
-Nodes (13): kindFilter(), App, liveWorkspaceNames(), Model, .choosingOverview, .choosingTheme, .overviewActive, .query (+5 more)
+Nodes (10): App, EscDismiss, NotchBand, OverviewCard, Panel, .canBecomeKey, .canBecomeMain, riftWorkspaces() (+2 more)
 
 ### Community 25 - "Darksign — Cinder (dark-souls-3)"
 Cohesion: 0.25
@@ -212,8 +210,8 @@ Cohesion: 0.25
 Nodes (7): Construction (/tmp/marks/elden_ring.py), Elden Ring sigil — Guidance (elden-ring), Geometry, measured from the official PNG with a circle Hough transform, residual maps and line probes (reference px), Simplifications, Sources inspected (local copies in research/references/elden-ring/), Verification, Why the logo sigil and not a Site of Grace
 
 ### Community 27 - "VeilBarView"
-Cohesion: 0.23
-Nodes (9): VeilBarView, .body, .chipButton, .islands, .p, VeilPanelKind, control, keys (+1 more)
+Cohesion: 0.35
+Nodes (5): VeilBarView, .body, .chipButton, .islands, .p
 
 ### Community 28 - "arasaka-logo: Arasaka Corporation insignia (Cyberpunk 2077)"
 Cohesion: 0.29
@@ -248,16 +246,16 @@ Cohesion: 0.33
 Nodes (5): Palette (from palettegen, 12 colors), Paradis: The Wall, seen from inside, Style notes for UI, Visual weight, Why this one
 
 ### Community 37 - "bar.swift"
-Cohesion: 0.26
-Nodes (8): Combine, Darwin, OverviewWindowStrip, .body, .maxThumbs, riftWindowsDetailed(), WindowCapture, WinThumb
+Cohesion: 0.13
+Nodes (16): Darwin, BatteryDevice, Kind, buds, mac, other, phone, .sortRank (+8 more)
 
 ### Community 38 - "install.sh script"
 Cohesion: 0.33
 Nodes (3): install.sh script, build.sh script, build.sh script
 
 ### Community 39 - "String"
-Cohesion: 0.17
-Nodes (13): String, .nilIfEmpty, calc(), canRememberQuery(), formatNumber(), riftWindows(), riftWorkspaces(), score() (+5 more)
+Cohesion: 0.10
+Nodes (15): String, .nilIfEmpty, canRememberQuery(), riftWindows(), score(), SearchTerm, .body, themeSwatches() (+7 more)
 
 ### Community 40 - "dark-souls-3 wallpaper ("Cinder"): Irithyll of the Boreal Valley and Anor Londo under a moonlit storm"
 Cohesion: 0.40
@@ -280,70 +278,66 @@ Cohesion: 0.50
 Nodes (3): Eclipse — Guts beneath the moon, Palette and layout, Status (2026-10-28)
 
 ### Community 45 - ".activate"
-Cohesion: 0.10
-Nodes (11): ApplicationServices, Contacts, EventKit, ContactSource, .status, MenuItems, .trusted, pasteIntoFrontApp() (+3 more)
+Cohesion: 0.09
+Nodes (17): ApplicationServices, Contacts, EventKit, contactActions(), ContactSource, .status, MenuItems, .trusted (+9 more)
 
-### Community 65 - "Item"
-Cohesion: 0.10
-Nodes (16): shortcutItems(), CalendarSource, .events, .reminders, Item, .canPersist, .id, .isInformational (+8 more)
+### Community 65 - "CalendarSource"
+Cohesion: 0.25
+Nodes (3): CalendarSource, .events, .reminders
 
 ### Community 69 - "test_theme.py"
 Cohesion: 0.14
 Nodes (3): luminance(), ratio(), compare()
 
 ### Community 70 - "NoiseMode"
-Cohesion: 0.11
-Nodes (13): BudsInfo, .buds, NoiseMode, anc, .hardwareModes, off, openSettings, .title (+5 more)
+Cohesion: 0.14
+Nodes (9): BudsInfo, .buds, NoiseMode, anc, .hardwareModes, off, openSettings, .title (+1 more)
 
 ### Community 71 - "VeilHost"
 Cohesion: 0.06
 Nodes (22): Foundation, VeilHost, VeilThumbs, ScreenCaptureKit, Command, next, pause, play (+14 more)
 
-### Community 72 - "CompanionApp"
-Cohesion: 0.19
-Nodes (3): IOKit.pwr_mgt, CompanionApp, SaverCompanionMain
-
-### Community 75 - "Bool"
-Cohesion: 0.13
-Nodes (3): SystemControls, .bluetoothOn, .focusOn
+### Community 75 - "SystemControls"
+Cohesion: 0.11
+Nodes (5): SystemControls, .bluetoothOn, .focusOn, .wifiDevice, .wifiOn
 
 ### Community 76 - "NSView"
 Cohesion: 0.22
 Nodes (3): PassThroughHost, NSView, .firstTextField
 
 ### Community 78 - "GlyphShell"
-Cohesion: 0.18
-Nodes (5): .power, GlyphShell, .reduceMotion, VPNService, .id
+Cohesion: 0.25
+Nodes (4): .cal, .power, GlyphShell, .reduceMotion
 
 ### Community 81 - "GlyphKind"
 Cohesion: 0.13
 Nodes (15): GlyphKind, buds, cal, charms, deck, home, lockMock, loginMock (+7 more)
 
 ### Community 83 - "AppKit"
-Cohesion: 0.25
-Nodes (4): AppKit, CoreText, VeilMode, SwiftUI
+Cohesion: 0.23
+Nodes (5): AppKit, Combine, CoreText, VeilMode, SwiftUI
 
 ### Community 84 - "DriftView"
-Cohesion: 0.20
-Nodes (4): QuartzCore, ScreenSaver, DriftView, SaverPreview
+Cohesion: 0.15
+Nodes (6): IOKit.pwr_mgt, QuartzCore, ScreenSaver, SaverCompanionMain, DriftView, SaverPreview
 
 ### Community 85 - ".styleCreator"
 Cohesion: 0.27
-Nodes (3): DotRing, .body, .styleCreator
+Nodes (3): DotField, .body, .styleCreator
 
-### Community 93 - "Action"
-Cohesion: 0.33
-Nodes (5): Action, copy, open, run, webSearch()
+### Community 93 - "main.swift"
+Cohesion: 0.08
+Nodes (28): Carbon.HIToolbox, ImageIO, acquireInstanceLock(), Action, copy, open, run, calc() (+20 more)
 
 ## Knowledge Gaps
 - **152 isolated node(s):** `.root`, `.animatedPanels`, `.sketchybarPopups`, `.veilBar`, `.overviewLiveThumbs` (+147 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 457 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
-- **35 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 458 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+- **34 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `String` connect `String` to `Palette`, `VeilPanelHost`, `OSDView`, `FocusPulse`, `.fill`, `.quick`, `extras.swift`, `.run`, `.search`, `Snapshot`, `VeilBarController`, `.controlBody`, `GlyphRoot`, `ClipHistory`, `VeilFeature`, `Kind`, `Kind`, `Model`, `VeilBarView`, `bar.swift`, `DesktopGlyphBoard`, `.activate`, `Item`, `NoiseMode`, `VeilHost`, `VeilScreenSaverView`, `Bool`, `GlyphShell`, `Weather`, `Theme`, `GlyphKind`, `.styleCreator`, `Action`?**
+- **Why does `String` connect `String` to `Palette`, `VeilPanelHost`, `OSDView`, `FocusPulse`, `.fill`, `.quick`, `Rates`, `Model`, `Item`, `Snapshot`, `Bool`, `.controlBody`, `GlyphRoot`, `VPNService`, `VeilFeature`, `Kind`, `.applicationDidFinishLaunching`, `VeilBarView`, `bar.swift`, `DesktopGlyphBoard`, `.activate`, `CalendarSource`, `NoiseMode`, `VeilHost`, `VeilScreenSaverView`, `SystemControls`, `Theme`, `GlyphKind`, `.styleCreator`, `main.swift`?**
   _High betweenness centrality (0.305) - this node is a cross-community bridge._
 - **Are the 14 inferred relationships involving `Item` (e.g. with `.content` and `.hero`) actually correct?**
   _`Item` has 14 INFERRED edges - model-reasoned connections that need verification._
@@ -352,8 +346,8 @@ _Questions this graph is uniquely positioned to answer:_
 - **Should `veil-theme` be split into smaller, more focused modules?**
   _Cohesion score 0.10452961672473868 - nodes in this community are weakly interconnected._
 - **Why does `DesktopGlyphBoard` connect `DesktopGlyphBoard` to `FocusPulse`, `String`?**
-  _High betweenness centrality (0.051) - this node is a cross-community bridge._
+  _High betweenness centrality (0.054) - this node is a cross-community bridge._
 - **Are the 2 inferred relationships involving `DesktopGlyphBoard` (e.g. with `.body` and `.pinMenu()`) actually correct?**
   _`DesktopGlyphBoard` has 2 INFERRED edges - model-reasoned connections that need verification._
 - **Should `Palette` be split into smaller, more focused modules?**
-  _Cohesion score 0.05083996463306808 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.07343660355708548 - nodes in this community are weakly interconnected._
