@@ -176,6 +176,17 @@ PLIST
   # Safe in-process preview — never launches ScreenSaverEngine / never locks.
   exec "$HOME/.config/veil/tools/saver-preview/run.sh" "${2:-}"
   ;;
+ saver-companion)
+  bin="$HOME/.config/veil/bin/veil-saver-companion"
+  [ -x "$bin" ] || "$HOME/.config/veil/tools/saver-companion/build.sh" "$bin"
+  if [ "${2:-}" = "--once" ] || [ "${2:-}" = "once" ]; then exec "$bin" --once; fi
+  echo "usage: veil saver-companion --once | veil feature enable saver-companion"
+  ;;
+ ws-chrome)
+  bin="$HOME/.config/veil/bin/veil-ws-chrome"
+  [ -x "$bin" ] || "$HOME/.config/veil/tools/ws-chrome/build.sh" "$bin"
+  exec "$bin" "${2:-status}"
+  ;;
  launch)
   if pgrep -xq veil-search; then
    osascript -l JavaScript -e "ObjC.import('Foundation'); \$.NSDistributedNotificationCenter.defaultCenter.postNotificationNameObjectUserInfoDeliverImmediately('app.veil.search.show', \$(), \$(), true)"
@@ -240,7 +251,7 @@ PLIST
   V="$HOME/.config/veil"; F="$V/generated/features"; mkdir -p "$F"
   # veil-bar is default-on (thin host strip). Migrate phase-1 enable flag away.
   on_by_default='music-popup clock-calendar cider-bridge screensaver-sync animated-panels overview-live-thumbs veil-bar'
-  off_by_default='sip-nowplaying sketchybar-popups force-reduce-motion'
+  off_by_default='sip-nowplaying sketchybar-popups force-reduce-motion saver-companion ws-chrome'
   known="$on_by_default $off_by_default"
   is_known() { echo " $known " | grep -q " $1 "; }
   is_opt_in() { echo " $off_by_default " | grep -q " $1 "; }
@@ -260,6 +271,8 @@ PLIST
       [ "$name" = sip-nowplaying ] && printf '; SIP-gated — see tools/sip-nowplaying/README.md'
       [ "$name" = sketchybar-popups ] && printf '; SketchyBar popup menus (skips animated panels)'
       [ "$name" = force-reduce-motion ] && printf '; panels use still-path without system Reduce Motion'
+      [ "$name" = saver-companion ] && printf '; VEI-40 idle theme companion — never ScreenSaverEngine'
+      [ "$name" = ws-chrome ] && printf '; VEI-41 thicker borders / window-server chrome'
       printf ')\n'
     done ;;
    disable)
@@ -270,6 +283,13 @@ PLIST
        sketchybar-popups)
         sketchybar --bar hidden=off 2>/dev/null || true
         osascript -l JavaScript -e "ObjC.import('Foundation'); \$.NSDistributedNotificationCenter.defaultCenter.postNotificationNameObjectUserInfoDeliverImmediately('app.veil.search.theme', \$(), \$(), true)" >/dev/null 2>&1 || true
+        ;;
+       saver-companion)
+        launchctl bootout "gui/$(id -u)/app.veil.saver-companion" 2>/dev/null || true
+        pkill -x veil-saver-companion 2>/dev/null || true
+        ;;
+       ws-chrome)
+        [ -x "$V/bin/veil-ws-chrome" ] && "$V/bin/veil-ws-chrome" disable || true
         ;;
       esac
     else
@@ -307,6 +327,32 @@ PLIST
       elif [ "$name" = sketchybar-popups ]; then
         sketchybar --bar hidden=off 2>/dev/null || true
         echo "enabled sketchybar-popups (SketchyBar strip + popups; animated Veil panels step aside)"
+      elif [ "$name" = saver-companion ]; then
+        "$V/tools/saver-companion/build.sh" "$V/bin/veil-saver-companion" || true
+        # Optional LaunchAgent — idle watch; never SSE.
+        la="$HOME/Library/LaunchAgents/app.veil.saver-companion.plist"
+        cat > "$la" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>app.veil.saver-companion</string>
+  <key>ProgramArguments</key><array>
+    <string>$V/bin/veil-saver-companion</string>
+    <string>--idle</string><string>180</string>
+  </array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ProcessType</key><string>Interactive</string>
+</dict></plist>
+PLIST
+        launchctl bootout "gui/$(id -u)/app.veil.saver-companion" 2>/dev/null || true
+        launchctl bootstrap "gui/$(id -u)" "$la" 2>/dev/null || true
+        launchctl kickstart -k "gui/$(id -u)/app.veil.saver-companion" 2>/dev/null || true
+        echo "enabled saver-companion (idle 180s theme overlay; click/key dismiss; no ScreenSaverEngine)"
+      elif [ "$name" = ws-chrome ]; then
+        "$V/tools/ws-chrome/build.sh" "$V/bin/veil-ws-chrome" || true
+        "$V/bin/veil-ws-chrome" enable
+        echo "enabled ws-chrome (borders width=8; disable restores backup)"
       fi
     else
       rm -f "$F/disable-$name"
@@ -321,5 +367,5 @@ PLIST
     fi ;;
    *) echo "usage: veil feature [list|enable NAME|disable NAME]"; exit 1 ;;
   esac ;;
-  *) printf '%s\n' 'Veil: veil off | on [THEME] | toggle | quiet | normal | toggle-quiet | feature | pause | reload | recover | quit | keys | overview | themes | music-popup | panel | dismiss-popups | saver-preview | launch | term | btop | status | selftest' ;;
+  *) printf '%s\n' 'Veil: veil off | on [THEME] | toggle | quiet | normal | toggle-quiet | feature | pause | reload | recover | quit | keys | overview | themes | music-popup | panel | dismiss-popups | saver-preview | saver-companion | ws-chrome | launch | term | btop | status | selftest' ;;
 esac
