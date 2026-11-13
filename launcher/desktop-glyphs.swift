@@ -1093,33 +1093,36 @@ struct DesktopGlyphCanvas: View {
         }
     }
 
-    /// Small = Mac-only; ≥2 cells → Continuity/BT multi-device board (VEI-32).
+    /// Small = Mac-only compact metric; ≥2 cells → Apple-style circular device rings (VEI-32 / UX-loop).
     @ViewBuilder
     private func batteryWidget(_ pin: DesktopGlyphPin) -> some View {
         let large = pin.spanCols >= 2 || pin.spanRows >= 2
         Group {
             if large {
                 let devices = Array(VeilPanelHost.shared.batteryDevices.prefix(max(4, pin.spanCols * pin.spanRows)))
-                VStack(alignment: .leading, spacing: 4) {
+                let cols = min(3, max(2, pin.spanCols))
+                VStack(alignment: .leading, spacing: 6) {
                     Text("BATTERY").font(mono(7)).foregroundStyle(p["comment"])
                     if devices.isEmpty {
-                        Text(board.batteryText).font(display(16)).foregroundStyle(p["fg"])
+                        batteryRingCell(
+                            title: "Mac",
+                            symbol: BatteryDevice.Kind.mac.symbol,
+                            level: Int(board.batteryText.filter(\.isNumber)),
+                            detail: nil
+                        )
+                        .frame(maxWidth: .infinity)
                     } else {
-                        ForEach(devices) { d in
-                            HStack(spacing: 6) {
-                                Image(systemName: d.kind.symbol)
-                                    .font(.system(size: 9, weight: .semibold))
-                                    .foregroundStyle(p["cyan"])
-                                    .frame(width: 12)
-                                Text(d.name).font(mono(7)).foregroundStyle(p["fg"]).lineLimit(1)
-                                Spacer(minLength: 0)
-                                if let detail = d.detail {
-                                    Text(detail).font(mono(6)).foregroundStyle(p["comment"]).lineLimit(1)
-                                } else if let level = d.level {
-                                    Text("\(level)%").font(mono(8)).foregroundStyle(p["fg"])
-                                } else {
-                                    Text("—").font(mono(8)).foregroundStyle(p["dim"])
-                                }
+                        LazyVGrid(
+                            columns: Array(repeating: GridItem(.flexible(minimum: 44), spacing: 8), count: cols),
+                            spacing: 8
+                        ) {
+                            ForEach(devices) { d in
+                                batteryRingCell(
+                                    title: batteryShortName(d),
+                                    symbol: batteryRingSymbol(d),
+                                    level: d.level,
+                                    detail: d.detail
+                                )
                             }
                         }
                     }
@@ -1137,6 +1140,88 @@ struct DesktopGlyphCanvas: View {
                 metricWidget(.battery, "BAT", board.batteryText)
             }
         }
+    }
+
+    /// Apple Battery-widget grammar: opaque circular ring, device glyph inside, short % under.
+    private func batteryRingCell(title: String, symbol: String, level: Int?, detail: String?) -> some View {
+        let pct = level.map { min(1, max(0, Double($0) / 100)) } ?? 0
+        let known = level != nil
+        let ring = known ? batteryRingColor(level!) : p["dim"]
+        return VStack(spacing: 4) {
+            ZStack {
+                Circle()
+                    .stroke(p["border"].opacity(0.9), lineWidth: 5)
+                Circle()
+                    .trim(from: 0, to: known ? pct : 0)
+                    .stroke(ring, style: StrokeStyle(lineWidth: 5, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                Image(systemName: symbol)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(p["fg"])
+                    .symbolRenderingMode(.hierarchical)
+            }
+            .frame(width: 52, height: 52)
+            Text(title)
+                .font(mono(7))
+                .foregroundStyle(p["comment"])
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+            if let level {
+                Text("\(level)%")
+                    .font(mono(9))
+                    .foregroundStyle(p["fg"])
+                    .monospacedDigit()
+            } else {
+                Text("—")
+                    .font(mono(9))
+                    .foregroundStyle(p["dim"])
+            }
+            if let detail, !detail.isEmpty {
+                Text(detail)
+                    .font(mono(6))
+                    .foregroundStyle(p["dim"])
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func batteryShortName(_ d: BatteryDevice) -> String {
+        switch d.kind {
+        case .mac: return "Mac"
+        case .buds:
+            let n = d.name.lowercased()
+            if n.contains("max") { return "Max" }
+            if n.contains("pro") { return "Pro" }
+            return "Buds"
+        case .watch: return "Watch"
+        case .phone:
+            return d.name.lowercased().contains("ipad") ? "iPad" : "iPhone"
+        case .other:
+            let t = d.name.trimmingCharacters(in: .whitespaces)
+            return t.count <= 8 ? t : String(t.prefix(7))
+        }
+    }
+
+    private func batteryRingSymbol(_ d: BatteryDevice) -> String {
+        switch d.kind {
+        case .mac: return "laptopcomputer"
+        case .buds:
+            let n = d.name.lowercased()
+            if n.contains("max") { return "headphones" }
+            return "airpodspro"
+        case .watch: return "applewatch"
+        case .phone:
+            return d.name.lowercased().contains("ipad") ? "ipad" : "iphone"
+        case .other: return d.kind.symbol
+        }
+    }
+
+    private func batteryRingColor(_ level: Int) -> Color {
+        if level <= 20 { return p["red"] }
+        if level <= 35 { return p["yellow"] }
+        return p["cyan"]
     }
 
     private var clockWidget: some View {
