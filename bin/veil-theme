@@ -446,10 +446,16 @@ def apply(name):
     if not os.environ.get("VEIL_NO_RELOAD"):
         commands = [(live, reload) for live, *_, reload in changes]
         bar_config = CFG / "sketchybar/sketchybarrc"
-        if any(bar_config.parent / "plugins" in live.parents for live, *_ in changes) and not any(
-            live == bar_config for live, _ in commands
-        ):
+        # Unified host owns the bar by default — skip SketchyBar reload noise unless fallback is on.
+        veil_bar = not (GEN / "features/disable-veil-bar").exists()
+        sketchy_up = subprocess.run(["pgrep", "-xq", "sketchybar"], capture_output=True).returncode == 0
+        if (not veil_bar or sketchy_up) and any(
+            bar_config.parent / "plugins" in live.parents for live, *_ in changes
+        ) and not any(live == bar_config for live, _ in commands):
             commands.append((bar_config, ["sketchybar", "--reload"]))
+        if veil_bar:
+            commands = [(live, cmd) for live, cmd in commands
+                        if not (isinstance(cmd, list) and cmd[:1] == ["sketchybar"])]
         reload_configs(commands, name)
         system_accents(theme)
         subprocess.Popen([sys.executable, str(ROOT / "screensaver/sync.py"), str(ROOT)],

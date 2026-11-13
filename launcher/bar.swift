@@ -213,6 +213,12 @@ final class VeilPanelHost: ObservableObject {
     @Published var batteryText = "—"
     @Published var netText = "Wi‑Fi"
     @Published var volumeText = "—"
+    /// Live control-panel toggles (VEI-39).
+    @Published var wifiOn = true
+    @Published var bluetoothOn = true
+    @Published var volumeLevel: Double = 0.5
+    @Published var brightnessLevel: Double = 0.7
+    @Published var muted = false
     /// Continuity / Bluetooth accessories for large Battery Glyph (VEI-32).
     @Published var batteryDevices: [BatteryDevice] = []
     /// AppKit screen rect of the bar button that opened the panel (nil → resolve from SketchyBar).
@@ -322,13 +328,13 @@ final class VeilPanelHost: ObservableObject {
     }
 
     private func panelSize() -> (CGFloat, CGFloat) {
-        let width: CGFloat = 340
+        let width: CGFloat
         let height: CGFloat
         switch kind {
-        case .control: height = 420
-        case .keys: height = 360
-        case .music: height = musicArtwork == nil ? 210 : 280
-        case nil: height = 1 // unused — ensureWindow refuses nil kind
+        case .control: width = 360; height = 520
+        case .keys: width = 340; height = 360
+        case .music: width = 340; height = musicArtwork == nil ? 210 : 280
+        case nil: width = 1; height = 1 // unused — ensureWindow refuses nil kind
         }
         return (width, height)
     }
@@ -389,7 +395,9 @@ final class VeilPanelHost: ObservableObject {
         guard kind != nil else { dismiss(); return }
         switch kind {
         case .music: loadMusic(fetchArtwork: true, force: true)
-        case .control: ensureStatusMeta(force: true)
+        case .control:
+            ensureStatusMeta(force: true)
+            refreshControlToggles()
         case .keys: break
         case nil: break
         }
@@ -411,6 +419,82 @@ final class VeilPanelHost: ObservableObject {
         if !force, Date().timeIntervalSince(lastStatusFetch) < 20 { return }
         lastStatusFetch = Date()
         loadStatus()
+        refreshControlToggles()
+    }
+
+    /// Snapshot Wi‑Fi / BT / volume / brightness for live control chrome.
+    func refreshControlToggles() {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let wifi = SystemControls.wifiOn
+            let bt = SystemControls.bluetoothOn
+            let vol = SystemControls.volumeLevel() ?? 0.5
+            let muted = SystemControls.isMuted()
+            let bright = Double(Brightness.get() ?? 0.7)
+            DispatchQueue.main.async {
+                self.wifiOn = wifi
+                self.bluetoothOn = bt
+                self.volumeLevel = vol
+                self.muted = muted
+                self.brightnessLevel = bright
+                self.volumeText = muted ? "MUTE" : "\(Int((vol * 100).rounded()))%"
+            }
+        }
+    }
+
+    func toggleWifi() {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let on = SystemControls.toggleWifi()
+            DispatchQueue.main.async {
+                self.wifiOn = on
+                self.netText = on ? "Wi‑Fi" : "Wi‑Fi off"
+            }
+        }
+    }
+
+    func toggleBluetooth() {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let on = SystemControls.toggleBluetooth()
+            DispatchQueue.main.async { self.bluetoothOn = on }
+        }
+    }
+
+    func toggleFocus() {
+        DispatchQueue.global(qos: .userInitiated).async {
+            _ = SystemControls.toggleFocus()
+        }
+    }
+
+    func openDisplays() { SystemControls.openDisplays() }
+
+    func setVolume(_ level: Double) {
+        volumeLevel = level
+        volumeText = "\(Int((level * 100).rounded()))%"
+        DispatchQueue.global(qos: .userInitiated).async {
+            SystemControls.setVolume(level)
+        }
+    }
+
+    func setBrightness(_ level: Double) {
+        brightnessLevel = level
+        SystemControls.setBrightness(level)
+    }
+
+    func toggleMute() {
+        DispatchQueue.global(qos: .userInitiated).async {
+            SystemControls.toggleMute()
+            let muted = SystemControls.isMuted()
+            let vol = SystemControls.volumeLevel() ?? 0
+            DispatchQueue.main.async {
+                self.muted = muted
+                self.volumeLevel = vol
+                self.volumeText = muted ? "MUTE" : "\(Int((vol * 100).rounded()))%"
+            }
+        }
+    }
+
+    /// Open the launcher theme gallery (not the Style creator — that is ⌃⌥Y / Glyph Style).
+    func openThemeGallery() {
+        runVeil(["themes"])
     }
 
     private func loadMusic(fetchArtwork: Bool = true, force: Bool = false) {
@@ -1153,11 +1237,7 @@ final class VeilBarController: ObservableObject {
             w.hidesOnDeactivate = false
             w.becomesKeyOnlyIfNeeded = true
             // Islands: pass through clear gaps. Strip: normal hosting so every pixel of the thin edge is hittable.
-            if barLayout == "islands" {
-                w.contentView = PassThroughHost(rootView: VeilBarView(bar: self))
-            } else {
-                w.contentView = NSHostingView(rootView: VeilBarView(bar: self))
-            }
+            w.contentView = Self.makeHost(bar: self, islands: barLayout == "islands")
             window = w
             w.setFrame(frame, display: true)
             w.orderFrontRegardless()
@@ -1167,14 +1247,23 @@ final class VeilBarController: ObservableObject {
         if force || window?.frame != frame {
             window?.setFrame(frame, display: true)
             if force {
-                if barLayout == "islands" {
-                    window?.contentView = PassThroughHost(rootView: VeilBarView(bar: self))
-                } else {
-                    window?.contentView = NSHostingView(rootView: VeilBarView(bar: self))
-                }
+                window?.contentView = Self.makeHost(bar: self, islands: barLayout == "islands")
             }
         }
         window?.orderFrontRegardless()
+    }
+
+    /// NSHostingView otherwise applies safe-area / titlebar insets that shove a 24pt row off-center in a 36pt strip.
+    private static func makeHost(bar: VeilBarController, islands: Bool) -> NSView {
+        let root = VeilBarView(bar: bar)
+        if islands {
+            let h = PassThroughHost(rootView: root)
+            if #available(macOS 13.0, *) { h.safeAreaRegions = [] }
+            return h
+        }
+        let h = NSHostingView(rootView: root)
+        if #available(macOS 13.0, *) { h.safeAreaRegions = [] }
+        return h
     }
 
     /// Synthetic bar-button frames for panel anchoring while SketchyBar is hidden.
@@ -1215,15 +1304,19 @@ struct VeilBarView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private var p: Palette { Palette.load() }
     private var islands: Bool { bar.barLayout == "islands" }
+    /// SketchyBar `--default background.height=24` inside EDGE_H 36.
+    private let rowH: CGFloat = 24
 
     var body: some View {
-        HStack(spacing: islands ? 10 : 8) {
-            chipButton
-            HStack(spacing: islands ? 6 : 4) {
-                ForEach(bar.workspaces, id: \.index) { ws in workspaceButton(ws) }
+        HStack(alignment: .center, spacing: 0) {
+            HStack(alignment: .center, spacing: 10) {
+                chipButton
+                HStack(alignment: .center, spacing: 2) {
+                    ForEach(bar.workspaces, id: \.index) { ws in workspaceButton(ws) }
+                }
             }
-            Spacer(minLength: 8)
-            HStack(spacing: 8) {
+            Spacer(minLength: 12)
+            HStack(alignment: .center, spacing: 10) {
                 barIconButton(system: "music.note", help: "Music") {
                     VeilPanelHost.shared.toggle(.music, near: Self.anchorNearMouse(size: NSSize(width: 24, height: 24)))
                 }
@@ -1233,7 +1326,9 @@ struct VeilBarView: View {
                 Text(bar.powerLabel)
                     .font(code(10, "Bold"))
                     .foregroundStyle(p["dim"])
-                HStack(spacing: 6) {
+                    .lineLimit(1)
+                    .fixedSize()
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Text(bar.clockDate)
                         .font(code(10, "Bold"))
                         .foregroundStyle(p["dim"])
@@ -1241,11 +1336,15 @@ struct VeilBarView: View {
                         .font(mono(13, "Medium"))
                         .foregroundStyle(p["fg"])
                 }
+                .fixedSize()
             }
+            .frame(height: rowH, alignment: .center)
         }
         .padding(.horizontal, islands ? 14 : 20)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         .background(islands ? Color.clear : p["bg_dark"])
+        // Kill hosting safe-area so the 24pt row sits dead-center in the 36pt strip.
+        .ignoresSafeArea()
     }
 
     private var chipButton: some View {
@@ -1262,7 +1361,7 @@ struct VeilBarView: View {
                 .font(mono(12, "SemiBold"))
                 .foregroundStyle(bar.chipStyle == "filled" ? p["bg_dark"] : p["fg"])
                 .padding(.horizontal, 10)
-                .frame(height: 24)
+                .frame(height: rowH)
                 .background(
                     Capsule(style: .continuous)
                         .fill(bar.chipStyle == "filled" ? p["yellow"] : Color.clear)
@@ -1286,18 +1385,21 @@ struct VeilBarView: View {
                 try? proc.run()
             }
         } label: {
-            HStack(spacing: 4) {
+            HStack(alignment: .center, spacing: 5) {
                 if bar.wsStyle == "dot" {
-                    Circle()
-                        .fill(ws.active ? p["red"] : p["dim"].opacity(0.7))
-                        .frame(width: 6, height: 6)
+                    // SketchyBar ● icon — fill center, not sitting on the text baseline.
+                    Text("●")
+                        .font(.system(size: 7, weight: .bold))
+                        .foregroundStyle(ws.active ? p["red"] : p["dim"].opacity(0.75))
+                        .frame(width: 10, height: rowH, alignment: .center)
                 }
                 Text(ws.name)
                     .font(code(11, "Bold"))
                     .foregroundStyle(ws.active ? p["fg"] : p["dim"])
+                    .lineLimit(1)
             }
-            .padding(.horizontal, 6)
-            .frame(height: 24)
+            .padding(.horizontal, 4)
+            .frame(height: rowH, alignment: .center)
         }
         .buttonStyle(.plain)
         .pressable()
@@ -1308,7 +1410,8 @@ struct VeilBarView: View {
             Image(systemName: system)
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(p["fg"])
-                .frame(width: 22, height: 24)
+                .frame(width: 22, height: rowH, alignment: .center)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .pressable()
