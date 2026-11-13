@@ -1,30 +1,12 @@
 #!/bin/bash
-# Nothing-friendly Dock (autohide) without touching Finder/wallpaper.
-# hide   — apply rice Dock settings
-# show   — force Dock always visible (keeps size)
-# status — print Dock prefs
+# Dock chrome is DISABLED (Big Dawg 2026-11-13). Never mutate Dock size, contents, static-only, or autohide.
+# Bar clearance adapts around the Dock; rice must not touch Dock prefs.
 set -euo pipefail
-
 cmd="${1:-status}"
-
 case "$cmd" in
-  hide|apply)
-    defaults write com.apple.dock autohide -bool true
-    defaults write com.apple.dock tilesize -int 36
-    defaults write com.apple.dock magnification -bool false
-    defaults write com.apple.dock show-recents -bool false
-    defaults write com.apple.dock mineffect -string scale
-    defaults write com.apple.dock launchanim -bool false
-    defaults write com.apple.dock static-only -bool true
-    defaults write com.apple.dock autohide-delay -float 0.05
-    defaults write com.apple.dock autohide-time-modifier -float 0.35
-    killall Dock >/dev/null 2>&1 || true
-    echo "Dock: autohide + 36px + no recents (Nothing)."
-    ;;
-  show)
-    defaults write com.apple.dock autohide -bool false
-    killall Dock >/dev/null 2>&1 || true
-    echo "Dock: always visible."
+  hide|apply|show)
+    echo "dock-nothing: no-op (Dock mutation disabled — leave size/apps/autohide alone)" >&2
+    exit 0
     ;;
   status|*)
     osascript -e 'tell application "System Events" to tell dock preferences to get {autohide, screen edge, magnification}' 2>/dev/null || true
@@ -33,7 +15,7 @@ case "$cmd" in
       "$(defaults read com.apple.dock show-recents 2>/dev/null || echo unset)" \
       "$(defaults read com.apple.dock static-only 2>/dev/null || echo unset)"
     if [ "$cmd" != status ]; then
-      echo "usage: dock-nothing.sh [hide|show|status]" >&2
+      echo "usage: dock-nothing.sh [status]  (hide/apply/show are no-ops)" >&2
       exit 1
     fi
     ;;

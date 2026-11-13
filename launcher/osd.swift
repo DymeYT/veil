@@ -7,7 +7,7 @@ import IOKit.ps
 import Network
 import SwiftUI
 
-enum OSDKind { case volume, brightness, caps, power, battery, network, input }
+enum OSDKind { case volume, brightness, caps, power, battery, network, input, buds }
 
 final class OSDModel: ObservableObject {
     @Published var kind = OSDKind.volume
@@ -111,6 +111,13 @@ struct OSDView: View {
         case .battery: return (m.level ?? 0) <= 0.1 ? "battery.0percent" : "battery.25percent"
         case .network: return m.detail == "Offline" ? "wifi.slash" : "wifi"
         case .input: return "keyboard"
+        case .buds:
+            if m.detail.lowercased().contains("low") || (m.level ?? 1) <= 0.2 {
+                return "battery.25percent"
+            }
+            return m.detail.lowercased().contains("gone") || m.detail.lowercased().contains("off")
+                ? "airpodspro.chargingcase.wireless"
+                : "airpodspro"
         }
     }
     var percent: String { m.level.map { "\(Int(($0 * 100).rounded()))" } ?? "" }
@@ -341,7 +348,8 @@ enum Brightness {
     static func set(_ v: Float) { _ = setter?(CGMainDisplayID(), v) }
 }
 
-/// Caps Lock, charger, low battery, network and input-source overlays. All event-driven: nothing polls.
+/// Caps Lock, charger, low battery, network, input-source, and AirPods/buds overlays.
+/// Mac power is event-driven; buds use a light probe (no Dock / no fullscreen).
 final class StateWatch {
     static let shared = StateWatch()
     private var caps = NSEvent.modifierFlags.contains(.capsLock)
@@ -351,6 +359,10 @@ final class StateWatch {
     private let path = NWPathMonitor()
     private var online: Bool?
     private var woke = Date.distantPast
+    private var budsTimer: DispatchSourceTimer?
+    private var budsConnected = false
+    private var budsName = ""
+    private var budsWarned = false
 
     func start() {
         monitor = NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged) { [weak self] e in
@@ -392,6 +404,81 @@ final class StateWatch {
             DispatchQueue.main.async { me.powerChanged() }
         }, ctx)?.takeRetainedValue() {
             CFRunLoopAddSource(CFRunLoopGetMain(), src, .defaultMode)
+        }
+        // QA / theme proof: `veil osd buds-connected|buds-gone|buds-low|mac-low`
+        DistributedNotificationCenter.default().addObserver(
+            forName: Notification.Name("app.veil.osd"), object: nil, queue: .main
+        ) { note in
+            StateWatch.handleOSDCommand(note.object as? String)
+        }
+        startBudsWatch()
+    }
+
+    /// Short notch-wing labels only — never long names that collide with the notch.
+    static func handleOSDCommand(_ raw: String?) {
+        guard let raw, !raw.isEmpty else { return }
+        switch raw {
+        case "buds-connected":
+            OSD.shared.show(.buds, level: nil, title: "AirPods", detail: "Connected")
+        case "buds-gone", "buds-disconnected":
+            OSD.shared.show(.buds, level: nil, title: "AirPods", detail: "Gone")
+        case "buds-low":
+            OSD.shared.show(.buds, level: 0.12, title: "Buds low", detail: "12%")
+        case "max-connected":
+            OSD.shared.show(.buds, level: nil, title: "Max", detail: "Connected")
+        case "mac-low", "battery-low":
+            OSD.shared.show(.battery, level: 0.1, title: "Battery low", detail: "10%")
+        default:
+            break
+        }
+    }
+
+    private func startBudsWatch() {
+        budsTimer?.cancel()
+        let t = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .utility))
+        t.schedule(deadline: .now() + 8, repeating: 18, leeway: .seconds(4))
+        t.setEventHandler { [weak self] in self?.probeBuds() }
+        t.resume()
+        budsTimer = t
+    }
+
+    private func probeBuds() {
+        let info = BudsInfo.probe()
+        let connected = info.connected
+        let name = info.name
+        let level: Int? = {
+            if let s = info.single { return s }
+            let sides = [info.left, info.right].compactMap { $0 }
+            return sides.min()
+        }()
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            let shortTitle: String = {
+                let n = name.lowercased()
+                if n.contains("max") { return "Max" }
+                if n.contains("pro") { return "Pro" }
+                if n.contains("airpods") || n.contains("buds") { return "AirPods" }
+                return "Buds"
+            }()
+            if connected != self.budsConnected {
+                self.budsConnected = connected
+                self.budsName = name
+                self.budsWarned = false
+                if connected {
+                    OSD.shared.show(.buds, level: level.map { Double($0) / 100 }, title: shortTitle, detail: "Connected")
+                } else {
+                    OSD.shared.show(.buds, level: nil, title: shortTitle.isEmpty ? "AirPods" : shortTitle, detail: "Gone")
+                }
+                return
+            }
+            // Low buds/Max battery — once per connect until recharge above 25%.
+            if connected, let level, level <= 15, !self.budsWarned {
+                self.budsWarned = true
+                OSD.shared.show(.buds, level: Double(level) / 100, title: "Buds low", detail: "\(level)%")
+            } else if connected, let level, level > 25 {
+                self.budsWarned = false
+            }
+            self.budsName = name
         }
     }
 

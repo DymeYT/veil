@@ -81,18 +81,9 @@ PY
 printf '%s\n' "$ART" > "$GEN/rice-wall-lock"
 log "wallpaper → art/nothing.jpg (Glyph dotted field)"
 
-# 2) Dock: autohide + small + no magnification/recents — bar owns the bottom edge.
-defaults write com.apple.dock autohide -bool true
-defaults write com.apple.dock tilesize -int 36
-defaults write com.apple.dock magnification -bool false
-defaults write com.apple.dock show-recents -bool false
-defaults write com.apple.dock mineffect -string scale
-defaults write com.apple.dock launchanim -bool false
-defaults write com.apple.dock static-only -bool true
-defaults write com.apple.dock autohide-delay -float 0.05
-defaults write com.apple.dock autohide-time-modifier -float 0.35
-killall Dock >/dev/null 2>&1 || true
-log "Dock → autohide, 36px, no magnify/recents (Nothing-friendly)"
+# 2) Dock: NEVER mutate (Big Dawg 2026-11-13). No tilesize/static-only/autohide/contents.
+# Bar clearance adapts around the Dock; rice must not shrink or empty it.
+log "Dock → left alone (mutation disabled)"
 
 # 3) Finder desktop icons: hide volume/device icons + desktop icon layer for clean Glyph field.
 defaults write com.apple.finder CreateDesktop -bool false

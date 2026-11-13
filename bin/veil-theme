@@ -57,11 +57,16 @@ def strings_for(theme):
     rm = subprocess.run(["defaults", "read", "com.apple.universalaccess", "reduceMotion"], capture_output=True, text=True).stdout.strip()
     out["system_motion"] = "false" if rm == "1" else "true"
     out["rift_animate"] = "false" if (GEN / "quiet").exists() else out["system_motion"]
-    # Usable tiling space follows the bar: reserve only the bar edge; free the opposite edge.
-    # Bottom bar → gap_top=0 (apps reach the top). Top bar → gap_bottom=0 (apps reach the bottom / Dock).
+    # Usable tiling space follows the bar: reserve the bar edge; free the opposite edge.
+    # Always keep a few px under the notch so window chrome isn't clipped (all themes).
+    notch_clear = 4
     if out.get("bar_position", "top") == "bottom":
-        out["gap_top"] = "0"
+        out["gap_top"] = str(notch_clear)
     else:
+        try:
+            out["gap_top"] = str(max(0, int(str(out.get("gap_top", "0") or "0"))) + notch_clear)
+        except ValueError:
+            out["gap_top"] = str(notch_clear)
         out["gap_bottom"] = "0"
     return out
 
