@@ -87,13 +87,19 @@ case "${1:-help}" in
   for name in sketchybar borders; do
    brew services stop "$name" >/dev/null 2>&1 || true   # one-time handover; brew deletes its own plist
    bin="/opt/homebrew/opt/$name/bin/$name"; plist="$la/app.veil.$name.plist"
+   # borders: start via bordersrc so theme colors + ax_focus=on always load (bare `borders` skips Rift-safe focus).
+   if [ "$name" = borders ]; then
+     prog_args="<string>/bin/bash</string><string>$HOME/.config/borders/bordersrc</string>"
+   else
+     prog_args="<string>$bin</string>"
+   fi
    cat > "$plist.new" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
 	<key>Label</key><string>app.veil.$name</string>
-	<key>ProgramArguments</key><array><string>$bin</string></array>
+	<key>ProgramArguments</key><array>$prog_args</array>
 	<key>EnvironmentVariables</key><dict>
 		<key>LANG</key><string>en_US.UTF-8</string>
 		<key>PATH</key><string>$HOME/.local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/bin:/bin:/usr/sbin:/sbin</string>

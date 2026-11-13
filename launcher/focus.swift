@@ -27,9 +27,11 @@ final class FocusPulse {
     private let model = FocusPulseModel()
     private var panel: NSPanel?
     private var observer: AXObserver?
+    private var watchedWindow: AXUIElement?
     private var pending: DispatchWorkItem?
     private var fade: DispatchWorkItem?
     private var cleanup: DispatchWorkItem?
+    private var retarget: [DispatchWorkItem] = []
     private var enabled = false
     private var opaqueTerminal: String?  // the Ghostty window currently toggled solid
     private let terminalQueue = DispatchQueue(label: "app.veil.search.terminal-opacity")
@@ -53,6 +55,8 @@ final class FocusPulse {
             pending?.cancel()
             fade?.cancel()
             cleanup?.cancel()
+            retarget.forEach { $0.cancel() }
+            retarget = []
             model.on = false
             panel?.orderOut(nil)
             syncTerminalOpacity(forceTranslucent: true)
@@ -63,16 +67,57 @@ final class FocusPulse {
     private func watch(_ pid: pid_t) {
         if let o = observer { CFRunLoopRemoveSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(o), .defaultMode) }
         observer = nil
+        watchedWindow = nil
         var created: AXObserver?
-        let callback: AXObserverCallback = { _, _, _, refcon in
+        let callback: AXObserverCallback = { _, element, notification, refcon in
             guard let refcon else { return }
-            Unmanaged<FocusPulse>.fromOpaque(refcon).takeUnretainedValue().focusChanged()
+            let self_ = Unmanaged<FocusPulse>.fromOpaque(refcon).takeUnretainedValue()
+            let name = (notification as String)
+            if name == (kAXFocusedWindowChangedNotification as String) {
+                self_.attachWindowNotifications(element)
+                self_.focusChanged()
+            } else {
+                // move / resize while the pulse is visible — retarget without restarting the bloom
+                self_.retargetVisiblePulse()
+            }
         }
         guard AXObserverCreate(pid, callback, &created) == .success, let o = created else { return }
-        guard AXObserverAddNotification(o, AXUIElementCreateApplication(pid), kAXFocusedWindowChangedNotification as CFString,
-                                        Unmanaged.passUnretained(self).toOpaque()) == .success else { return }
+        let appEl = AXUIElementCreateApplication(pid)
+        let ref = Unmanaged.passUnretained(self).toOpaque()
+        guard AXObserverAddNotification(o, appEl, kAXFocusedWindowChangedNotification as CFString, ref) == .success else { return }
         CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(o), .defaultMode)
         observer = o
+        var win: CFTypeRef?
+        if AXUIElementCopyAttributeValue(appEl, kAXFocusedWindowAttribute as CFString, &win) == .success,
+           let win, CFGetTypeID(win) == AXUIElementGetTypeID() {
+            attachWindowNotifications(win as! AXUIElement)
+        }
+    }
+
+    private func attachWindowNotifications(_ element: AXUIElement) {
+        guard let o = observer else { return }
+        let ref = Unmanaged.passUnretained(self).toOpaque()
+        if let prev = watchedWindow, CFEqual(prev, element) == false {
+            AXObserverRemoveNotification(o, prev, kAXWindowMovedNotification as CFString)
+            AXObserverRemoveNotification(o, prev, kAXWindowResizedNotification as CFString)
+        }
+        // Focused-window-changed may pass the app element; resolve to the window when needed.
+        var win: CFTypeRef? = element
+        var role: CFTypeRef?
+        if AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &role) == .success,
+           (role as? String) == (kAXApplicationRole as String) {
+            AXUIElementCopyAttributeValue(element, kAXFocusedWindowAttribute as CFString, &win)
+        }
+        guard let win, CFGetTypeID(win) == AXUIElementGetTypeID() else { return }
+        let window = win as! AXUIElement
+        _ = AXObserverAddNotification(o, window, kAXWindowMovedNotification as CFString, ref)
+        _ = AXObserverAddNotification(o, window, kAXWindowResizedNotification as CFString, ref)
+        watchedWindow = window
+    }
+
+    private func retargetVisiblePulse() {
+        guard model.on, let next = focusedFrame() else { return }
+        panel?.setFrame(next.insetBy(dx: -10, dy: -10), display: true)
     }
 
     func focusChanged() {
@@ -120,28 +165,76 @@ final class FocusPulse {
         guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
               !FileManager.default.fileExists(atPath: home + "/.config/veil/generated/quiet") else { return }
         pending?.cancel()
-        // a beat for Rift to settle the window before its frame is read
-        let w = DispatchWorkItem { [weak self] in self?.bloom() }
+        retarget.forEach { $0.cancel() }
+        retarget = []
+        // Beat for Rift to place the window before the first frame read.
+        let w = DispatchWorkItem { [weak self] in self?.bloom(track: true) }
         pending = w
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1, execute: w)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12, execute: w)
     }
 
-    /// The focused window's frame in AppKit coordinates (origin bottom-left of the primary screen).
+    /// Quartz (AX / CGWindow, origin top-left of main display) → AppKit (origin bottom-left).
+    private func quartzToAppKit(_ quartz: CGRect) -> CGRect {
+        let primary = NSScreen.screens.first { $0.frame.origin == .zero } ?? NSScreen.screens[0]
+        return CGRect(
+            x: quartz.origin.x,
+            y: primary.frame.maxY - quartz.origin.y - quartz.height,
+            width: quartz.width,
+            height: quartz.height
+        )
+    }
+
+    /// Prefer CGWindowList bounds (matches on-screen pixels); fall back to AX position/size.
     private func focusedFrame() -> CGRect? {
         guard let app = NSWorkspace.shared.frontmostApplication,
-              app.processIdentifier != ProcessInfo.processInfo.processIdentifier else { return nil }  // not our own panels
-        var win: CFTypeRef?, posV: CFTypeRef?, sizeV: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(AXUIElementCreateApplication(app.processIdentifier), kAXFocusedWindowAttribute as CFString, &win) == .success,
+              app.processIdentifier != ProcessInfo.processInfo.processIdentifier else { return nil }
+        let pid = app.processIdentifier
+
+        var win: CFTypeRef?, posV: CFTypeRef?, sizeV: CFTypeRef?, titleV: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(AXUIElementCreateApplication(pid), kAXFocusedWindowAttribute as CFString, &win) == .success,
               let win, CFGetTypeID(win) == AXUIElementGetTypeID() else { return nil }
-        let w = win as! AXUIElement
-        AXUIElementCopyAttributeValue(w, kAXPositionAttribute as CFString, &posV)
-        AXUIElementCopyAttributeValue(w, kAXSizeAttribute as CFString, &sizeV)
+        let axWin = win as! AXUIElement
+        AXUIElementCopyAttributeValue(axWin, kAXPositionAttribute as CFString, &posV)
+        AXUIElementCopyAttributeValue(axWin, kAXSizeAttribute as CFString, &sizeV)
+        AXUIElementCopyAttributeValue(axWin, kAXTitleAttribute as CFString, &titleV)
         var pos = CGPoint.zero, size = CGSize.zero
         guard let posV, let sizeV, CFGetTypeID(posV) == AXValueGetTypeID(), CFGetTypeID(sizeV) == AXValueGetTypeID(),
               AXValueGetValue(posV as! AXValue, .cgPoint, &pos), AXValueGetValue(sizeV as! AXValue, .cgSize, &size),
-              size.width > 120, size.height > 80, let primary = NSScreen.screens.first else { return nil }
-        let frame = CGRect(x: pos.x, y: primary.frame.maxY - pos.y - size.height, width: size.width, height: size.height)
-        // Finder's desktop and true fullscreen windows fill the display — a pulse there is a full-screen ring.
+              size.width > 120, size.height > 80 else { return nil }
+        let axTitle = titleV as? String ?? ""
+        let axQuartz = CGRect(origin: pos, size: size)
+
+        // CGWindowList uses the same top-left space as AX; pick the best on-screen match for this PID.
+        var quartz = axQuartz
+        let opts: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
+        if let info = CGWindowListCopyWindowInfo(opts, kCGNullWindowID) as? [[String: Any]] {
+            let candidates = info.compactMap { row -> CGRect? in
+                guard (row[kCGWindowOwnerPID as String] as? pid_t) == pid,
+                      (row[kCGWindowLayer as String] as? Int) == 0,
+                      let b = row[kCGWindowBounds as String] as? [String: Any],
+                      let x = b["X"] as? CGFloat, let y = b["Y"] as? CGFloat,
+                      let w = b["Width"] as? CGFloat, let h = b["Height"] as? CGFloat,
+                      w > 120, h > 80 else { return nil }
+                return CGRect(x: x, y: y, width: w, height: h)
+            }
+            if let titled = info.first(where: { row in
+                (row[kCGWindowOwnerPID as String] as? pid_t) == pid
+                    && (row[kCGWindowLayer as String] as? Int) == 0
+                    && !axTitle.isEmpty
+                    && (row[kCGWindowName as String] as? String) == axTitle
+            }), let b = titled[kCGWindowBounds as String] as? [String: Any],
+               let x = b["X"] as? CGFloat, let y = b["Y"] as? CGFloat,
+               let w = b["Width"] as? CGFloat, let h = b["Height"] as? CGFloat {
+                quartz = CGRect(x: x, y: y, width: w, height: h)
+            } else if let nearest = candidates.min(by: {
+                abs($0.midX - axQuartz.midX) + abs($0.midY - axQuartz.midY)
+                    < abs($1.midX - axQuartz.midX) + abs($1.midY - axQuartz.midY)
+            }) {
+                quartz = nearest
+            }
+        }
+
+        let frame = quartzToAppKit(quartz)
         if let screen = NSScreen.screens.first(where: { $0.frame.intersects(frame) }) ?? NSScreen.main {
             let area = frame.width * frame.height, screenArea = screen.frame.width * screen.frame.height
             if screenArea > 0, area / screenArea > 0.92 { return nil }
@@ -149,7 +242,7 @@ final class FocusPulse {
         return frame
     }
 
-    private func bloom() {
+    private func bloom(track: Bool) {
         guard enabled, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion, let f = focusedFrame() else { return }
         fade?.cancel()
         cleanup?.cancel()
@@ -162,18 +255,36 @@ final class FocusPulse {
             return p
         }()
         panel = w
-        w.contentView = NSHostingView(rootView: FocusPulseView(m: model, color: palette()["cyan"]))
-        w.setFrame(frame, display: false)
-        model.on = false
-        w.orderFrontRegardless()
-        withAnimation(.spring(response: 0.22, dampingFraction: 0.82)) { model.on = true }
+        if !(w.contentView is NSHostingView<FocusPulseView>) {
+            w.contentView = NSHostingView(rootView: FocusPulseView(m: model, color: palette()["cyan"]))
+        }
+        w.setFrame(frame, display: true)
+        if !model.on {
+            model.on = false
+            w.orderFrontRegardless()
+            withAnimation(.spring(response: 0.22, dampingFraction: 0.82)) { model.on = true }
+        } else {
+            w.orderFrontRegardless()
+        }
         let fade = DispatchWorkItem { [weak self] in
             withAnimation(.easeIn(duration: 0.34)) { self?.model.on = false }
         }
         let cleanup = DispatchWorkItem { [weak self] in self?.panel?.orderOut(nil) }
         self.fade = fade
         self.cleanup = cleanup
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.22, execute: fade)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.62, execute: cleanup)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.28, execute: fade)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.68, execute: cleanup)
+
+        guard track else { return }
+        // Re-stick while Rift finishes the focus animation (border was reading mid-tween frames).
+        retarget.forEach { $0.cancel() }
+        retarget = [0.08, 0.20, 0.36].map { delay in
+            let item = DispatchWorkItem { [weak self] in
+                guard let self, self.model.on, let next = self.focusedFrame() else { return }
+                self.panel?.setFrame(next.insetBy(dx: -10, dy: -10), display: true)
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: item)
+            return item
+        }
     }
 }

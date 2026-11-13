@@ -72,9 +72,9 @@
     "semantic_hash": ""
   },
   "bin/veil": {
-    "mtime": 1794573728.437823,
-    "seen": 1794573817.3960052,
-    "ast_hash": "fca428d915df9b066f45d48495b9d0fb",
+    "mtime": 1794574664.9866927,
+    "seen": 1794574764.2363882,
+    "ast_hash": "bf88fd711169fe0e298649f450414a60",
     "semantic_hash": ""
   },
   "bin/veil-baseline": {
@@ -120,9 +120,9 @@
     "semantic_hash": ""
   },
   "launcher/focus.swift": {
-    "mtime": 1794546333.8521721,
-    "seen": 1794570665.733227,
-    "ast_hash": "322565a8ed00cc777f968677ec9380c3",
+    "mtime": 1794574727.8232145,
+    "seen": 1794574764.236392,
+    "ast_hash": "4dcb7a985df15659335b37ff97aa0494",
     "semantic_hash": ""
   },
   "launcher/integrations.swift": {
@@ -198,9 +198,9 @@
     "semantic_hash": ""
   },
   "templates/bordersrc": {
-    "mtime": 1793480062.594553,
-    "seen": 1794570665.733231,
-    "ast_hash": "9c63af5ea893275acb914a6404d884d9",
+    "mtime": 1794574659.908449,
+    "seen": 1794574764.2364001,
+    "ast_hash": "cc61002cfe4360fd5a9a584a9c723471",
     "semantic_hash": ""
   },
   "templates/cursor.json": {
