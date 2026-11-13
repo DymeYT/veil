@@ -195,6 +195,12 @@ music_panel() {
         else . end' <<<"$snapshot") || return
       ;;
     mouse.clicked)
+      # Animated Veil music panel by default; SketchyBar popup is the opt-in fallback.
+      if [ ! -f "$HOME/.config/veil/generated/features/enable-sketchybar-popups" ] \
+         && [ ! -f "$HOME/.config/veil/generated/features/disable-animated-panels" ]; then
+        "$HOME/.local/bin/veil" music-popup >/dev/null 2>&1 || true
+        return
+      fi
       if sketchybar --query music | jq -e '.popup.drawing == "on" or .popup.drawing == true' >/dev/null; then
         sketchybar --set music popup.drawing=off
         return
@@ -334,6 +340,12 @@ case "$NAME" in
   fi ;;
  city)
   if [[ "$SENDER" == mouse.clicked ]]; then
+   # Animated Veil control panel by default; SketchyBar popup when sketchybar-popups is enabled.
+   if [ ! -f "$HOME/.config/veil/generated/features/enable-sketchybar-popups" ] \
+      && [ ! -f "$HOME/.config/veil/generated/features/disable-animated-panels" ]; then
+     "$HOME/.local/bin/veil" panel control >/dev/null 2>&1 || true
+     exit 0
+   fi
    # one status line, read when the panel opens: no background polling for readings that are off the bar
    # quiet mode is the user's switch (veil quiet); Reduce Motion is the system's, and is reported on its own
    quiet=OFF; [ -f "$HOME/.config/veil/generated/quiet" ] && quiet=ON

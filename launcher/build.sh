@@ -9,7 +9,7 @@ stage="$out/Veil Search.app"
 keep_stage=false
 trap '[ "$keep_stage" = true ] || rm -rf "$out"' EXIT
 mkdir -p "$stage/Contents/MacOS"
-if ! swiftc -O -swift-version 5 -o "$stage/Contents/MacOS/veil-search" main.swift splash.swift extras.swift sources.swift integrations.swift osd.swift focus.swift mode.swift review-render.swift > "$out/build.log" 2>&1; then
+if ! swiftc -O -swift-version 5 -framework ScreenCaptureKit -o "$stage/Contents/MacOS/veil-search" main.swift splash.swift extras.swift sources.swift integrations.swift osd.swift focus.swift mode.swift review-render.swift bar.swift > "$out/build.log" 2>&1; then
   cat "$out/build.log"; echo "build failed; installed Veil Search preserved"; exit 1
 fi
 cat "$out/build.log"
@@ -28,6 +28,7 @@ cat > "$stage/Contents/Info.plist" <<PLIST
   <key>NSContactsUsageDescription</key><string>Veil Search shows matching contacts when you search a name.</string>
   <key>NSCalendarsFullAccessUsageDescription</key><string>Veil Search shows upcoming events and creates events you type.</string>
   <key>NSRemindersFullAccessUsageDescription</key><string>Veil Search creates reminders you type.</string>
+  <key>NSScreenCaptureUsageDescription</key><string>Veil Search captures live window previews for Workspace Overview.</string>
   <key>LSMinimumSystemVersion</key><string>14.0</string>
 </dict></plist>
 PLIST

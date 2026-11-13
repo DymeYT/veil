@@ -138,6 +138,7 @@ PLIST
   ;;
  dismiss-popups)
   sketchybar --set music popup.drawing=off --set clock popup.drawing=off --set keys popup.drawing=off --set city popup.drawing=off 2>/dev/null || true
+  osascript -l JavaScript -e "ObjC.import('Foundation'); \$.NSDistributedNotificationCenter.defaultCenter.postNotificationNameObjectUserInfoDeliverImmediately('app.veil.panel', 'dismiss', \$(), true)" >/dev/null 2>&1 || true
   rift-cli execute mission-control dismiss >/dev/null 2>&1 || true
   # Hide Veil Search. Object is epoch-ms so a hide posted BEFORE a newer show is ignored (dismiss→overview race).
   _veil_hide_ts=$(/usr/bin/python3 -c 'import time; print(int(time.time()*1000))' 2>/dev/null || date +%s000)
@@ -152,8 +153,17 @@ PLIST
   osascript -l JavaScript -e "ObjC.import('Foundation'); \$.NSDistributedNotificationCenter.defaultCenter.postNotificationNameObjectUserInfoDeliverImmediately('app.veil.search.show', 'theme', \$(), true)" >/dev/null 2>&1 || true
   ;;
  music-popup)
-  # Fresh Now Playing open (media-control first). Prefer this over bare popup.drawing=on.
-  exec "$HOME/.config/sketchybar/plugins/veil.sh" music mouse.clicked
+  # Animated Veil panel by default; SketchyBar popup when sketchybar-popups is enabled.
+  if [ -f "$HOME/.config/veil/generated/features/enable-sketchybar-popups" ] \
+     || [ -f "$HOME/.config/veil/generated/features/disable-animated-panels" ]; then
+    exec "$HOME/.config/sketchybar/plugins/veil.sh" music mouse.clicked
+  fi
+  osascript -l JavaScript -e "ObjC.import('Foundation'); \$.NSDistributedNotificationCenter.defaultCenter.postNotificationNameObjectUserInfoDeliverImmediately('app.veil.panel', 'music', \$(), true)" >/dev/null 2>&1 || true
+  ;;
+ panel)
+  # Animated control/music/keys panels hosted by Veil Search.
+  kind=${2:-control}
+  osascript -l JavaScript -e "ObjC.import('Foundation'); \$.NSDistributedNotificationCenter.defaultCenter.postNotificationNameObjectUserInfoDeliverImmediately('app.veil.panel', '$kind', \$(), true)" >/dev/null 2>&1 || true
   ;;
  saver-preview)
   # Safe in-process preview — never launches ScreenSaverEngine / never locks.
@@ -218,8 +228,8 @@ PLIST
   # SIP-gated features may be fully implemented now; they stay off overnight and
   # activate after wake when SIP is off — see tools/sip-nowplaying/README.md
   V="$HOME/.config/veil"; F="$V/generated/features"; mkdir -p "$F"
-  on_by_default='music-popup clock-calendar cider-bridge screensaver-sync'
-  off_by_default='sip-nowplaying'
+  on_by_default='music-popup clock-calendar cider-bridge screensaver-sync animated-panels veil-bar'
+  off_by_default='sip-nowplaying sketchybar-popups'
   known="$on_by_default $off_by_default"
   is_known() { echo " $known " | grep -q " $1 "; }
   is_opt_in() { echo " $off_by_default " | grep -q " $1 "; }
@@ -234,17 +244,27 @@ PLIST
       if [ -f "$F/enable-$name" ]; then state=on; else state=off; fi
       printf '  %-20s %s  (opt-in' "$name" "$state"
       [ "$name" = sip-nowplaying ] && printf '; SIP-gated — see tools/sip-nowplaying/README.md'
+      [ "$name" = sketchybar-popups ] && printf '; SketchyBar popup fallback during Veil-bar transition'
       printf ')\n'
     done ;;
    disable)
     name=${3:?feature name}; is_known "$name" || { echo "unknown feature: $name (want: $known)"; exit 1; }
     if is_opt_in "$name"; then
       rm -f "$F/enable-$name"
+      case "$name" in
+       sketchybar-popups)
+        osascript -l JavaScript -e "ObjC.import('Foundation'); \$.NSDistributedNotificationCenter.defaultCenter.postNotificationNameObjectUserInfoDeliverImmediately('app.veil.search.theme', \$(), \$(), true)" >/dev/null 2>&1 || true
+        ;;
+      esac
     else
       touch "$F/disable-$name"
       case "$name" in
        music-popup|clock-calendar) veil-theme apply "$(cat "$V/current")" ;;
        screensaver-sync) python3 "$V/screensaver/sync.py" "$V" --remove 2>/dev/null || true ;;
+       veil-bar)
+        sketchybar --bar hidden=off 2>/dev/null || true
+        osascript -l JavaScript -e "ObjC.import('Foundation'); \$.NSDistributedNotificationCenter.defaultCenter.postNotificationNameObjectUserInfoDeliverImmediately('app.veil.search.theme', \$(), \$(), true)" >/dev/null 2>&1 || true
+        ;;
       esac
     fi
     echo "disabled $name" ;;
@@ -261,15 +281,21 @@ PLIST
         else
           echo "enabled sip-nowplaying (SIP disabled — helper preferred when it returns data)"
         fi
+      elif [ "$name" = sketchybar-popups ]; then
+        sketchybar --bar hidden=off 2>/dev/null || true
+        echo "enabled sketchybar-popups (SketchyBar strip + popups; animated Veil panels step aside)"
       fi
     else
       rm -f "$F/disable-$name"
       case "$name" in
        music-popup|clock-calendar|screensaver-sync) veil-theme apply "$(cat "$V/current")" ;;
+       veil-bar|animated-panels)
+        osascript -l JavaScript -e "ObjC.import('Foundation'); \$.NSDistributedNotificationCenter.defaultCenter.postNotificationNameObjectUserInfoDeliverImmediately('app.veil.search.theme', \$(), \$(), true)" >/dev/null 2>&1 || true
+        ;;
       esac
       echo "enabled $name"
     fi ;;
    *) echo "usage: veil feature [list|enable NAME|disable NAME]"; exit 1 ;;
   esac ;;
-  *) printf '%s\n' 'Veil: veil off | on [THEME] | toggle | quiet | normal | toggle-quiet | feature | pause | reload | recover | quit | keys | overview | themes | music-popup | dismiss-popups | saver-preview | launch | term | btop | status | selftest' ;;
+  *) printf '%s\n' 'Veil: veil off | on [THEME] | toggle | quiet | normal | toggle-quiet | feature | pause | reload | recover | quit | keys | overview | themes | music-popup | panel | dismiss-popups | saver-preview | launch | term | btop | status | selftest' ;;
 esac

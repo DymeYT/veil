@@ -50,8 +50,9 @@ System Settings → Wallpaper → Screen Saver → Custom → Other. Its artwork
 | Something looks broken | `veil selftest`, then `veil recover` |
 
 Overview shows every Rift workspace, including empty ones. Use the arrow keys to navigate,
-Tab to cycle, Return to activate, and Esc to close. Drag a window card to move it to another
-workspace. Cards use app icons and titles, so Overview works without Screen Recording access.
+Tab to cycle, Return to activate, and Esc to close. Cards show live window previews via
+ScreenCaptureKit when Veil Search has Screen Recording access; otherwise they fall back to
+an app-icon mosaic so Overview still works without that permission.
 
 ## How theming works
 

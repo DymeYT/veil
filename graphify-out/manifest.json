@@ -1,0 +1,542 @@
+{
+  "art/symbols/arasaka-logo.json": {
+    "mtime": 1793142242.0592117,
+    "seen": 1794570665.733217,
+    "ast_hash": "7c4d462dbb652657418200d7fa0ed9e3",
+    "semantic_hash": ""
+  },
+  "art/symbols/ashina-crest.json": {
+    "mtime": 1793155584.650519,
+    "seen": 1794570665.7332191,
+    "ast_hash": "3ebb1a09a16b487073f186a9f9724a88",
+    "semantic_hash": ""
+  },
+  "art/symbols/brand-of-sacrifice.json": {
+    "mtime": 1793125335.466244,
+    "seen": 1794570665.73322,
+    "ast_hash": "3cbc53966b14c901a98dea6d07c5651e",
+    "semantic_hash": ""
+  },
+  "art/symbols/darksign.json": {
+    "mtime": 1793155687.488435,
+    "seen": 1794570665.733221,
+    "ast_hash": "09b71982d456d9d8d7fe3f0443769c57",
+    "semantic_hash": ""
+  },
+  "art/symbols/elden-ring-sigil.json": {
+    "mtime": 1793155711.0273538,
+    "seen": 1794570665.733221,
+    "ast_hash": "595ae3c173321ac903a0c11c1121ca7d",
+    "semantic_hash": ""
+  },
+  "art/symbols/factorio-gear.json": {
+    "mtime": 1793142242.903371,
+    "seen": 1794570665.733221,
+    "ast_hash": "2eb1ced4cc1c3ef9cd0b0d7f1a2eb003",
+    "semantic_hash": ""
+  },
+  "art/symbols/hornet-needle.json": {
+    "mtime": 1793155698.9175315,
+    "seen": 1794570665.7332218,
+    "ast_hash": "abda344e616aa177fc5595a54d8fc2ec",
+    "semantic_hash": ""
+  },
+  "art/symbols/knight-mask.json": {
+    "mtime": 1793155699.2155805,
+    "seen": 1794570665.7332218,
+    "ast_hash": "928c57d5bca279b4d0a8027556e31dd8",
+    "semantic_hash": ""
+  },
+  "art/symbols/night-city-emblem.json": {
+    "mtime": 1793142242.9041147,
+    "seen": 1794570665.733223,
+    "ast_hash": "10f799fdf639d10990083614540e53cf",
+    "semantic_hash": ""
+  },
+  "art/symbols/umbra-disc.json": {
+    "mtime": 1794547268.3347955,
+    "seen": 1794570665.733223,
+    "ast_hash": "d518f31c9d453476303b2f92e25670b5",
+    "semantic_hash": ""
+  },
+  "art/symbols/wings-of-freedom.json": {
+    "mtime": 1793155699.5158567,
+    "seen": 1794570665.733223,
+    "ast_hash": "0d8604d3bcc6d12fbdcd562051b734b7",
+    "semantic_hash": ""
+  },
+  "bin/metrics.c": {
+    "mtime": 1794546685.155711,
+    "seen": 1794570665.733224,
+    "ast_hash": "37315cb5ec56dae32f7ea7ca941abdcf",
+    "semantic_hash": ""
+  },
+  "bin/veil": {
+    "mtime": 1794570529.1273773,
+    "seen": 1794570665.733224,
+    "ast_hash": "bda4044a8525805612ab699977721a47",
+    "semantic_hash": ""
+  },
+  "bin/veil-baseline": {
+    "mtime": 1793304510.3982854,
+    "seen": 1794570665.733224,
+    "ast_hash": "bac6f77b58ff6f108e9ea7ac800e5524",
+    "semantic_hash": ""
+  },
+  "bin/veil-theme": {
+    "mtime": 1794555912.9747517,
+    "seen": 1794570665.7332249,
+    "ast_hash": "a7fdfb6a952d9d66f37b7457221ab5f1",
+    "semantic_hash": ""
+  },
+  "install.sh": {
+    "mtime": 1794546892.5721126,
+    "seen": 1794570665.7332249,
+    "ast_hash": "9ad5baff0bfb9d06b7e1155388887f91",
+    "semantic_hash": ""
+  },
+  "launcher/aliases.json": {
+    "mtime": 1793157628.8574638,
+    "seen": 1794570665.7332249,
+    "ast_hash": "f783d828213d3b53e27ab17a176a11ca",
+    "semantic_hash": ""
+  },
+  "launcher/bar.swift": {
+    "mtime": 1794570500.0100048,
+    "seen": 1794570665.733226,
+    "ast_hash": "916265d5efad8a781cc26f5c4ee70f01",
+    "semantic_hash": ""
+  },
+  "launcher/build.sh": {
+    "mtime": 1794570509.6521068,
+    "seen": 1794570665.733226,
+    "ast_hash": "f05f7d689f785e7b1105f2fcd8976976",
+    "semantic_hash": ""
+  },
+  "launcher/extras.swift": {
+    "mtime": 1794546374.9591427,
+    "seen": 1794570665.733226,
+    "ast_hash": "f363d7d75d8673e2ece2ec9650d5bb36",
+    "semantic_hash": ""
+  },
+  "launcher/focus.swift": {
+    "mtime": 1794546333.8521721,
+    "seen": 1794570665.733227,
+    "ast_hash": "322565a8ed00cc777f968677ec9380c3",
+    "semantic_hash": ""
+  },
+  "launcher/integrations.swift": {
+    "mtime": 1794546212.3532443,
+    "seen": 1794570665.733227,
+    "ast_hash": "46776428e4925450023afe160468af18",
+    "semantic_hash": ""
+  },
+  "launcher/main.swift": {
+    "mtime": 1794570551.6286252,
+    "seen": 1794570665.733227,
+    "ast_hash": "fe32e8c286634ca0e5f5b7c9b7c2355e",
+    "semantic_hash": ""
+  },
+  "launcher/make-signing-identity.sh": {
+    "mtime": 1793291658.012994,
+    "seen": 1794570665.733228,
+    "ast_hash": "6a1d1a94776ca80be74c60597bcc6071",
+    "semantic_hash": ""
+  },
+  "launcher/mode.swift": {
+    "mtime": 1793910460.3867629,
+    "seen": 1794570665.733228,
+    "ast_hash": "c6e024166ef20c093d953dce76c8ef76",
+    "semantic_hash": ""
+  },
+  "launcher/osd.swift": {
+    "mtime": 1794546300.8390677,
+    "seen": 1794570665.7332292,
+    "ast_hash": "29466f607d7007b1ced0b2cba6f57997",
+    "semantic_hash": ""
+  },
+  "launcher/review-render.swift": {
+    "mtime": 1794548505.819474,
+    "seen": 1794570665.7332292,
+    "ast_hash": "03a9a2c061b1d8e8aa4c902f1b15524d",
+    "semantic_hash": ""
+  },
+  "launcher/scripts/ip.sh": {
+    "mtime": 1793292134.0752895,
+    "seen": 1794570665.7332292,
+    "ast_hash": "cb29fa1c032d85cdc4d02d5785326977",
+    "semantic_hash": ""
+  },
+  "launcher/sources.swift": {
+    "mtime": 1794546727.6457076,
+    "seen": 1794570665.73323,
+    "ast_hash": "6a592fe5f79d64a5a73c36cfa59bfbea",
+    "semantic_hash": ""
+  },
+  "launcher/splash.swift": {
+    "mtime": 1794570227.44434,
+    "seen": 1794570665.73323,
+    "ast_hash": "08a46957f77f5962609c637a128ce2c6",
+    "semantic_hash": ""
+  },
+  "screensaver/Veil.swift": {
+    "mtime": 1794547200.513265,
+    "seen": 1794570665.73323,
+    "ast_hash": "2341fab2a13d1e59a690b2967bf4f1d0",
+    "semantic_hash": ""
+  },
+  "screensaver/build.sh": {
+    "mtime": 1794546555.4869053,
+    "seen": 1794570665.733231,
+    "ast_hash": "39839e6b726befe1b65be9e29c52ab97",
+    "semantic_hash": ""
+  },
+  "screensaver/sync.py": {
+    "mtime": 1794546482.082129,
+    "seen": 1794570665.733231,
+    "ast_hash": "0a26e26e3735a276ce50608b6e7e8636",
+    "semantic_hash": ""
+  },
+  "templates/bordersrc": {
+    "mtime": 1793480062.594553,
+    "seen": 1794570665.733231,
+    "ast_hash": "9c63af5ea893275acb914a6404d884d9",
+    "semantic_hash": ""
+  },
+  "templates/cursor.json": {
+    "mtime": 1793103163.7540076,
+    "seen": 1794570665.733232,
+    "ast_hash": "afcc6c8f52e62d59c87192eed346612f",
+    "semantic_hash": ""
+  },
+  "templates/launcher.json": {
+    "mtime": 1793332232.3349397,
+    "seen": 1794570665.733232,
+    "ast_hash": "d6566177379c7d6a9ace49ec362a0b2a",
+    "semantic_hash": ""
+  },
+  "templates/nvim.lua": {
+    "mtime": 1794570241.8539717,
+    "seen": 1794570665.733232,
+    "ast_hash": "070b0ad4fcfc1fc83a818f8a9a779214",
+    "semantic_hash": ""
+  },
+  "templates/sketchybar/plugins/calendar.sh": {
+    "mtime": 1794548510.4746325,
+    "seen": 1794570665.733233,
+    "ast_hash": "e1cc6ac8aef254ecf8076bd386f90dec",
+    "semantic_hash": ""
+  },
+  "templates/sketchybar/plugins/mode-event.sh": {
+    "mtime": 1794546515.9823,
+    "seen": 1794570665.733233,
+    "ast_hash": "645880d442e5a9a4b1d44a885b1d39e7",
+    "semantic_hash": ""
+  },
+  "templates/sketchybar/plugins/subscribe-rift.sh": {
+    "mtime": 1794546632.6242583,
+    "seen": 1794570665.733233,
+    "ast_hash": "703cba39ec7dba1f92ed551a7b9d93d1",
+    "semantic_hash": ""
+  },
+  "templates/sketchybar/plugins/veil.sh": {
+    "mtime": 1794570545.3660035,
+    "seen": 1794570665.733233,
+    "ast_hash": "d2de7c29ed61e798c36c52810d09f581",
+    "semantic_hash": ""
+  },
+  "templates/sketchybar/plugins/workspace-event.sh": {
+    "mtime": 1794570180.7011797,
+    "seen": 1794570665.733234,
+    "ast_hash": "b57f4fe1cca0f0618d8c5ba3e6365938",
+    "semantic_hash": ""
+  },
+  "templates/sketchybar/sketchybarrc": {
+    "mtime": 1794570179.5970626,
+    "seen": 1794570665.733234,
+    "ast_hash": "11c46844260d7a58c47efc83824e86f6",
+    "semantic_hash": ""
+  },
+  "test_theme.py": {
+    "mtime": 1794547268.3350768,
+    "seen": 1794570665.733235,
+    "ast_hash": "c62bbdc28f445e46a972a7566b45928c",
+    "semantic_hash": ""
+  },
+  "tests/test_baseline.py": {
+    "mtime": 1793304510.4350138,
+    "seen": 1794570665.733235,
+    "ast_hash": "b5bfc4b598c3ecc0577604e9d9c8eab4",
+    "semantic_hash": ""
+  },
+  "tools/compare_themes.py": {
+    "mtime": 1793300723.2731888,
+    "seen": 1794570665.733235,
+    "ast_hash": "1f41f9368b92334d03054233a2974ee9",
+    "semantic_hash": ""
+  },
+  "tools/saver-preview/SaverPreview.swift": {
+    "mtime": 1794552691.3984292,
+    "seen": 1794570665.733236,
+    "ast_hash": "f3487661927838d4ecf9786a425fdf9f",
+    "semantic_hash": ""
+  },
+  "tools/saver-preview/run.sh": {
+    "mtime": 1794550831.9121497,
+    "seen": 1794570665.733236,
+    "ast_hash": "4777a303922803fb2af429d473a8273e",
+    "semantic_hash": ""
+  },
+  "tools/sip-nowplaying/NowPlayingSip.swift": {
+    "mtime": 1794550104.6008854,
+    "seen": 1794570665.733236,
+    "ast_hash": "b023c9eb7c915d49b3e7fdbc40dd73c9",
+    "semantic_hash": ""
+  },
+  "tools/sip-nowplaying/build.sh": {
+    "mtime": 1794550155.271275,
+    "seen": 1794570665.733237,
+    "ast_hash": "694d784dd95ef17c327d5edee290f609",
+    "semantic_hash": ""
+  },
+  "tools/veil-wallpaper.swift": {
+    "mtime": 1793327897.289784,
+    "seen": 1794570665.733237,
+    "ast_hash": "1d5487f9fff9e359e738615eb676dbb8",
+    "semantic_hash": ""
+  },
+  "uninstall.sh": {
+    "mtime": 1794546512.0193608,
+    "seen": 1794570665.733237,
+    "ast_hash": "7a1f386580fdd54d68bd58418643b450",
+    "semantic_hash": ""
+  },
+  "README.md": {
+    "mtime": 1794570659.1905737,
+    "seen": 1794570665.733237,
+    "ast_hash": "bd61fd1c0055c1faf71ac5d2bb42b5d3",
+    "semantic_hash": ""
+  },
+  "art/arasaka.notes.md": {
+    "mtime": 1793328337.2197888,
+    "seen": 1794570665.733238,
+    "ast_hash": "a94528766b03d813fea020689047d17f",
+    "semantic_hash": ""
+  },
+  "art/dark-souls-3.notes.md": {
+    "mtime": 1793196505.7757251,
+    "seen": 1794570665.733238,
+    "ast_hash": "deee6c31f590468776016c4b7a1558b4",
+    "semantic_hash": ""
+  },
+  "art/eclipse.notes.md": {
+    "mtime": 1793219328.571594,
+    "seen": 1794570665.733238,
+    "ast_hash": "30a49ec13c95ae639b1b57cbfda3b022",
+    "semantic_hash": ""
+  },
+  "art/elden-ring.notes.md": {
+    "mtime": 1793196505.7621143,
+    "seen": 1794570665.733239,
+    "ast_hash": "f4d8147a614d0914de1cb4fe8080ceaa",
+    "semantic_hash": ""
+  },
+  "art/factorio.notes.md": {
+    "mtime": 1793219262.4508955,
+    "seen": 1794570665.733239,
+    "ast_hash": "dbebb605dd426403dc3594cc93a966d7",
+    "semantic_hash": ""
+  },
+  "art/hallownest.notes.md": {
+    "mtime": 1793306498.6436536,
+    "seen": 1794570665.733239,
+    "ast_hash": "412497238e1761c7c4baedf55b9ef529",
+    "semantic_hash": ""
+  },
+  "art/night-city.notes.md": {
+    "mtime": 1793158400.5010989,
+    "seen": 1794570665.7332401,
+    "ast_hash": "267208f1bd9a68f8cbe2ffad6d79ca26",
+    "semantic_hash": ""
+  },
+  "art/nyc.notes.md": {
+    "mtime": 1793155764.3449867,
+    "seen": 1794570665.7332401,
+    "ast_hash": "7f9c5d1e0fa3bf29bfb0cd3dd7e75d36",
+    "semantic_hash": ""
+  },
+  "art/paradis.notes.md": {
+    "mtime": 1793155979.1570337,
+    "seen": 1794570665.7332401,
+    "ast_hash": "c8daeb545cc65ef233a4c0c1edf66368",
+    "semantic_hash": ""
+  },
+  "art/sekiro.notes.md": {
+    "mtime": 1793196505.7693048,
+    "seen": 1794570665.733241,
+    "ast_hash": "c6145876c2db44a28226a3333e254bfb",
+    "semantic_hash": ""
+  },
+  "art/symbols/arasaka-logo.notes.md": {
+    "mtime": 1793155545.7826133,
+    "seen": 1794570665.733241,
+    "ast_hash": "5ba094fcd1f1d67a1e27981aa661f474",
+    "semantic_hash": ""
+  },
+  "art/symbols/ashina-crest.notes.md": {
+    "mtime": 1793155765.4548728,
+    "seen": 1794570665.733241,
+    "ast_hash": "615b6d6d235b61ad020442954674d1f1",
+    "semantic_hash": ""
+  },
+  "art/symbols/brand-of-sacrifice.notes.md": {
+    "mtime": 1793125335.4663486,
+    "seen": 1794570665.733242,
+    "ast_hash": "6f5e3b9de0a43be762b75cf0c0aabb18",
+    "semantic_hash": ""
+  },
+  "art/symbols/darksign.notes.md": {
+    "mtime": 1793158400.5013857,
+    "seen": 1794570665.733242,
+    "ast_hash": "c525cf2cd22aeb14bc96361cdeddd27f",
+    "semantic_hash": ""
+  },
+  "art/symbols/elden-ring-sigil.notes.md": {
+    "mtime": 1793155765.4483643,
+    "seen": 1794570665.733242,
+    "ast_hash": "8fb620b60d0658c7499e307d2d1bfd29",
+    "semantic_hash": ""
+  },
+  "art/symbols/factorio-gear.notes.md": {
+    "mtime": 1793155545.7906573,
+    "seen": 1794570665.733242,
+    "ast_hash": "d21b47419c98c8e235a77ce4ec802837",
+    "semantic_hash": ""
+  },
+  "art/symbols/hornet-needle.notes.md": {
+    "mtime": 1793155749.2212155,
+    "seen": 1794570665.733243,
+    "ast_hash": "92faecd4037613e7ee1d664b91b8b117",
+    "semantic_hash": ""
+  },
+  "art/symbols/knight-mask.notes.md": {
+    "mtime": 1793155749.2299638,
+    "seen": 1794570665.733243,
+    "ast_hash": "7f48bc610e39472a9db87a02204a2b49",
+    "semantic_hash": ""
+  },
+  "art/symbols/night-city-emblem.notes.md": {
+    "mtime": 1793155545.7978325,
+    "seen": 1794570665.733243,
+    "ast_hash": "9d8571d271abcb8c2ca751d0db74bc23",
+    "semantic_hash": ""
+  },
+  "art/symbols/umbra-disc.notes.md": {
+    "mtime": 1794547268.3392394,
+    "seen": 1794570665.733244,
+    "ast_hash": "87a1e805abd8319f385195fb5439c476",
+    "semantic_hash": ""
+  },
+  "art/symbols/wings-of-freedom.notes.md": {
+    "mtime": 1793155749.23897,
+    "seen": 1794570665.733244,
+    "ast_hash": "5a7d4bc648872b78f4937020ab20aa96",
+    "semantic_hash": ""
+  },
+  "art/umbra.notes.md": {
+    "mtime": 1794547268.3415785,
+    "seen": 1794570665.733244,
+    "ast_hash": "9d2c68c3ca269ea01690034bed83a097",
+    "semantic_hash": ""
+  },
+  "rift/README.md": {
+    "mtime": 1794546383.7654266,
+    "seen": 1794570665.733245,
+    "ast_hash": "a1b9875b9b7ee73f906e2c030cbd3024",
+    "semantic_hash": ""
+  },
+  "screensaver/README.md": {
+    "mtime": 1794546505.5484717,
+    "seen": 1794570665.733245,
+    "ast_hash": "98c2dfdd071ecaa07451a5986838d06c",
+    "semantic_hash": ""
+  },
+  "themes/ECOSYSTEMS.md": {
+    "mtime": 1794570205.5087593,
+    "seen": 1794570665.733245,
+    "ast_hash": "26f9452240a9ddba7ea1a888b8cee137",
+    "semantic_hash": ""
+  },
+  "tools/sip-nowplaying/README.md": {
+    "mtime": 1794550121.2869365,
+    "seen": 1794570665.7332458,
+    "ast_hash": "088d772823b3f6ebe9eafed02e221418",
+    "semantic_hash": ""
+  },
+  "art/symbols/arasaka-logo.svg": {
+    "mtime": 1793142242.0595167,
+    "seen": 1794570665.7332458,
+    "ast_hash": "b5029451a23804ec927ec562db247939",
+    "semantic_hash": ""
+  },
+  "art/symbols/ashina-crest.svg": {
+    "mtime": 1793155584.6512296,
+    "seen": 1794570665.7332458,
+    "ast_hash": "7987662bb50c8d0863848525457d0e20",
+    "semantic_hash": ""
+  },
+  "art/symbols/brand-of-sacrifice.svg": {
+    "mtime": 1793125335.4663029,
+    "seen": 1794570665.733247,
+    "ast_hash": "0a8eb9f764a72f4b910123b347873e42",
+    "semantic_hash": ""
+  },
+  "art/symbols/darksign.svg": {
+    "mtime": 1793155687.488748,
+    "seen": 1794570665.733247,
+    "ast_hash": "236657d03c3ebdc95469aa8fc8b25d9b",
+    "semantic_hash": ""
+  },
+  "art/symbols/elden-ring-sigil.svg": {
+    "mtime": 1793155711.0281088,
+    "seen": 1794570665.733247,
+    "ast_hash": "edf58b431b53da463e7cc691e917a86f",
+    "semantic_hash": ""
+  },
+  "art/symbols/factorio-gear.svg": {
+    "mtime": 1793142242.9037797,
+    "seen": 1794570665.733248,
+    "ast_hash": "ca9d90d1b3aa6c3cc56ec0a63a2b110e",
+    "semantic_hash": ""
+  },
+  "art/symbols/hornet-needle.svg": {
+    "mtime": 1793155698.917702,
+    "seen": 1794570665.733248,
+    "ast_hash": "0d1c2e4b08ba3b9b67e1943e3bc3354d",
+    "semantic_hash": ""
+  },
+  "art/symbols/knight-mask.svg": {
+    "mtime": 1793155699.2157807,
+    "seen": 1794570665.733249,
+    "ast_hash": "7eaaebe6ebc4661cd042b91dd42d405e",
+    "semantic_hash": ""
+  },
+  "art/symbols/night-city-emblem.svg": {
+    "mtime": 1793142242.9041967,
+    "seen": 1794570665.733249,
+    "ast_hash": "743f32f06951c06764af94e09a74a7ac",
+    "semantic_hash": ""
+  },
+  "art/symbols/wings-of-freedom.svg": {
+    "mtime": 1793155699.5163457,
+    "seen": 1794570665.733249,
+    "ast_hash": "0b939ecf26a9a7d251cd2786a273aec4",
+    "semantic_hash": ""
+  },
+  "art/umbra.jpg": {
+    "mtime": 1794547268.3101537,
+    "seen": 1794570665.7332501,
+    "ast_hash": "053033dec94813688dcc9acb65f0210c",
+    "semantic_hash": ""
+  }
+}

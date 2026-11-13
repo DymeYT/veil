@@ -519,6 +519,8 @@ final class Model: NSObject, ObservableObject {
     @Published var palette = Palette.load()
     @Published var searchingFiles = false
     @Published var windows: [Int: [Win]] = [:]
+    /// Live window thumbnails for Workspace Overview (ScreenCaptureKit / app-icon fallback).
+    @Published var overviewThumbs: [Int: [WinThumb]] = [:]
     @Published var shown = false
     /// Exclusive launcher surface — overview and theme gallery never share card sources.
     enum Surface: Equatable { case search, overview, themes }
@@ -902,6 +904,10 @@ final class Model: NSObject, ObservableObject {
             ? [Item(kind: .answer, title: "No workspaces", subtitle: "Theme vocabulary missing",
                     symbol: "rectangle.grid.2x2", action: .copy(""), score: 0)]
             : cards
+        // Live window list for thumbnails (Rift window_server_id → ScreenCaptureKit).
+        let rift = riftWorkspaces()
+        windows = riftWindows(rift)
+        overviewThumbs = riftWindowsDetailed(rift)
         // Cards first, then exclusive surface — prevents gallery bleed for one paint cycle.
         overviewCards = safe
         themeCards = []
@@ -1634,6 +1640,7 @@ struct OverviewCard: View {
     let palette: Palette
     let selected: Bool
     let index: Int
+    var windows: [WinThumb] = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -1644,24 +1651,24 @@ struct OverviewCard: View {
                     .padding(.horizontal, 8).padding(.vertical, 4)
                     .background(RoundedRectangle(cornerRadius: 6).fill(selected ? palette["yellow"] : palette["surface"]))
                 Spacer(minLength: 6)
-                Image(systemName: item.symbol)
-                    .font(.system(size: 16, weight: .semibold))
+                Text(windows.isEmpty ? "empty" : "\(windows.count) win")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
                     .foregroundStyle(selected ? palette["cyan"] : palette["dim"])
             }
+            OverviewWindowStrip(thumbs: windows, palette: palette)
             Text(item.title)
-                .font(.system(size: 22, weight: .bold, design: .monospaced))
+                .font(.system(size: 18, weight: .bold, design: .monospaced))
                 .foregroundStyle(palette["fg"])
-                .lineLimit(2)
+                .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityLabel(item.title)
             Text(item.subtitle)
                 .font(.system(size: 11, weight: .medium, design: .monospaced))
                 .foregroundStyle(palette["dim"])
-                .lineLimit(2)
-            Spacer(minLength: 0)
+                .lineLimit(1)
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, minHeight: 128, alignment: .topLeading)
+        .padding(12)
+        .frame(maxWidth: .infinity, minHeight: 168, alignment: .topLeading)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(selected ? palette["selection"] : palette["surface"])
@@ -1672,6 +1679,7 @@ struct OverviewCard: View {
         )
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Workspace \(item.title)")
+        .pressable()
     }
 }
 
@@ -2028,7 +2036,8 @@ struct LauncherView: View {
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 2), spacing: 12) {
                         ForEach(Array(cards.enumerated()), id: \.element.id) { index, item in
                             Button { m.activate(index) } label: {
-                                OverviewCard(item: item, palette: p, selected: index == m.selected, index: index)
+                                OverviewCard(item: item, palette: p, selected: index == m.selected, index: index,
+                                             windows: m.overviewThumbs[index] ?? [])
                             }
                             .buttonStyle(.plain)
                             .id(index)
@@ -2424,6 +2433,8 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 self.splash = nil
                 MediaKeys.shared.stop()
                 FocusPulse.shared.setEnabled(false)
+                VeilBarController.shared.stop()
+                VeilPanelHost.shared.dismiss()
                 self.band.reload(Palette.load())
             } else {
                 FocusPulse.shared.setEnabled(true)
@@ -2431,6 +2442,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 // Spotlight lets go of ⌘Space a beat after its shortcut is switched off
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { self.registerSearchKey() }
                 self.band.reload(Palette.load())
+                VeilBarController.shared.start()
             }
             ClipHistory.shared.syncPolling()
         }
@@ -2526,6 +2538,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             self.model.palette = Palette.load()
             self.model.ncCache = ncItems(liveWorkspaceNames(paletteWS: self.model.wsNames))
             self.band.reload(self.model.palette)
+            if veilIsOff || !VeilFeature.veilBar { VeilBarController.shared.stop() } else { VeilBarController.shared.start() }
             if self.model.shown {
                 if self.model.surface == .overview {
                     self.model.enterOverview()
@@ -2549,9 +2562,24 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         StateWatch.shared.start()
         FocusPulse.shared.palette = { [weak self] in self?.model.palette ?? Palette.load() }
         FocusPulse.shared.start()
+        // Custom Veil bar + animated music/control panels (SketchyBar fallback via feature flags).
+        if !veilIsOff { VeilBarController.shared.start() }
+        DistributedNotificationCenter.default().addObserver(forName: Notification.Name("app.veil.panel"), object: nil, queue: .main) { n in
+            let raw = ((n.object as? String) ?? "").lowercased()
+            switch raw {
+            case "music": VeilPanelHost.shared.toggle(.music)
+            case "control", "city": VeilPanelHost.shared.toggle(.control)
+            case "keys": VeilPanelHost.shared.toggle(.keys)
+            case "dismiss", "off": VeilPanelHost.shared.dismiss()
+            default: break
+            }
+        }
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
                                                          object: nil, queue: .main) { [weak self] _ in self?.syncWindowMotion() }
-        NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in self?.band.reload(Palette.load()) }
+        NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.band.reload(Palette.load())
+            if !veilIsOff, VeilFeature.veilBar { VeilBarController.shared.start() }
+        }
     }
 
     // Follow a live accessibility change without polling or waiting for a theme reapply.
