@@ -279,11 +279,14 @@ case "$THEME" in
     sketchybar --set city popup.height=30 popup.background.border_color=0xfffcee09 popup.background.border_width=1
     sketchybar --set music.track label.font="$F_CHIP" --set music.source label.color=0xfffcee09
     ;;
-  umbra)  # quiet luxury: taller music sheet + pearl hairline
-    sketchybar --set city popup.height=32 popup.background.corner_radius=12 popup.background.border_color=0x6691cee0
-    sketchybar --set music popup.height=36 \
-      --set music.track label.font="$F_CHIP" label.padding_left=16 label.padding_right=16 \
-      --set music.source label.color=0xff91cee0
+  umbra)  # quiet luxury: deeper music sheet + pearl hairline (unixporn panel depth)
+    sketchybar --set city popup.height=34 popup.background.corner_radius=12 popup.background.border_color=0x8091cee0 popup.background.border_width=1
+    sketchybar --set music popup.height=40 popup.background.corner_radius=12 popup.background.border_color=0x8091cee0 \
+      --set music.source label.font="$F_SMALL" label.color=0xff91cee0 label.padding_left=16 label.padding_right=16 \
+      --set music.track label.font="$F_CHIP" label.padding_left=16 label.padding_right=16 label.color=0xfff3f6f8 \
+      --set music.detail label.padding_left=16 label.padding_right=16 \
+      --set music.toggle background.color=0xff19222c background.corner_radius=8 \
+      --set music.previous icon.padding_left=10 --set music.next icon.padding_right=10
     ;;
   elden-ring)
     sketchybar --set city popup.height=32 popup.background.corner_radius=12 popup.background.border_color=0x66fcee09

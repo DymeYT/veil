@@ -33,7 +33,8 @@ struct Palette {
     static func load(_ path: String = ncRoot + "/generated/launcher.json") -> Palette {
         var p = Palette()
         let url = URL(fileURLWithPath: path)
-        let raw = (try? JSONSerialization.jsonObject(with: Data(contentsOf: url))) as? [String: String] ?? [:]
+        // .uncached: theme apply atomically replaces this file; a mapped cache kept stale ws after brand updates.
+        let raw = (try? JSONSerialization.jsonObject(with: Data(contentsOf: url, options: [.uncached]))) as? [String: String] ?? [:]
         let fallback = ["bg_float": "0e1524", "bg_dark": "070a12", "surface": "151b2d", "border": "26324a",
                         "selection": "26385a", "line": "334563", "comment": "76849c", "dim": "8794ad",
                         "fg": "d9f4ff", "white": "ffffff", "cyan": "00e5ff", "magenta": "ff4fbc", "yellow": "fcee09", "green": "5af7a5"]
@@ -291,6 +292,95 @@ let settingsPanes: [(String, String, String)] = [
     ("VPN", "com.apple.NetworkExtensionSettingsUI.NESettingsUIExtension", "lock.shield"), ("Siri", "com.apple.Siri-Settings.extension", "waveform"),
 ]
 
+private let sketchybarBin: String = {
+    for path in ["/opt/homebrew/bin/sketchybar", "/usr/local/bin/sketchybar", home + "/.local/bin/sketchybar"] {
+        if FileManager.default.isExecutableFile(atPath: path) { return path }
+    }
+    return "/opt/homebrew/bin/sketchybar"
+}()
+
+/// Live workspace vocabulary — same source SketchyBar / Rift use after `veil-theme apply`.
+/// Always reread from disk (never trust a cached palette `ws` string alone).
+func liveWorkspaceNames(paletteWS: [String] = []) -> [String] {
+    // 1) SketchyBar live labels (exact bar truth when the bar is up)
+    var fromBar: [String] = []
+    for i in 0..<5 {
+        let p = Process(), pipe = Pipe()
+        p.executableURL = URL(fileURLWithPath: sketchybarBin)
+        p.arguments = ["--query", "ws.\(i)"]
+        p.standardOutput = pipe
+        p.standardError = FileHandle.nullDevice
+        guard (try? p.run()) != nil else { break }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        p.waitUntilExit()
+        guard p.terminationStatus == 0,
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { break }
+        let label = ((obj["label"] as? [String: Any])?["value"] as? String)
+            ?? ((obj["icon"] as? [String: Any])?["value"] as? String)
+            ?? ""
+        let name = label.trimmingCharacters(in: .whitespaces)
+            .replacingOccurrences(of: "•", with: "")
+            .trimmingCharacters(in: .whitespaces)
+        if name.isEmpty { break }
+        fromBar.append(name)
+    }
+    if fromBar.count == 5 {
+        return fromBar
+    }
+
+    // 2) Rift config workspace_names (hot-reloaded by the WM; written with the bar)
+    if let data = try? Data(contentsOf: URL(fileURLWithPath: home + "/.config/rift/config.toml"), options: [.uncached]),
+       let text = String(data: data, encoding: .utf8) {
+        let re = try? NSRegularExpression(pattern: "workspace_names\\s*=\\s*\\[([^\\]]*)\\]", options: [])
+        let ns = text as NSString
+        if let match = re?.firstMatch(in: text, range: NSRange(location: 0, length: ns.length)), match.numberOfRanges > 1 {
+            let body = ns.substring(with: match.range(at: 1))
+            var names: [String] = []
+            let quoted = try? NSRegularExpression(pattern: "\"([^\"]+)\"")
+            let bns = body as NSString
+            quoted?.enumerateMatches(in: body, range: NSRange(location: 0, length: bns.length)) { m, _, _ in
+                guard let m, m.numberOfRanges > 1 else { return }
+                names.append(bns.substring(with: m.range(at: 1)))
+            }
+            if names.count >= 5 {
+                let out = Array(names.prefix(5))
+                return out
+            }
+        }
+    }
+
+    // 3) Fresh launcher.json (veil-theme output)
+    let fresh = Palette.load()
+    let fromLauncher = fresh.s("ws", "").split(separator: " ").map(String.init).filter { !$0.isEmpty }
+    if fromLauncher.count >= 5 {
+        let out = Array(fromLauncher.prefix(5))
+        return out
+    }
+
+    // 4) Current theme.toml [strings]/style] ws= (same token veil-theme expands into the bar)
+    if let idData = try? Data(contentsOf: URL(fileURLWithPath: ncRoot + "/current"), options: [.uncached]),
+       let id = String(data: idData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+       let tomlData = try? Data(contentsOf: URL(fileURLWithPath: ncRoot + "/themes/\(id).toml"), options: [.uncached]),
+       let toml = String(data: tomlData, encoding: .utf8) {
+        let re = try? NSRegularExpression(pattern: "(?m)^ws\\s*=\\s*\"([^\"]+)\"")
+        let ns = toml as NSString
+        var last = ""
+        re?.enumerateMatches(in: toml, range: NSRange(location: 0, length: ns.length)) { m, _, _ in
+            guard let m, m.numberOfRanges > 1 else { return }
+            last = ns.substring(with: m.range(at: 1))
+        }
+        let names = last.split(separator: " ").map(String.init).filter { !$0.isEmpty }
+        if names.count >= 5 {
+            let out = Array(names.prefix(5))
+            return out
+        }
+    }
+
+    // 5) Caller palette / default
+    if paletteWS.count >= 5 { return Array(paletteWS.prefix(5)) }
+    return ["ONE", "TWO", "THREE", "FOUR", "FIVE"]
+}
+
 func ncItems(_ ws: [String]) -> [Item] {
     let nc = home + "/.local/bin/veil"
     var items: [Item] = []
@@ -437,9 +527,9 @@ final class Model: NSObject, ObservableObject {
     private var loadingShortcuts = false
 
     func refresh(updateHiddenResults: Bool = false) {
-        let newPalette = Palette.load()
-        if palette.text != newPalette.text { palette = newPalette }
-        ncCache = ncItems(wsNames)
+        // Always reread launcher.json — theme apply must not leave stale ws/brand in memory.
+        palette = Palette.load()
+        ncCache = ncItems(liveWorkspaceNames(paletteWS: wsNames))
         SourceCache.reload()
         refreshGeneration += 1
         let generation = refreshGeneration
@@ -539,14 +629,18 @@ final class Model: NSObject, ObservableObject {
         }
         if choosingOverview {
             cancelFileSearch()
-            // Live workspace cards — theme-aware Veil Search surface (pairs with Rift mission control).
-            ncCache = ncItems(wsNames)
+            // Live workspace cards — same vocab as SketchyBar/Rift after every theme apply.
+            palette = Palette.load()
+            let names = liveWorkspaceNames(paletteWS: wsNames)
+            ncCache = ncItems(names)
             var cards = ncCache.filter { $0.symbol == "square.grid.2x2" || $0.symbol == "rectangle.grid.2x2" }
             if cards.isEmpty {
                 cards = [Item(kind: .answer, title: "No workspaces", subtitle: "Rift did not report virtual workspaces",
                               symbol: "rectangle.grid.2x2", action: .copy(""), score: 0)]
             }
-            publish(cards)
+            // Bypass publish()'s kind re-sort / top-hit promotion — keep theme vocab order stable.
+            items = cards
+            selected = 0
             return
         }
         if let entries = folderItems(q) {  // "~/Dev/": browse instead of search
@@ -2291,6 +2385,14 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         DistributedNotificationCenter.default().addObserver(forName: Notification.Name("app.veil.search.splash"), object: nil, queue: .main) { [weak self] _ in
             self?.showSplash()
         }
+        // Theme apply finished — drop cached palette/ws so overview matches the bar immediately.
+        DistributedNotificationCenter.default().addObserver(forName: Notification.Name("app.veil.search.theme"), object: nil, queue: .main) { [weak self] _ in
+            guard let self else { return }
+            self.model.palette = Palette.load()
+            self.model.ncCache = ncItems(liveWorkspaceNames(paletteWS: self.model.wsNames))
+            self.band.reload(self.model.palette)
+            if self.model.shown { self.model.search() }
+        }
         // veil-theme: set this image as the desktop picture on every screen
         DistributedNotificationCenter.default().addObserver(forName: Notification.Name("app.veil.search.desktop"), object: nil, queue: .main) { n in
             guard let path = n.object as? String else { return }
@@ -2423,7 +2525,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func showSplash() {
         let p = Palette.load()
         model.palette = p
-        model.ncCache = ncItems(model.wsNames)
+        model.ncCache = ncItems(liveWorkspaceNames(paletteWS: model.wsNames))
         if model.shown { model.search() }
         splash?.orderOut(nil); splash?.contentView = nil
         guard !veilIsOff, let screen = NSScreen.screens.first(where: { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) }) ?? NSScreen.main else { return }
