@@ -256,6 +256,14 @@ func glyphSurfaceItems() -> [Item] {
         ("Add Glyph: Net", "Pin network tile on desktop grid", "wifi", "DESKTOP_ADD:net"),
         ("Add Glyph: Volume", "Pin volume tile on desktop grid", "speaker.wave.2", "DESKTOP_ADD:volume"),
         ("Add Glyph: Media", "Pin now-playing tile on desktop grid", "music.note", "DESKTOP_ADD:media"),
+        ("Remove Glyph: CPU", "Unpin CPU tile from desktop", "trash", "DESKTOP_REMOVE:cpu"),
+        ("Remove Glyph: Memory", "Unpin memory tile from desktop", "trash", "DESKTOP_REMOVE:mem"),
+        ("Remove Glyph: Cava", "Unpin cava tile from desktop", "trash", "DESKTOP_REMOVE:cava"),
+        ("Remove Glyph: Battery", "Unpin battery tile from desktop", "trash", "DESKTOP_REMOVE:battery"),
+        ("Remove Glyph: GPU", "Unpin GPU tile from desktop", "trash", "DESKTOP_REMOVE:gpu"),
+        ("Remove Glyph: Media", "Unpin media tile from desktop", "trash", "DESKTOP_REMOVE:media"),
+        ("Remove Glyph: Quick", "Unpin Quick tile from desktop", "trash", "DESKTOP_REMOVE:quick"),
+        ("Remove Glyph: Clock", "Unpin clock tile from desktop", "trash", "DESKTOP_REMOVE:clock"),
         ("Rice: Nothing", "Apply Nothing OS theme", "circle.fill", "APPLY:nothing"),
     ]
     return surfaces.map { title, sub, sym, kind in
@@ -271,6 +279,13 @@ func glyphSurfaceItems() -> [Item] {
                         action: .run(["/usr/bin/osascript", "-l", "JavaScript", "-e",
                                       "ObjC.import('Foundation'); $.NSDistributedNotificationCenter.defaultCenter.postNotificationNameObjectUserInfoDeliverImmediately('app.veil.desktop-glyphs', 'add:\(gid)', $(), true)"]),
                         score: 88)
+        }
+        if kind.hasPrefix("DESKTOP_REMOVE:") {
+            let gid = String(kind.dropFirst("DESKTOP_REMOVE:".count))
+            return Item(kind: .action, title: title, subtitle: sub, symbol: sym,
+                        action: .run(["/usr/bin/osascript", "-l", "JavaScript", "-e",
+                                      "ObjC.import('Foundation'); $.NSDistributedNotificationCenter.defaultCenter.postNotificationNameObjectUserInfoDeliverImmediately('app.veil.desktop-glyphs', 'remove:\(gid)', $(), true)"]),
+                        score: 87)
         }
         if kind == "DESKTOP" || kind == "DESKTOP_RESET" {
             let notif = kind == "DESKTOP_RESET" ? "reset" : "toggle"

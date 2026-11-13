@@ -72,9 +72,9 @@
     "semantic_hash": ""
   },
   "bin/veil": {
-    "mtime": 1794589231.3748653,
-    "seen": 1794589273.124942,
-    "ast_hash": "121354d00abc131afbb65930aa9435ff",
+    "mtime": 1794591578.4083397,
+    "seen": 1794591906.570987,
+    "ast_hash": "c003ef977a7b681ae75689cd76461ae5",
     "semantic_hash": ""
   },
   "bin/veil-baseline": {
@@ -84,9 +84,9 @@
     "semantic_hash": ""
   },
   "bin/veil-theme": {
-    "mtime": 1794586125.3623598,
-    "seen": 1794586950.1367831,
-    "ast_hash": "feff2ab71e10152cd63f43bb55f5ffcd",
+    "mtime": 1794591577.2914011,
+    "seen": 1794591906.5709891,
+    "ast_hash": "cd5f6e614ab2fceb4353346d63f5b1e8",
     "semantic_hash": ""
   },
   "install.sh": {
@@ -102,21 +102,21 @@
     "semantic_hash": ""
   },
   "launcher/bar.swift": {
-    "mtime": 1794590472.6507072,
-    "seen": 1794590652.89033,
-    "ast_hash": "e1483bf803f547e826d61e38658695c1",
+    "mtime": 1794591903.373648,
+    "seen": 1794591906.57099,
+    "ast_hash": "1779f2a66ca7ea5287ae219ec785cd84",
     "semantic_hash": ""
   },
   "launcher/build.sh": {
-    "mtime": 1794588449.5115016,
-    "seen": 1794588867.136938,
-    "ast_hash": "f3426828fa2b4404645b3a38143042c1",
+    "mtime": 1794591491.1965368,
+    "seen": 1794591906.570991,
+    "ast_hash": "7b3d552197e0a211af87389c911e3bff",
     "semantic_hash": ""
   },
   "launcher/extras.swift": {
-    "mtime": 1794589587.470551,
-    "seen": 1794590652.890332,
-    "ast_hash": "9ab1a6809a2beccbf956f72c1163e485",
+    "mtime": 1794591805.593912,
+    "seen": 1794591906.5709922,
+    "ast_hash": "788e7f6a05c74d7e689040d5f3c0b8d7",
     "semantic_hash": ""
   },
   "launcher/focus.swift": {
@@ -132,9 +132,9 @@
     "semantic_hash": ""
   },
   "launcher/main.swift": {
-    "mtime": 1794590495.6169758,
-    "seen": 1794590652.890334,
-    "ast_hash": "f3758f537efc6339cae4f05851871e85",
+    "mtime": 1794591792.3348472,
+    "seen": 1794591906.5709949,
+    "ast_hash": "20c2f4b4d8cc5a5777eb1fe4232afd60",
     "semantic_hash": ""
   },
   "launcher/make-signing-identity.sh": {
@@ -150,9 +150,9 @@
     "semantic_hash": ""
   },
   "launcher/osd.swift": {
-    "mtime": 1794587187.7284956,
-    "seen": 1794587809.031878,
-    "ast_hash": "e7ee485dbdf9b8b7261fc8b5b4c74a03",
+    "mtime": 1794591896.5339167,
+    "seen": 1794591906.570996,
+    "ast_hash": "68034ecf342ae8907cf98451ef3fb106",
     "semantic_hash": ""
   },
   "launcher/review-render.swift": {
@@ -240,9 +240,9 @@
     "semantic_hash": ""
   },
   "templates/sketchybar/plugins/veil.sh": {
-    "mtime": 1794587880.35956,
-    "seen": 1794588867.13695,
-    "ast_hash": "a86549bd3116f9990e2b422322e43625",
+    "mtime": 1794591442.6229913,
+    "seen": 1794591906.571004,
+    "ast_hash": "12e1a6d3c578f5c64482e84c04fb2ba8",
     "semantic_hash": ""
   },
   "templates/sketchybar/plugins/workspace-event.sh": {
@@ -288,15 +288,15 @@
     "semantic_hash": ""
   },
   "tools/sip-nowplaying/NowPlayingSip.swift": {
-    "mtime": 1794550104.6008854,
-    "seen": 1794570665.733236,
-    "ast_hash": "b023c9eb7c915d49b3e7fdbc40dd73c9",
+    "mtime": 1794591898.031885,
+    "seen": 1794591906.571008,
+    "ast_hash": "43259a464f4ad0adfb9b3635fd2bac97",
     "semantic_hash": ""
   },
   "tools/sip-nowplaying/build.sh": {
-    "mtime": 1794587875.4421124,
-    "seen": 1794588867.136954,
-    "ast_hash": "237948056356a8f360bccd326304692c",
+    "mtime": 1794591822.5797703,
+    "seen": 1794591906.571008,
+    "ast_hash": "33951e5182d155705aee3c5fb83b57cf",
     "semantic_hash": ""
   },
   "tools/veil-wallpaper.swift": {
@@ -576,15 +576,21 @@
     "semantic_hash": ""
   },
   "launcher/desktop-glyphs.swift": {
-    "mtime": 1794590373.4747527,
-    "seen": 1794590652.8903308,
-    "ast_hash": "b3b737fccc4c2930645f7336bce51c8f",
+    "mtime": 1794591786.9916294,
+    "seen": 1794591906.570991,
+    "ast_hash": "cb2bd3be480ecf462c82ad845d885b6d",
     "semantic_hash": ""
   },
   "art/nothing.jpg": {
     "mtime": 1794586392.6180356,
     "seen": 1794587809.031903,
     "ast_hash": "5dd3de52cf6a2790b40c6762ca918f17",
+    "semantic_hash": ""
+  },
+  "launcher/host.swift": {
+    "mtime": 1794591587.1314788,
+    "seen": 1794591906.570994,
+    "ast_hash": "b8267160a4335f6f12c8204a9719b17f",
     "semantic_hash": ""
   }
 }

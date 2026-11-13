@@ -1,8 +1,23 @@
 // Desktop Glyph board: full-desktop snap grid, catalog of tiles, drag + fluent resize.
 // Wallpaper layer; empty chrome click-through. Stable API for unify in-process hosting.
+// VEI-37: remove via AX right-click menu + drag-to-trash (SwiftUI contextMenu never fires — pass-through host).
 import AppKit
 import Combine
 import SwiftUI
+
+/// NSMenu target for AX right-click (board hit-tests nil → SwiftUI menus never open).
+private final class GlyphCtxMenu: NSObject {
+    weak var board: DesktopGlyphBoard?
+    var id: DesktopGlyphID = .cpu
+    @objc func remove() { Task { @MainActor in self.board?.removePin(self.id) } }
+    @objc func reset() { Task { @MainActor in self.board?.resetToDefault() } }
+    @objc func hideAll() { Task { @MainActor in self.board?.toggleEnabled() } }
+    @objc func toggleAdd(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String,
+              let gid = DesktopGlyphID(rawValue: raw) else { return }
+        Task { @MainActor in self.board?.togglePin(gid) }
+    }
+}
 
 enum DesktopGlyphID: String, Codable, CaseIterable, Identifiable {
     case clock, quick, cava, media
@@ -66,6 +81,8 @@ final class DesktopGlyphBoard: ObservableObject {
     @Published var dragTranslation: CGSize = .zero
     @Published var resizeSpan: (cols: Int, rows: Int)?
     @Published var showGridGuides = false
+    /// Drag-to-remove: cursor is over the bottom trash zone.
+    @Published var overTrash = false
 
     /// Full-desktop grid — cells fill usable frame (bar/Dock insets), even gutters.
     let cols = 16
@@ -87,6 +104,7 @@ final class DesktopGlyphBoard: ObservableObject {
     private var dragArmed = false
     private var resizeStartSpan: (cols: Int, rows: Int) = (1, 1)
     private let dragThreshold: CGFloat = 4
+    private var menuTarget: GlyphCtxMenu?
     private var themeId: String { Palette.load().s("theme_id", "nothing") }
     private var storePath: String { ncRoot + "/generated/desktop-glyphs-\(themeId).json" }
     private var legacyStorePath: String { ncRoot + "/generated/desktop-glyphs.json" }
@@ -132,6 +150,7 @@ final class DesktopGlyphBoard: ObservableObject {
         dragging = nil
         resizing = nil
         showGridGuides = false
+        overTrash = false
     }
 
     private func syncTick() {
@@ -169,14 +188,29 @@ final class DesktopGlyphBoard: ObservableObject {
     }
 
     func setPin(_ id: DesktopGlyphID, pinned: Bool) {
+        if !pinned {
+            removePin(id)
+            return
+        }
         if let i = pins.firstIndex(where: { $0.id == id }) {
-            pins[i].pinned = pinned
-        } else if pinned {
+            pins[i].pinned = true
+            pins[i] = placeWithoutOverlap(pins[i])
+        } else {
             pins.append(placeWithoutOverlap(DesktopGlyphPin(
                 id: id, col: 0, row: 0, pinned: true,
                 colSpan: id.defaultSpan.cols, rowSpan: id.defaultSpan.rows)))
         }
         save(); refresh()
+    }
+
+    /// Delete Glyph from the board and persist (VEI-37).
+    func removePin(_ id: DesktopGlyphID) {
+        pins.removeAll { $0.id == id }
+        clearInteraction()
+        save()
+        syncTick()
+        ensureWindow(force: false)
+        objectWillChange.send()
     }
 
     func move(_ id: DesktopGlyphID, toCol col: Int, toRow row: Int) {
@@ -230,7 +264,14 @@ final class DesktopGlyphBoard: ObservableObject {
         let cell = cellAt(point: point, canvas: canvas)
         dragCol = min(cols - pin.spanCols, max(0, cell.col))
         dragRow = min(rows - pin.spanRows, max(0, cell.row))
+        overTrash = trashZone(in: canvas).insetBy(dx: -12, dy: -12).contains(point)
         objectWillChange.send()
+    }
+
+    /// Bottom-center drop target while dragging — release here removes the Glyph.
+    func trashZone(in canvas: CGSize) -> CGRect {
+        let w: CGFloat = 168, h: CGFloat = 52
+        return CGRect(x: (canvas.width - w) / 2, y: canvas.height - h - 28, width: w, height: h)
     }
 
     func updateResize(local point: CGPoint, canvas: CGSize) {
@@ -251,11 +292,21 @@ final class DesktopGlyphBoard: ObservableObject {
 
     func endDrag(commit: Bool) {
         let id = dragging; let c = dragCol; let r = dragRow
+        let dropTrash = overTrash
         dragTranslation = .zero
-        if commit, let id, let c, let r { move(id, toCol: c, toRow: r) }
-        else { clearInteraction(); objectWillChange.send() }
+        if commit, dropTrash, let id {
+            removePin(id)
+        } else if commit, let id, let c, let r {
+            overTrash = false
+            move(id, toCol: c, toRow: r)
+        } else {
+            clearInteraction(); objectWillChange.send()
+        }
         window?.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopIconWindow)) + 2)
     }
+
+    /// Agent/screenshot path — remove without relying on right-click delivery.
+    func proveRemove(_ id: DesktopGlyphID) { removePin(id) }
 
     func endResize(commit: Bool) {
         let id = resizing; let span = resizeSpan
@@ -367,12 +418,17 @@ final class DesktopGlyphBoard: ObservableObject {
         let down: (NSEvent) -> Void = { [weak self] e in Task { @MainActor in self?.onMouseDown(e) } }
         let drag: (NSEvent) -> Void = { [weak self] e in Task { @MainActor in self?.onMouseDragged(e) } }
         let up: (NSEvent) -> Void = { [weak self] e in Task { @MainActor in self?.onMouseUp(e) } }
+        let right: (NSEvent) -> Void = { [weak self] e in Task { @MainActor in self?.onRightMouseDown(e) } }
         for mask in [NSEvent.EventTypeMask.leftMouseDown, .leftMouseDragged, .leftMouseUp] {
             let handler: (NSEvent) -> Void = mask == .leftMouseDown ? down : mask == .leftMouseDragged ? drag : up
             if let g = NSEvent.addGlobalMonitorForEvents(matching: mask, handler: handler) { mouseMonitors.append(g) }
             if let g = NSEvent.addLocalMonitorForEvents(matching: mask, handler: { e in handler(e); return e }) {
                 mouseMonitors.append(g)
             }
+        }
+        if let g = NSEvent.addGlobalMonitorForEvents(matching: .rightMouseDown, handler: right) { mouseMonitors.append(g) }
+        if let g = NSEvent.addLocalMonitorForEvents(matching: .rightMouseDown, handler: { e in right(e); return e }) {
+            mouseMonitors.append(g)
         }
     }
 
@@ -459,6 +515,48 @@ final class DesktopGlyphBoard: ObservableObject {
             default: break
             }
         }
+    }
+
+    private func onRightMouseDown(_ event: NSEvent) {
+        guard enabled, !veilIsOff else { return }
+        let pt = NSEvent.mouseLocation
+        guard let pin = pinAtScreen(pt) else { return }
+        presentPinMenu(for: pin.id, at: pt)
+    }
+
+    /// Context menu that actually works on the wallpaper layer (AX path).
+    func presentPinMenu(for id: DesktopGlyphID, at screenPt: CGPoint) {
+        let target = GlyphCtxMenu()
+        target.board = self
+        target.id = id
+        menuTarget = target
+
+        let menu = NSMenu()
+        let remove = NSMenuItem(title: "Remove \(id.title)", action: #selector(GlyphCtxMenu.remove), keyEquivalent: "")
+        remove.target = target
+        remove.image = NSImage(systemSymbolName: "trash", accessibilityDescription: "Remove")
+        menu.addItem(remove)
+        menu.addItem(NSMenuItem.separator())
+        let reset = NSMenuItem(title: "Reset layout", action: #selector(GlyphCtxMenu.reset), keyEquivalent: "")
+        reset.target = target
+        menu.addItem(reset)
+        let hide = NSMenuItem(title: "Hide all desktop Glyphs", action: #selector(GlyphCtxMenu.hideAll), keyEquivalent: "")
+        hide.target = target
+        menu.addItem(hide)
+        menu.addItem(NSMenuItem.separator())
+        let addRoot = NSMenuItem(title: "Add Glyph", action: nil, keyEquivalent: "")
+        let addSub = NSMenu()
+        for g in DesktopGlyphID.allCases {
+            let on = pins.first(where: { $0.id == g })?.pinned == true
+            let item = NSMenuItem(title: on ? "✓ \(g.title)" : g.title,
+                                  action: #selector(GlyphCtxMenu.toggleAdd(_:)), keyEquivalent: "")
+            item.target = target
+            item.representedObject = g.rawValue
+            addSub.addItem(item)
+        }
+        addRoot.submenu = addSub
+        menu.addItem(addRoot)
+        menu.popUp(positioning: nil, at: screenPt, in: nil)
     }
 
     // MARK: - Window
@@ -645,7 +743,7 @@ struct DesktopGlyphCanvas: View {
                 Color.clear
                 if board.showGridGuides {
                     gridGuides(m).allowsHitTesting(false)
-                    if let preview = board.previewFrame(metrics: m) {
+                    if let preview = board.previewFrame(metrics: m), !board.overTrash {
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
                             .strokeBorder(p["cyan"].opacity(0.55), style: StrokeStyle(lineWidth: 2, dash: [4, 3]))
                             .frame(width: preview.width, height: preview.height)
@@ -653,9 +751,13 @@ struct DesktopGlyphCanvas: View {
                             .allowsHitTesting(false)
                     }
                 }
+                if board.dragging != nil {
+                    trashAffordance(in: geo.size).allowsHitTesting(false)
+                }
                 ForEach(board.pins.filter(\.pinned)) { pin in
                     let frame = board.frame(for: pin, metrics: m)
                     let offset = board.dragging == pin.id ? board.dragTranslation : .zero
+                    let overTrash = board.dragging == pin.id && board.overTrash
                     ZStack(alignment: .bottomTrailing) {
                         widget(pin)
                         // Resize affordance (corner)
@@ -667,17 +769,46 @@ struct DesktopGlyphCanvas: View {
                     .frame(width: frame.width, height: frame.height)
                     .clipShape(RoundedRectangle(cornerRadius: tileRadius, style: .circular))
                     .compositingGroup() // flatten so AA fringe doesn't read as frost
-                    .scaleEffect((board.dragging == pin.id || board.resizing == pin.id) && !reduceMotion ? 1.02 : 1)
+                    .opacity(overTrash ? 0.55 : 1)
+                    .scaleEffect(
+                        overTrash && !reduceMotion ? 0.9
+                        : ((board.dragging == pin.id || board.resizing == pin.id) && !reduceMotion ? 1.02 : 1)
+                    )
                     .offset(offset)
                     .frame(width: frame.width, height: frame.height)
                     .position(x: frame.midX, y: frame.midY)
                     .zIndex(board.dragging == pin.id || board.resizing == pin.id ? 10 : 1)
                     .animation(reduceMotion ? nil : .interactiveSpring(response: 0.28, dampingFraction: 0.86),
-                               value: "\(pin.col),\(pin.row),\(pin.spanCols),\(pin.spanRows)")
+                               value: "\(pin.col),\(pin.row),\(pin.spanCols),\(pin.spanRows),\(board.overTrash)")
                     .allowsHitTesting(false)
                 }
             }
         }
+    }
+
+    private func trashAffordance(in canvas: CGSize) -> some View {
+        let zone = board.trashZone(in: canvas)
+        let hot = board.overTrash
+        return ZStack {
+            RoundedRectangle(cornerRadius: 14, style: .circular)
+                .fill(p["surface"])
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .circular)
+                        .strokeBorder(hot ? p["red"] : p["border"], lineWidth: hot ? 2 : 1)
+                )
+            HStack(spacing: 8) {
+                Image(systemName: "trash")
+                    .font(.system(size: 14, weight: .bold))
+                Text(hot ? "RELEASE TO REMOVE" : "DRAG HERE TO REMOVE")
+                    .font(mono(9))
+                    .tracking(1)
+            }
+            .foregroundStyle(hot ? p["red"] : p["fg"])
+        }
+        .frame(width: zone.width, height: zone.height)
+        .compositingGroup()
+        .position(x: zone.midX, y: zone.midY)
+        .opacity(hot ? 1 : 0.92)
     }
 
     private func gridGuides(_ m: DesktopGlyphBoard.GridMetrics) -> some View {
@@ -882,7 +1013,8 @@ struct DesktopGlyphCanvas: View {
 
     @ViewBuilder
     private func pinMenu(_ id: DesktopGlyphID) -> some View {
-        Button("Unpin \(id.title)") { board.setPin(id, pinned: false) }
+        // Fallback only — real path is AX right-click → NSMenu (pass-through host).
+        Button("Remove \(id.title)", role: .destructive) { board.removePin(id) }
         Button("Reset layout") { board.resetToDefault() }
         Button("Hide all desktop Glyphs") { board.toggleEnabled() }
         Divider()

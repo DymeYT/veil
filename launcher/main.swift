@@ -2465,6 +2465,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 Task { @MainActor in
                     VeilBarController.shared.stop()
                     VeilPanelHost.shared.dismiss()
+                    VeilHost.shared.stopChrome()
                 }
                 self.band.reload(Palette.load())
             } else {
@@ -2473,7 +2474,10 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 // Spotlight lets go of ⌘Space a beat after its shortcut is switched off
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { self.registerSearchKey() }
                 self.band.reload(Palette.load())
-                Task { @MainActor in VeilBarController.shared.start() }
+                Task { @MainActor in
+                    VeilBarController.shared.start()
+                    VeilHost.shared.start()
+                }
             }
             ClipHistory.shared.syncPolling()
         }
@@ -2571,6 +2575,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             self.band.reload(self.model.palette)
             Task { @MainActor in
                 if veilIsOff || !VeilFeature.veilBar { VeilBarController.shared.stop() } else { VeilBarController.shared.start() }
+                if !veilIsOff { VeilHost.shared.reloadBorders() }
             }
             if self.model.shown {
                 if self.model.surface == .overview {
@@ -2595,8 +2600,22 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         StateWatch.shared.start()
         FocusPulse.shared.palette = { [weak self] in self?.model.palette ?? Palette.load() }
         FocusPulse.shared.start()
-        // Custom Veil bar + animated music/control panels (SketchyBar fallback via feature flags).
-        if !veilIsOff { VeilBarController.shared.start() }
+        // Thin in-process bar (default) + supervise borders/Rift under this process.
+        if !veilIsOff {
+            VeilBarController.shared.start()
+            VeilHost.shared.start()
+        }
+        DistributedNotificationCenter.default().addObserver(forName: Notification.Name("app.veil.host"), object: nil, queue: .main) { n in
+            let raw = ((n.object as? String) ?? "").lowercased()
+            Task { @MainActor in
+                switch raw {
+                case "quit-rift", "stop-rift": VeilHost.shared.stopRift()
+                case "start", "recover": VeilHost.shared.start()
+                case "reload-borders": VeilHost.shared.reloadBorders()
+                default: break
+                }
+            }
+        }
         DistributedNotificationCenter.default().addObserver(forName: Notification.Name("app.veil.panel"), object: nil, queue: .main) { n in
             let raw = ((n.object as? String) ?? "").lowercased()
             Task { @MainActor in
@@ -2620,6 +2639,13 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
                     }
                     return
                 }
+                if raw.hasPrefix("remove:") {
+                    let name = String(raw.dropFirst(7))
+                    if let id = DesktopGlyphID(rawValue: name) {
+                        DesktopGlyphBoard.shared.removePin(id)
+                    }
+                    return
+                }
                 switch raw {
                 case "toggle", "on", "off": DesktopGlyphBoard.shared.toggleEnabled()
                 case "refresh", "reload": DesktopGlyphBoard.shared.refresh()
@@ -2627,6 +2653,8 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 case "prove-drag":
                     // Same pipeline as AX mouse drag — for screenshots when CGEvent is blocked.
                     DesktopGlyphBoard.shared.proveDrag(.cava, toCol: 14, toRow: 7)
+                case "prove-remove":
+                    DesktopGlyphBoard.shared.proveRemove(.cava)
                 case "dismiss-panels":
                     VeilPanelHost.shared.dismissImmediate()
                 default: DesktopGlyphBoard.shared.start()
