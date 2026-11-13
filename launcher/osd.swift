@@ -52,7 +52,8 @@ final class OSD {
             w.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary]
             panel = w
         }
-        if theme != p.text || viewFrame != frame {
+        // Compare the live frame, not a cache: display changes can move the panel behind our back.
+        if theme != p.text || viewFrame != frame || w.frame != frame || w.contentView == nil {
             let notchWidth = OSD.notch(screen).map { $0.maxX - $0.minX } ?? 0
             w.contentView = NSHostingView(rootView: OSDView(m: model, p: p, notchWidth: notchWidth).frame(width: frame.width, height: frame.height))
             w.setFrame(frame, display: false)

@@ -56,7 +56,8 @@ enum OutsideClick {
 
     /// Status-bar+ panels that aren't the thin Veil bar or desktop Glyph board.
     @MainActor private static func isOverlayHusk(_ w: NSWindow) -> Bool {
-        guard w.isVisible else { return false }
+        // Click-through chrome (volume/brightness OSD, notch band) is never an overlay to sweep.
+        guard w.isVisible, !w.ignoresMouseEvents else { return false }
         let level = w.level.rawValue
         let barLevel = Int(CGWindowLevelForKey(.dockWindow)) - 1
         let desktopGlyph = Int(CGWindowLevelForKey(.desktopIconWindow)) + 2
