@@ -241,17 +241,17 @@ def restore(backup):
 
 
 def set_wallpaper(theme):
-    """The theme's real art becomes the desktop picture on every screen."""
+    """The theme's real art becomes the desktop picture on every screen (non-blocking)."""
     art = ROOT / "art" / f"{theme['id']}.jpg"
     if not art.is_file():
         return
     # Veil Search sets it per screen through NSWorkspace; System Events covers the case where it isn't running
     js = ("ObjC.import('Foundation'); $.NSDistributedNotificationCenter.defaultCenter"
           f".postNotificationNameObjectUserInfoDeliverImmediately('app.veil.search.desktop', {json.dumps(str(art))}, $(), true)")
-    subprocess.run(["osascript", "-l", "JavaScript", "-e", js], capture_output=True)
-    if subprocess.run(["pgrep", "-xq", "veil-search"]).returncode != 0:
-        subprocess.run(["osascript", "-e", f'tell application "System Events" to tell every desktop to set picture to {json.dumps(str(art))}'],
-                       capture_output=True)
+    subprocess.Popen(["osascript", "-l", "JavaScript", "-e", js], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if subprocess.run(["pgrep", "-xq", "veil-search"], capture_output=True).returncode != 0:
+        subprocess.Popen(["osascript", "-e", f'tell application "System Events" to tell every desktop to set picture to {json.dumps(str(art))}'],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 def sync_screensaver():
@@ -289,11 +289,13 @@ def system_accents(theme):
 // running apps only redraw their accent on these (System Settings sends the same set)
 ['AppleColorPreferencesChangedNotification', 'AppleAquaColorVariantChanged', 'AppleInterfaceThemeChangedNotification', 'NSSystemColorsDidChangeNotification']
   .forEach(n => $.NSDistributedNotificationCenter.defaultCenter.postNotificationNameObjectUserInfoDeliverImmediately(n, $(), $(), true));"""
-    subprocess.run(["osascript", "-l", "JavaScript", "-e", js], capture_output=True)
+    subprocess.Popen(["osascript", "-l", "JavaScript", "-e", js], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     set_wallpaper(theme)
-    # Veil Search shows the theme's boot splash (it rereads generated/launcher.json)
-    subprocess.run(["osascript", "-l", "JavaScript", "-e", "ObjC.import('Foundation'); $.NSDistributedNotificationCenter.defaultCenter"
-                    ".postNotificationNameObjectUserInfoDeliverImmediately('app.veil.search.splash', $(), $(), true)"], capture_output=True)
+    # Boot splash is fire-and-forget — never stall apply on the splash window.
+    subprocess.Popen(["osascript", "-l", "JavaScript", "-e",
+                      "ObjC.import('Foundation'); $.NSDistributedNotificationCenter.defaultCenter"
+                      ".postNotificationNameObjectUserInfoDeliverImmediately('app.veil.search.splash', $(), $(), true)"],
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 
@@ -305,24 +307,24 @@ def _music_feature_on():
     return not (ROOT / "generated/features/disable-music-popup").is_file()
 
 
-def _wait_sketchybar_music(timeout=1.25):
-    """Deterministic settle after --reload: apply does not return until music exists (or feature off)."""
+def _wait_sketchybar_music(timeout=0.45):
+    """Fast settle after --reload: return as soon as music exists (or feature off). Keep short for <500ms feel."""
     if not _music_feature_on():
         return True
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        r = subprocess.run(["sketchybar", "--query", "music"], capture_output=True, text=True, timeout=2)
+        r = subprocess.run(["sketchybar", "--query", "music"], capture_output=True, text=True, timeout=1)
         if r.returncode == 0 and r.stdout.strip().startswith("{"):
             return True
-        time.sleep(0.02)
-    # Last chance: nudge bar update then one more poll window.
-    subprocess.run(["sketchybar", "--update"], capture_output=True, timeout=3)
-    deadline = time.monotonic() + 0.4
+        time.sleep(0.015)
+    # One nudge + brief final poll (do not add hundreds of ms).
+    subprocess.run(["sketchybar", "--update"], capture_output=True, timeout=2)
+    deadline = time.monotonic() + 0.12
     while time.monotonic() < deadline:
-        r = subprocess.run(["sketchybar", "--query", "music"], capture_output=True, text=True, timeout=2)
+        r = subprocess.run(["sketchybar", "--query", "music"], capture_output=True, text=True, timeout=1)
         if r.returncode == 0 and r.stdout.strip().startswith("{"):
             return True
-        time.sleep(0.02)
+        time.sleep(0.015)
     return False
 
 
@@ -362,10 +364,12 @@ def reload_configs(commands, theme_id):
             need_music_settle = True
 
     if need_music_settle:
-        settled = _wait_sketchybar_music()
+        # Brief poll only — do not hold apply for a long settle window (sub-500ms feel).
+        settled = _wait_sketchybar_music(timeout=0.12)
         outcomes.append({"target": "sketchybar-music-settle", "settled": settled})
         if not settled:
-            print("  warning: sketchybar music item not ready after reload settle")
+            # Background nudge; apply has already returned responsiveness to the user.
+            subprocess.Popen(["sketchybar", "--update"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     # Notify Veil Search to drop any cached palette/ws (overview must match bar).
     subprocess.Popen(["osascript", "-l", "JavaScript", "-e",

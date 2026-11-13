@@ -101,11 +101,11 @@ for i in 0 1 2 3 4; do
         busy) args+=(--set "$s" "${base[@]}" background.drawing=off label.color=0xffd9f4ff) ;;
         empty) args+=(--set "$s" "${base[@]}" background.drawing=off label.color=0xff8794ad) ;;
       esac ;;
-    diamond)  # glyph with a small numeral, so ⌥N is findable without counting
+    diamond)  # diamond glyph + workspace NAME (not 1–5); position still maps to ⌥N
       case $state in
-        active) args+=(--set "$s" icon=◆ icon.color=0xff00e5ff label="$((i+1))" label.color=0xffd9f4ff background.drawing=off) ;;
-        busy) args+=(--set "$s" icon=◈ icon.color=0xffd9f4ff label="$((i+1))" label.color=0xff8794ad background.drawing=off) ;;
-        empty) args+=(--set "$s" icon=◇ icon.color=0xff76849c label="$((i+1))" label.color=0xff8794ad background.drawing=off) ;;
+        active) args+=(--set "$s" icon=◆ icon.color=0xff00e5ff label="$n" label.color=0xffd9f4ff background.drawing=off) ;;
+        busy) args+=(--set "$s" icon=◈ icon.color=0xffd9f4ff label="$n" label.color=0xff8794ad background.drawing=off) ;;
+        empty) args+=(--set "$s" icon=◇ icon.color=0xff76849c label="$n" label.color=0xff8794ad background.drawing=off) ;;
       esac ;;
     bracket)  # typewriter: plain type, the active one struck in ink on a plate
       w=(label.width=$(( (${#n} + 2) * 8 )) label.align=center background.corner_radius=0 background.border_width=0)

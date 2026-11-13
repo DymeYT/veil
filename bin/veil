@@ -127,14 +127,19 @@ PLIST
   # Visible product surface: Rift mission control (with window previews) PLUS Veil Search overview grid.
   if ! pgrep -xq veil-search; then
     open -a "$HOME/Applications/Veil Search.app" || true
-    sleep 0.35
+    sleep 0.45
   fi
+  # Mission control first, then Search on top (panel level is statusBar) so workspace cards stay readable.
   rift-cli execute mission-control show-all >/dev/null 2>&1 || true
+  sleep 0.05
   osascript -l JavaScript -e "ObjC.import('Foundation'); \$.NSDistributedNotificationCenter.defaultCenter.postNotificationNameObjectUserInfoDeliverImmediately('app.veil.search.show', 'overview', \$(), true)" >/dev/null 2>&1 || true
   ;;
  dismiss-popups)
   sketchybar --set music popup.drawing=off --set clock popup.drawing=off --set keys popup.drawing=off --set city popup.drawing=off 2>/dev/null || true
   rift-cli execute mission-control dismiss >/dev/null 2>&1 || true
+  # Also hide Veil Search (overview / theme gallery / panel) — Esc + CLI must clear the surface.
+  # object "force" bypasses the brief post-show hide suppression used to beat dismiss→overview races.
+  osascript -l JavaScript -e "ObjC.import('Foundation'); \$.NSDistributedNotificationCenter.defaultCenter.postNotificationNameObjectUserInfoDeliverImmediately('app.veil.search.hide', 'force', \$(), true)" >/dev/null 2>&1 || true
   ;;
  themes)
   # Reliable gallery opener when Cursor steals ⌘T (also: ⌃⌥T global hotkey, Search → theme).

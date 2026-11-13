@@ -299,10 +299,45 @@ private let sketchybarBin: String = {
     return "/opt/homebrew/bin/sketchybar"
 }()
 
-/// Live workspace vocabulary — same source SketchyBar / Rift use after `veil-theme apply`.
-/// Always reread from disk (never trust a cached palette `ws` string alone).
-func liveWorkspaceNames(paletteWS: [String] = []) -> [String] {
-    // 1) SketchyBar live labels (exact bar truth when the bar is up)
+/// True when a bar label is a slot numeral (diamond regression) rather than theme vocabulary.
+func isNumericWorkspaceToken(_ raw: String) -> Bool {
+    let t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    return !t.isEmpty && t.unicodeScalars.allSatisfy { CharacterSet.decimalDigits.contains($0) }
+}
+
+func themeTomlWorkspaceNames() -> [String] {
+    guard let idData = try? Data(contentsOf: URL(fileURLWithPath: ncRoot + "/current"), options: [.uncached]),
+          let id = String(data: idData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+          let tomlData = try? Data(contentsOf: URL(fileURLWithPath: ncRoot + "/themes/\(id).toml"), options: [.uncached]),
+          let toml = String(data: tomlData, encoding: .utf8) else { return [] }
+    let re = try? NSRegularExpression(pattern: "(?m)^ws\\s*=\\s*\"([^\"]+)\"")
+    let ns = toml as NSString
+    var last = ""
+    re?.enumerateMatches(in: toml, range: NSRange(location: 0, length: ns.length)) { m, _, _ in
+        guard let m, m.numberOfRanges > 1 else { return }
+        last = ns.substring(with: m.range(at: 1))
+    }
+    return last.split(separator: " ").map(String.init).filter { !$0.isEmpty }
+}
+
+func riftWorkspaceNames() -> [String] {
+    guard let data = try? Data(contentsOf: URL(fileURLWithPath: home + "/.config/rift/config.toml"), options: [.uncached]),
+          let text = String(data: data, encoding: .utf8) else { return [] }
+    let re = try? NSRegularExpression(pattern: "workspace_names\\s*=\\s*\\[([^\\]]*)\\]", options: [])
+    let ns = text as NSString
+    guard let match = re?.firstMatch(in: text, range: NSRange(location: 0, length: ns.length)), match.numberOfRanges > 1 else { return [] }
+    let body = ns.substring(with: match.range(at: 1))
+    var names: [String] = []
+    let quoted = try? NSRegularExpression(pattern: "\"([^\"]+)\"")
+    let bns = body as NSString
+    quoted?.enumerateMatches(in: body, range: NSRange(location: 0, length: bns.length)) { m, _, _ in
+        guard let m, m.numberOfRanges > 1 else { return }
+        names.append(bns.substring(with: m.range(at: 1)))
+    }
+    return names
+}
+
+func sketchybarWorkspaceNames() -> [String] {
     var fromBar: [String] = []
     for i in 0..<5 {
         let p = Process(), pipe = Pipe()
@@ -315,70 +350,62 @@ func liveWorkspaceNames(paletteWS: [String] = []) -> [String] {
         p.waitUntilExit()
         guard p.terminationStatus == 0,
               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { break }
-        let label = ((obj["label"] as? [String: Any])?["value"] as? String)
-            ?? ((obj["icon"] as? [String: Any])?["value"] as? String)
-            ?? ""
-        let name = label.trimmingCharacters(in: .whitespaces)
+        let label = ((obj["label"] as? [String: Any])?["value"] as? String) ?? ""
+        let icon = ((obj["icon"] as? [String: Any])?["value"] as? String) ?? ""
+        // Prefer label; fall back to icon only when label empty (never prefer a lone numeral over a named icon).
+        var name = label.trimmingCharacters(in: .whitespaces)
             .replacingOccurrences(of: "•", with: "")
             .trimmingCharacters(in: .whitespaces)
-        if name.isEmpty { break }
+        if name.isEmpty || isNumericWorkspaceToken(name) {
+            let iconName = icon.trimmingCharacters(in: .whitespaces)
+            if !iconName.isEmpty && !isNumericWorkspaceToken(iconName)
+                && iconName != "◆" && iconName != "◈" && iconName != "◇" {
+                name = iconName
+            }
+        }
+        if name.isEmpty || isNumericWorkspaceToken(name) { break }
         fromBar.append(name)
     }
-    if fromBar.count == 5 {
-        return fromBar
-    }
+    return fromBar.count == 5 ? fromBar : []
+}
 
-    // 2) Rift config workspace_names (hot-reloaded by the WM; written with the bar)
-    if let data = try? Data(contentsOf: URL(fileURLWithPath: home + "/.config/rift/config.toml"), options: [.uncached]),
-       let text = String(data: data, encoding: .utf8) {
-        let re = try? NSRegularExpression(pattern: "workspace_names\\s*=\\s*\\[([^\\]]*)\\]", options: [])
-        let ns = text as NSString
-        if let match = re?.firstMatch(in: text, range: NSRange(location: 0, length: ns.length)), match.numberOfRanges > 1 {
-            let body = ns.substring(with: match.range(at: 1))
-            var names: [String] = []
-            let quoted = try? NSRegularExpression(pattern: "\"([^\"]+)\"")
-            let bns = body as NSString
-            quoted?.enumerateMatches(in: body, range: NSRange(location: 0, length: bns.length)) { m, _, _ in
-                guard let m, m.numberOfRanges > 1 else { return }
-                names.append(bns.substring(with: m.range(at: 1)))
-            }
-            if names.count >= 5 {
-                let out = Array(names.prefix(5))
-                return out
-            }
-        }
-    }
+/// Live workspace vocabulary — must match the settled bar after `veil-theme apply`.
+/// Never trust cached palette alone; never accept diamond-style numeric 1–5 as vocabulary.
+func liveWorkspaceNames(paletteWS: [String] = []) -> [String] {
+    // 1) SketchyBar live labels when they carry real theme words
+    let fromBar = sketchybarWorkspaceNames()
+    if fromBar.count == 5 { return fromBar }
 
-    // 3) Fresh launcher.json (veil-theme output)
-    let fresh = Palette.load()
-    let fromLauncher = fresh.s("ws", "").split(separator: " ").map(String.init).filter { !$0.isEmpty }
-    if fromLauncher.count >= 5 {
-        let out = Array(fromLauncher.prefix(5))
-        return out
-    }
+    // 2) Theme.toml ws= (canonical vocabulary veil-theme expands into the bar)
+    let fromTheme = themeTomlWorkspaceNames()
+    if fromTheme.count >= 5 { return Array(fromTheme.prefix(5)) }
 
-    // 4) Current theme.toml [strings]/style] ws= (same token veil-theme expands into the bar)
-    if let idData = try? Data(contentsOf: URL(fileURLWithPath: ncRoot + "/current"), options: [.uncached]),
-       let id = String(data: idData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
-       let tomlData = try? Data(contentsOf: URL(fileURLWithPath: ncRoot + "/themes/\(id).toml"), options: [.uncached]),
-       let toml = String(data: tomlData, encoding: .utf8) {
-        let re = try? NSRegularExpression(pattern: "(?m)^ws\\s*=\\s*\"([^\"]+)\"")
-        let ns = toml as NSString
-        var last = ""
-        re?.enumerateMatches(in: toml, range: NSRange(location: 0, length: ns.length)) { m, _, _ in
-            guard let m, m.numberOfRanges > 1 else { return }
-            last = ns.substring(with: m.range(at: 1))
-        }
-        let names = last.split(separator: " ").map(String.init).filter { !$0.isEmpty }
-        if names.count >= 5 {
-            let out = Array(names.prefix(5))
-            return out
-        }
-    }
+    // 3) Rift config workspace_names
+    let fromRift = riftWorkspaceNames()
+    if fromRift.count >= 5 { return Array(fromRift.prefix(5)) }
+
+    // 4) Fresh launcher.json
+    let fromLauncher = Palette.load().s("ws", "").split(separator: " ").map(String.init).filter { !$0.isEmpty }
+    if fromLauncher.count >= 5 { return Array(fromLauncher.prefix(5)) }
 
     // 5) Caller palette / default
     if paletteWS.count >= 5 { return Array(paletteWS.prefix(5)) }
     return ["ONE", "TWO", "THREE", "FOUR", "FIVE"]
+}
+
+/// Overview cards only — never Theme: gallery rows. Titles are bare ws names for OCR/product sync.
+func overviewWorkspaceCards(paletteWS: [String] = []) -> [Item] {
+    let names = liveWorkspaceNames(paletteWS: paletteWS)
+    let rift = home + "/.local/bin/rift-cli"
+    return names.enumerated().map { i, name in
+        Item(kind: .nc,
+             title: name,
+             subtitle: "Workspace \(i + 1)  ⌥\(i + 1)",
+             symbol: "square.grid.2x2",
+             action: .run([rift, "execute", "workspace", "switch", "\(i)"]),
+             score: 10_000 - i,
+             extra: "overview-ws:\(i)")
+    }
 }
 
 func ncItems(_ ws: [String]) -> [Item] {
@@ -493,6 +520,8 @@ final class Model: NSObject, ObservableObject {
     @Published var searchingFiles = false
     @Published var windows: [Int: [Win]] = [:]
     @Published var shown = false
+    /// Dedicated overview surface — not Theme: gallery rows under WORKSPACE OVERVIEW chrome.
+    @Published var overviewActive = false
     var openMouse = NSPoint.zero  // hover selects only after the pointer moves from where it was at open
     var apps: [Item] = []
     var shortcuts: [Item] = []
@@ -614,6 +643,12 @@ final class Model: NSObject, ObservableObject {
                                           symbol: "doc.on.clipboard", action: .copy(""), score: 0)] : clips)
             return
         }
+        // Overview is a dedicated surface — evaluate before empty-query wipe / Theme gallery.
+        if overviewActive || q.lowercased() == "overview" {
+            cancelFileSearch()
+            presentOverviewCards()
+            return
+        }
         if q.isEmpty {
             cancelFileSearch()
             items = []
@@ -621,28 +656,14 @@ final class Model: NSObject, ObservableObject {
             return
         }
         if choosingTheme {
+            overviewActive = false
             cancelFileSearch()
             publish(ncCache.filter { $0.symbol == "paintpalette" }.sorted {
                 ($0.subtitle == "Current theme" ? 0 : 1, $0.title) < ($1.subtitle == "Current theme" ? 0 : 1, $1.title)
             })
             return
         }
-        if choosingOverview {
-            cancelFileSearch()
-            // Live workspace cards — same vocab as SketchyBar/Rift after every theme apply.
-            palette = Palette.load()
-            let names = liveWorkspaceNames(paletteWS: wsNames)
-            ncCache = ncItems(names)
-            var cards = ncCache.filter { $0.symbol == "square.grid.2x2" || $0.symbol == "rectangle.grid.2x2" }
-            if cards.isEmpty {
-                cards = [Item(kind: .answer, title: "No workspaces", subtitle: "Rift did not report virtual workspaces",
-                              symbol: "rectangle.grid.2x2", action: .copy(""), score: 0)]
-            }
-            // Bypass publish()'s kind re-sort / top-hit promotion — keep theme vocab order stable.
-            items = cards
-            selected = 0
-            return
-        }
+        overviewActive = false
         if let entries = folderItems(q) {  // "~/Dev/": browse instead of search
             cancelFileSearch()
             publish(entries); return
@@ -858,15 +879,35 @@ final class Model: NSObject, ObservableObject {
     func move(_ d: Int) { if !items.isEmpty { selected = (selected + d + items.count) % items.count; userMoved = true } }
 
     /// Columns in the result grid (Foundry's console and Cinder's register are two-up); 1 for lists.
-    var choosingTheme: Bool { mode == 0 && query.trimmingCharacters(in: .whitespaces).lowercased() == "theme" }
-    var choosingOverview: Bool { mode == 0 && query.trimmingCharacters(in: .whitespaces).lowercased() == "overview" }
+    var choosingTheme: Bool { mode == 0 && !overviewActive && query.trimmingCharacters(in: .whitespaces).lowercased() == "theme" }
+    var choosingOverview: Bool { overviewActive || (mode == 0 && query.trimmingCharacters(in: .whitespaces).lowercased() == "overview") }
     var gridColumns: Int {
         if choosingTheme { return 3 }
         if choosingOverview { return 2 }
         return ["console", "embers"].contains(palette.s("layout", "")) ? 2 : 1
     }
 
+    func presentOverviewCards() {
+        overviewActive = true
+        mode = 0
+        actionsOpen = false
+        cancelFileSearch()
+        palette = Palette.load()
+        let cards = overviewWorkspaceCards(paletteWS: wsNames)
+        ncCache = ncItems(liveWorkspaceNames(paletteWS: wsNames))
+        // Never filter Theme: rows into this surface — cards are purpose-built.
+        items = cards.isEmpty
+            ? [Item(kind: .answer, title: "No workspaces", subtitle: "Theme vocabulary missing",
+                    symbol: "rectangle.grid.2x2", action: .copy(""), score: 0)]
+            : cards
+        selected = 0
+        if query.trimmingCharacters(in: .whitespaces).lowercased() != "overview" {
+            query = "overview"
+        }
+    }
+
     func toggleThemePicker() {
+        overviewActive = false
         let next = choosingTheme ? "" : "theme"
         mode = 0
         actionsOpen = false
@@ -1549,10 +1590,11 @@ struct OverviewCard: View {
                     .foregroundStyle(selected ? palette["cyan"] : palette["dim"])
             }
             Text(item.title)
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: 22, weight: .bold, design: .monospaced))
                 .foregroundStyle(palette["fg"])
                 .lineLimit(2)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityLabel(item.title)
             Text(item.subtitle)
                 .font(.system(size: 11, weight: .medium, design: .monospaced))
                 .foregroundStyle(palette["dim"])
@@ -1569,6 +1611,8 @@ struct OverviewCard: View {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .strokeBorder(selected ? palette["cyan"] : palette["border"], lineWidth: selected ? 2 : 1)
         )
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Workspace \(item.title)")
     }
 }
 
@@ -2148,13 +2192,16 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var lastToggle = Date.distantPast
     /// Ignore resignKey briefly after show so the panel is not dismissed by the open itself.
     var ignoreResignUntil = Date.distantPast
+    /// Distributed hide from a prior `dismiss-popups` must not win over a just-posted show.
+    var suppressHideUntil = Date.distantPast
 
     func applicationDidFinishLaunching(_ n: Notification) {
         if Model.migrateRankingPrivacy(.standard) { model.usage = [:]; model.history = []; model.pins = []; model.queryChoices = [:] }
         panel = Panel(contentRect: NSRect(x: 0, y: 0, width: 940, height: 640),
                       styleMask: [.borderless, .nonactivatingPanel, .fullSizeContentView], backing: .buffered, defer: false)
         panel.isFloatingPanel = true
-        panel.level = .modalPanel
+        // Above normal / full-screen media apps so overview/theme surfaces stay visible for product use.
+        panel.level = .statusBar
         panel.backgroundColor = .clear
         panel.isOpaque = false
         panel.hasShadow = false
@@ -2207,7 +2254,10 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 }
             }
             switch Int(e.keyCode) {
-            case kVK_Escape:  // Esc clears the query, then the mode, then closes
+            case kVK_Escape:  // Overview: close immediately. Else clear query → mode → close.
+                if self.model.choosingOverview || self.model.overviewActive {
+                    self.hide(); return nil
+                }
                 if !self.model.query.isEmpty { self.model.query = ""; self.model.historyIndex = -1 }
                 else if self.model.mode != 0 { self.model.mode = 0; self.model.search() }
                 else { self.hide() }
@@ -2319,6 +2369,13 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         DistributedNotificationCenter.default().addObserver(forName: Notification.Name("app.veil.search.show"), object: nil, queue: .main) { [weak self] n in
             self?.show(query: n.object as? String ?? "")
         }
+        // veil dismiss-popups / Esc path — hide Search overview/panel entirely
+        DistributedNotificationCenter.default().addObserver(forName: Notification.Name("app.veil.search.hide"), object: nil, queue: .main) { [weak self] n in
+            guard let self else { return }
+            let force = (n.object as? String)?.lowercased() == "force"
+            if !force, Date() < self.suppressHideUntil { return }
+            self.hide()
+        }
         // functional check: top results for one query per feature, written to ~/Library/Caches/veil-search-verify.txt
         DistributedNotificationCenter.default().addObserver(forName: Notification.Name("app.veil.search.verify"), object: nil, queue: .main) { [weak self] _ in
             guard let m = self?.model else { return }
@@ -2391,7 +2448,13 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             self.model.palette = Palette.load()
             self.model.ncCache = ncItems(liveWorkspaceNames(paletteWS: self.model.wsNames))
             self.band.reload(self.model.palette)
-            if self.model.shown { self.model.search() }
+            if self.model.shown {
+                if self.model.overviewActive || self.model.choosingOverview {
+                    self.model.presentOverviewCards()
+                } else {
+                    self.model.search()
+                }
+            }
         }
         // veil-theme: set this image as the desktop picture on every screen
         DistributedNotificationCenter.default().addObserver(forName: Notification.Name("app.veil.search.desktop"), object: nil, queue: .main) { n in
@@ -2483,8 +2546,16 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         guard !veilIsOff, let screen = NSScreen.screens.first(where: { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) }) ?? NSScreen.main else { return }
         ClipHistory.shared.capture()
         MenuItems.frontPID = NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0
+        // Beat a late dismiss-popups hide from the previous surface.
+        suppressHideUntil = Date().addingTimeInterval(0.7)
         model.refresh()
-        if model.query == query { model.search() } else { model.query = query }
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if q == "overview" {
+            model.presentOverviewCards()
+        } else {
+            model.overviewActive = false
+            if model.query == query { model.search() } else { model.query = query }
+        }
         model.selected = 0
         model.openMouse = NSEvent.mouseLocation
         if !(panel.contentView is NSHostingView<LauncherView>) {
@@ -2513,6 +2584,8 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         DispatchQueue.main.async {
             guard self.panel.isVisible else { return }
             self.model.shown = true
+            // Re-assert overview cards after refresh async callbacks cannot race Theme: rows in.
+            if self.model.overviewActive { self.model.presentOverviewCards() }
             if !(self.panel.firstResponder is NSTextView), let field = self.panel.contentView?.firstTextField {
                 self.panel.makeFirstResponder(field)
             }
@@ -2553,13 +2626,20 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     func hide() {
-        guard panel.isVisible else { return }
+        guard panel.isVisible else {
+            model.overviewActive = false
+            return
+        }
         panel.orderOut(nil)
         Scrim.shared.hide()
         model.shown = false
         model.actionsOpen = false
         model.historyIndex = -1
         model.mode = 0
+        model.overviewActive = false
+        if model.query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "overview" {
+            model.query = ""
+        }
         model.cancelFileSearch()
         Weather.shared.cancelPending()
     }
@@ -2614,6 +2694,21 @@ func selftest() -> Never {
         precondition(model.items[model.selected].title == "Theme: Night City")
         model.toggleThemePicker()
         precondition(model.query.isEmpty && model.items.isEmpty)
+    }
+    do {
+        let cards = overviewWorkspaceCards(paletteWS: ["FOCUS", "BUILD", "STUDY", "MEDIA", "FLOAT"])
+        precondition(cards.count == 5)
+        precondition(cards.map(\.title) == ["FOCUS", "BUILD", "STUDY", "MEDIA", "FLOAT"])
+        precondition(cards.allSatisfy { !$0.title.hasPrefix("Theme:") })
+        precondition(isNumericWorkspaceToken("3") && !isNumericWorkspaceToken("WALL"))
+        let model = Model()
+        model.renderingFixture = true
+        model.overviewActive = true
+        model.search()
+        precondition(model.choosingOverview)
+        precondition(model.items.allSatisfy { !$0.title.hasPrefix("Theme:") })
+        model.renderingFixture = false
+        model.cancelFileSearch()
     }
     for typo in ["sfaari", "safri", "safaari", "safary", "xafari"] {
         precondition(score(typo, "Safari").map { $0 >= 510 } == true)
