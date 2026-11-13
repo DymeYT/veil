@@ -541,13 +541,18 @@ struct GlyphRoot: View {
             HStack(alignment: .top, spacing: 40) {
                 VStack(alignment: .leading, spacing: 12) {
                     Text(Date(), style: .time).font(doto(96)).foregroundStyle(fg)
+                        .lineLimit(1).minimumScaleFactor(0.4)
                     Text(dateLine()).font(mono(12)).foregroundStyle(muted).tracking(2)
+                        .lineLimit(1).truncationMode(.tail).minimumScaleFactor(0.7)
                     Text(greeting()).font(ui(28)).foregroundStyle(fg).padding(.top, 12)
+                        .lineLimit(1).truncationMode(.tail).minimumScaleFactor(0.65)
                     HStack(spacing: 16) {
                         Label("0 NOTIFICATIONS", systemImage: "bell").font(mono(10)).foregroundStyle(muted)
+                            .lineLimit(1)
                     }
                 }
-                Spacer()
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .layoutPriority(1)
                 LazyVGrid(columns: [GridItem(.fixed(150)), GridItem(.fixed(150))], spacing: 14) {
                     // Calendar Glyph slot → Quick (calendar remains via clock click / desktop clock).
                     Button { shell.present(.quick) } label: {
@@ -559,15 +564,20 @@ struct GlyphRoot: View {
                         Circle().stroke(Color.white.opacity(0.15), lineWidth: 8)
                         Circle().trim(from: 0, to: 0.55).stroke(p["cyan"], style: StrokeStyle(lineWidth: 8, lineCap: .round))
                             .rotationEffect(.degrees(-90))
-                        Text("CAVA").font(mono(10)).foregroundStyle(muted)
+                        Text("CAVA").font(mono(10)).foregroundStyle(muted).lineLimit(1)
                     }
                     .frame(width: 150, height: 150)
                     .background(Circle().fill(panel))
                 }
-                Text("Calendar · click clock on desktop Glyph or ⌃⌥C")
-                    .font(mono(9)).foregroundStyle(muted)
+                .layoutPriority(0)
             }
             .padding(60)
+            .overlay(alignment: .bottomLeading) {
+                Text("Calendar · click clock on desktop Glyph or ⌃⌥C")
+                    .font(mono(9)).foregroundStyle(muted)
+                    .lineLimit(1).truncationMode(.tail)
+                    .padding(.leading, 60).padding(.bottom, 24)
+            }
             VStack {
                 HStack {
                     Spacer()
@@ -580,10 +590,11 @@ struct GlyphRoot: View {
 
     func homeTile<Content: View>(_ title: String, _ content: Content) -> some View {
         VStack(spacing: 8) {
-            Text(title).font(mono(10)).foregroundStyle(muted)
+            Text(title).font(mono(10)).foregroundStyle(muted).lineLimit(1).minimumScaleFactor(0.7)
             content.foregroundStyle(fg)
         }
         .frame(width: 150, height: 150)
+        .clipped()
         .background(opaquePanel(28))
             .clipShape(RoundedRectangle(cornerRadius: 28, style: .circular))
             .compositingGroup()
@@ -603,8 +614,9 @@ struct GlyphRoot: View {
             .sorted { $0.lastPathComponent < $1.lastPathComponent } ?? []
         return ZStack {
             VStack(alignment: .leading, spacing: 16) {
-                Text("WALLS").font(doto(32)).foregroundStyle(fg)
+                Text("WALLS").font(doto(32)).foregroundStyle(fg).lineLimit(1).minimumScaleFactor(0.6)
                 Text("Wallpapers as dots · pick to apply").font(mono(10)).foregroundStyle(muted)
+                    .lineLimit(1).truncationMode(.tail)
                 ScrollView {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 100), spacing: 10)], spacing: 10) {
                         ForEach(pics, id: \.path) { url in
@@ -620,7 +632,10 @@ struct GlyphRoot: View {
                                 .frame(width: 100, height: 72)
                                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                                 .overlay(Text(url.deletingPathExtension().lastPathComponent)
-                                    .font(mono(8)).foregroundStyle(.white).padding(4), alignment: .bottomLeading)
+                                    .font(mono(8)).foregroundStyle(.white)
+                                    .lineLimit(1).truncationMode(.middle)
+                                    .frame(maxWidth: 92, alignment: .leading)
+                                    .padding(4), alignment: .bottomLeading)
                             }.buttonStyle(.plain)
                         }
                     }
@@ -650,21 +665,26 @@ struct GlyphRoot: View {
         let day = Calendar.current.component(.day, from: Date())
         return ZStack {
             VStack(alignment: .leading, spacing: 16) {
-                Text("CAL").font(doto(32)).foregroundStyle(fg)
+                Text("CAL").font(doto(32)).foregroundStyle(fg).lineLimit(1).minimumScaleFactor(0.6)
                 HStack(alignment: .top, spacing: 24) {
                     VStack {
                         Text(DateFormatter.month.string(from: Date()).uppercased()).font(mono(10)).foregroundStyle(muted)
-                        Text("\(day)").font(doto(72)).foregroundStyle(fg)
+                            .lineLimit(1).minimumScaleFactor(0.7)
+                        Text("\(day)").font(doto(72)).foregroundStyle(fg).lineLimit(1).minimumScaleFactor(0.5)
                     }
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("FOCUS TIMER").font(mono(10)).foregroundStyle(muted)
-                        Text("25:00").font(doto(36)).foregroundStyle(fg)
+                        Text("FOCUS TIMER").font(mono(10)).foregroundStyle(muted).lineLimit(1)
+                        Text("25:00").font(doto(36)).foregroundStyle(fg).lineLimit(1)
                         Text("Click clock in bar · stub timer UI").font(ui(12)).foregroundStyle(muted)
+                            .lineLimit(2).truncationMode(.tail)
                         let events = CalendarSource.upcoming("today")
                         ForEach(Array(events.prefix(3).enumerated()), id: \.offset) { _, e in
-                            Text(e.title).font(ui(13)).foregroundStyle(fg).lineLimit(1)
+                            Text(e.title).font(ui(13)).foregroundStyle(fg)
+                                .lineLimit(1).truncationMode(.tail)
+                                .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 Button("Close") { shell.dismiss() }.buttonStyle(GlyphBtn(p: p))
             }
@@ -683,8 +703,8 @@ struct GlyphRoot: View {
     var shot: some View {
         ZStack {
             VStack(alignment: .leading, spacing: 14) {
-                Text("SHOT").font(doto(32)).foregroundStyle(fg)
-                Text("Screenshots · recording").font(mono(10)).foregroundStyle(muted)
+                Text("SHOT").font(doto(32)).foregroundStyle(fg).lineLimit(1).minimumScaleFactor(0.6)
+                Text("Screenshots · recording").font(mono(10)).foregroundStyle(muted).lineLimit(1)
                 HStack(spacing: 10) {
                     Button("Selection") { runShot(["-i"]); shell.dismiss() }.buttonStyle(GlyphBtn(p: p, filled: true))
                     Button("Window") { runShot(["-i", "-w"]); shell.dismiss() }.buttonStyle(GlyphBtn(p: p))
@@ -724,8 +744,9 @@ struct GlyphRoot: View {
         ]
         return ZStack {
             VStack(alignment: .leading, spacing: 14) {
-                Text("CHARMS").font(doto(32)).foregroundStyle(fg)
+                Text("CHARMS").font(doto(32)).foregroundStyle(fg).lineLimit(1).minimumScaleFactor(0.6)
                 Text("Emoji · kaomoji · symbols · also :emoji in launcher").font(mono(10)).foregroundStyle(muted)
+                    .lineLimit(2).truncationMode(.tail)
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 70))], spacing: 8) {
                     ForEach(samples, id: \.1) { s in
                         Button {
@@ -761,9 +782,10 @@ struct GlyphRoot: View {
             bg.ignoresSafeArea().onTapGesture { shell.dismiss() }
             HStack(alignment: .top, spacing: 20) {
                 VStack(alignment: .leading, spacing: 14) {
-                    Text("STYLE").font(doto(36)).foregroundStyle(fg)
+                    Text("STYLE").font(doto(36)).foregroundStyle(fg).lineLimit(1).minimumScaleFactor(0.55)
                     Text("Theme creator · live preview").font(mono(10)).foregroundStyle(muted).tracking(1)
-                    Text("SOURCE").font(mono(9)).foregroundStyle(muted)
+                        .lineLimit(1).truncationMode(.tail)
+                    Text("SOURCE").font(mono(9)).foregroundStyle(muted).lineLimit(1)
                     HStack {
                         sourceChip("nothing", "Nothing")
                         sourceChip("wall", "Wallpaper")
@@ -781,7 +803,8 @@ struct GlyphRoot: View {
                                         HStack {
                                             Circle().fill(swatch(for: id)).frame(width: 14, height: 14)
                                             Text(name).font(ui(13)).foregroundStyle(fg)
-                                            Spacer()
+                                                .lineLimit(1).truncationMode(.tail)
+                                                .frame(maxWidth: .infinity, alignment: .leading)
                                             if shell.styleScheme == id { Circle().fill(red).frame(width: 8, height: 8) }
                                         }
                                     }.buttonStyle(.plain)
@@ -812,18 +835,20 @@ struct GlyphRoot: View {
                     }
                     if !shell.toast.isEmpty {
                         Text(shell.toast).font(mono(10)).foregroundStyle(red)
+                            .lineLimit(2).truncationMode(.tail)
                     }
                 }
                 .frame(width: 360)
                 // Live desktop mock under cursor / side panel
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("PREVIEW").font(mono(9)).foregroundStyle(muted)
+                    Text("PREVIEW").font(mono(9)).foregroundStyle(muted).lineLimit(1)
                     ZStack {
                         RoundedRectangle(cornerRadius: 20).fill(Color.black)
                         DotField().opacity(0.4)
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("9:41").font(doto(48)).foregroundStyle(.white)
+                            Text("9:41").font(doto(48)).foregroundStyle(.white).lineLimit(1).minimumScaleFactor(0.5)
                             Text(shell.previewName).font(ui(16)).foregroundStyle(.white.opacity(0.9))
+                                .lineLimit(1).truncationMode(.tail)
                             HStack {
                                 Capsule().fill(Color.white.opacity(0.15)).frame(width: 80, height: 10)
                                 Circle().fill(previewAccent()).frame(width: 18, height: 18)
@@ -838,6 +863,7 @@ struct GlyphRoot: View {
                     .frame(width: 280, height: 360)
                     .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color.white.opacity(0.12), lineWidth: 1))
                     Text("Shell · bar · borders · terminal follow apply").font(ui(11)).foregroundStyle(muted)
+                        .lineLimit(2).truncationMode(.tail)
                 }
             }
             .padding(28)
@@ -910,8 +936,9 @@ struct GlyphRoot: View {
         ZStack {
             Color.black.ignoresSafeArea()
             VStack(spacing: 20) {
-                Text("LOCK").font(doto(56)).foregroundStyle(.white)
+                Text("LOCK").font(doto(56)).foregroundStyle(.white).lineLimit(1).minimumScaleFactor(0.5)
                 Text("Mock only · ScreenSaverEngine never engaged").font(mono(11)).foregroundStyle(Color.white.opacity(0.5))
+                    .lineLimit(2).multilineTextAlignment(.center).padding(.horizontal, 24)
                 DotRing(progress: 0.2, color: .white, accent: red).frame(width: 100, height: 100)
                 Button("Dismiss") { shell.dismiss() }.buttonStyle(GlyphBtn(p: p, filled: true))
             }
@@ -922,8 +949,9 @@ struct GlyphRoot: View {
         ZStack {
             Color.black.ignoresSafeArea()
             VStack(spacing: 24) {
-                Text("LOGIN").font(doto(48)).foregroundStyle(.white)
+                Text("LOGIN").font(doto(48)).foregroundStyle(.white).lineLimit(1).minimumScaleFactor(0.5)
                 Text("SDDM analog · Mac login cannot be replaced").font(mono(11)).foregroundStyle(Color.white.opacity(0.5))
+                    .lineLimit(2).multilineTextAlignment(.center).padding(.horizontal, 24)
                 Capsule().fill(Color.white.opacity(0.12)).frame(width: 280, height: 36)
                     .overlay(Text("password").font(mono(12)).foregroundStyle(Color.white.opacity(0.35)))
                 DotRing(progress: 0.65, color: .white, accent: red).frame(width: 120, height: 120)
@@ -941,6 +969,7 @@ struct GlyphBtn: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.custom(p.s("ui_mono", "Space Mono"), size: 10).weight(.bold))
+            .lineLimit(1).minimumScaleFactor(0.75)
             .foregroundStyle(filled ? Color.white : p["fg"])
             .padding(.horizontal, 12).padding(.vertical, 8)
             .background(
