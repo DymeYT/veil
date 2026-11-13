@@ -44,6 +44,10 @@ def strings_for(theme):
     out = {k: str(v) for k, v in out.items()}
     colors = theme["colors"]
     out = {k: re.sub(r"%(\w+)%", lambda m: colors[m.group(1)].lower(), v) for k, v in out.items()}
+    # fastfetch color keys: ANSI name or #RRGGBB only — never bare palette roles like "fg".
+    for key in ("ff_title_color", "ff_logo_color"):
+        if key in out:
+            out[key] = fastfetch_color(out[key], colors)
     out["ws_toml"] = json.dumps(out["ws"].split())
     out["theme_id"] = theme.get("id", BASE)
     out["home"] = str(HOME)  # absolute paths for configs that do not expand ~ (Rift's exec and run_on_start)
@@ -65,6 +69,31 @@ def strings_for(theme):
 FF_KEYS = {"os": "ff_k1", "host": "ff_k2", "kernel": "ff_k3", "uptime": "ff_k4", "memory": "ff_k5", "battery": "ff_k6"}
 FF_TYPES = set(FF_KEYS) | {"cpu", "gpu", "disk", "display", "shell", "terminal", "packages", "wm", "localip", "datetime", "locale", "swap", "processes"}
 FF_SYMBOLS = {"block", "background", "circle", "diamond", "triangle", "square", "star"}
+# Named colors fastfetch accepts (plus #RRGGBB). Palette role names like "fg" are NOT valid.
+FF_NAMED = {
+    "black", "red", "green", "yellow", "blue", "magenta", "cyan", "white", "default",
+    "light_black", "light_red", "light_green", "light_yellow", "light_blue",
+    "light_magenta", "light_cyan", "light_white",
+}
+
+
+def fastfetch_color(value, colors):
+    """Normalize a theme ff_*_color to an ANSI name or #RRGGBB (VEI-43)."""
+    v = (value or "").strip()
+    if not v:
+        raise ValueError("ff_*_color must not be empty")
+    low = v.lower().lstrip("#")
+    if v.lower() in FF_NAMED:
+        return v.lower()
+    if re.fullmatch(r"[0-9a-fA-F]{6}", low):
+        return f"#{low.lower()}"
+    # Palette role → #hex (e.g. legacy nothing.toml ff_title_color = "fg").
+    if low in colors and re.fullmatch(r"[0-9a-fA-F]{6}", colors[low]):
+        return f"#{colors[low].lower()}"
+    raise ValueError(
+        f"invalid fastfetch color {value!r}: use an ANSI name ({sorted(FF_NAMED)[:4]}…) "
+        f"or #RRGGBB (not a bare palette role)"
+    )
 
 
 def fastfetch_modules(s):

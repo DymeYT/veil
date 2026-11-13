@@ -5,11 +5,12 @@ adjust-cell-height = @@term_cell@@
 
 # theme
 # @@title@@
-background = 090d17
-foreground = d9f4ff
-cursor-color = 00e5ff
-selection-background = 26385a
-selection-foreground = ffffff
+# Ghostty accepts bare RRGGBB or #RRGGBB; always write #RRGGBB (VEI-43).
+background = #090d17
+foreground = #d9f4ff
+cursor-color = #00e5ff
+selection-background = #26385a
+selection-foreground = #ffffff
 palette = 0=#151b2d
 palette = 1=#ff5370
 palette = 2=#5af7a5

@@ -1,4 +1,5 @@
 import AppKit
+import Darwin
 import Combine
 import SwiftUI
 
@@ -25,6 +26,12 @@ enum VeilFeature {
 
     /// Opt-in: force the Reduce Motion still-path (panels appear/dismiss without fade).
     static var forceReduceMotion: Bool { FileManager.default.fileExists(atPath: root + "/enable-force-reduce-motion") }
+
+    /// Opt-in idle theme companion (VEI-40) — never ScreenSaverEngine.
+    static var saverCompanion: Bool { FileManager.default.fileExists(atPath: root + "/enable-saver-companion") }
+
+    /// Opt-in window-server chrome experiments (VEI-41) — thicker focus ring / soft halo.
+    static var wsChrome: Bool { FileManager.default.fileExists(atPath: root + "/enable-ws-chrome") }
 }
 
 // MARK: - Window thumbnails (ScreenCaptureKit; falls back to app icons)
@@ -225,6 +232,7 @@ final class VeilPanelHost: ObservableObject {
     var anchorRect: NSRect?
     private var window: NSWindow?
     private var dismissGeneration = 0
+    private var outsideMonitors: [Any] = []
     private var lastMusicFetch = Date.distantPast
     private var lastStatusFetch = Date.distantPast
     private var lastBatteryDevicesFetch = Date.distantPast
@@ -258,6 +266,7 @@ final class VeilPanelHost: ObservableObject {
                 window.animator().alphaValue = 1
             }
         }
+        installOutsideClick()
     }
 
     func dismiss() {
@@ -269,6 +278,7 @@ final class VeilPanelHost: ObservableObject {
     func dismissImmediate(animated: Bool = false) {
         _ = animated // reserved; husks require sync kill
         dismissGeneration &+= 1
+        OutsideClick.remove(&outsideMonitors)
         let window = self.window
         kind = nil
         anchorRect = nil
@@ -276,6 +286,27 @@ final class VeilPanelHost: ObservableObject {
         window?.contentView = nil
         window?.alphaValue = 1
         self.window = nil
+    }
+
+    private func installOutsideClick() {
+        OutsideClick.remove(&outsideMonitors)
+        let gen = dismissGeneration
+        let anchor = anchorRect
+        outsideMonitors = OutsideClick.install(
+            window: window,
+            ignoreUntil: Date().addingTimeInterval(0.4),
+            extraSafeFrames: {
+                var frames: [NSRect] = []
+                if let anchor { frames.append(anchor.insetBy(dx: -8, dy: -8)) }
+                if let bar = VeilBarController.shared.barWindowFrame { frames.append(bar) }
+                return frames
+            },
+            onOutside: { [weak self] in
+                guard let self, self.dismissGeneration == gen else { return }
+                GlyphShell.shared.dismiss()
+                self.dismissImmediate()
+            }
+        )
     }
 
     /// Prefer in-process Veil bar anchors when that strip owns chrome (SketchyBar parks
@@ -967,31 +998,114 @@ struct VeilPanelView: View {
     }
 
     private var controlBody: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(p.cased("Controls"))
-                .font(.system(size: 12, weight: .bold, design: .monospaced))
-                .foregroundStyle(p["yellow"])
-            Text(host.statusLine)
-                .font(.system(size: 11, weight: .medium, design: .monospaced))
-                .foregroundStyle(p["dim"])
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text(p.cased("Controls"))
+                    .font(panelFont(12, .bold, mono: true))
+                    .foregroundStyle(p["yellow"])
+                Spacer()
+                Text(host.statusLine)
+                    .font(panelFont(10, .medium, mono: true))
+                    .foregroundStyle(p["dim"])
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+            // Live system toggles (VEI-39) — not dead husks.
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                controlToggle("Wi‑Fi", host.wifiOn ? "wifi" : "wifi.slash", host.wifiOn) { host.toggleWifi() }
+                controlToggle("BT", "wave.3.right", host.bluetoothOn) { host.toggleBluetooth() }
+                controlToggle("Focus", "moon.fill", false) { host.toggleFocus() }
+                controlToggle("Displays", "display.2", false) { host.openDisplays() }
+            }
+            controlSlider("VOLUME", host.muted ? 0 : host.volumeLevel) { host.setVolume($0) }
+            controlSlider("BRIGHTNESS", host.brightnessLevel) { host.setBrightness($0) }
+            HStack(spacing: 8) {
+                panelButton(host.muted ? "speaker.slash.fill" : "speaker.wave.2.fill") { host.toggleMute() }
+                Text(host.muted ? "MUTED" : host.volumeText)
+                    .font(panelFont(11, .semibold, mono: true))
+                    .foregroundStyle(p["dim"])
+                Spacer()
+            }
             Divider().overlay(p["border"])
+            // Themes → gallery/switcher — Style creator stays ⌃⌥Y / Glyph Style.
+            controlRow("Themes", "paintpalette") { host.openThemeGallery() }
             controlRow("Workspace Overview", "rectangle.grid.2x2") { host.runVeil(["overview"]) }
-            controlRow("Theme gallery", "paintpalette") { host.runVeil(["themes"]) }
             controlRow("Launcher", "magnifyingglass") { host.runVeil(["launch"]) }
-            controlRow("Terminal", "terminal") { host.runVeil(["term"]) }
-            controlRow("Monitor", "waveform.path.ecg") { host.runVeil(["btop"]) }
+            HStack(spacing: 8) {
+                miniRow("Sound", "speaker.wave.2") { SystemControls.openSound(); host.dismiss() }
+                miniRow("Network", "network") { SystemControls.openNetwork(); host.dismiss() }
+            }
             controlRow("Show menu bar", "menubar.rectangle") {
                 VeilBarController.shared.revealMenuBar()
                 host.dismiss()
             }
-            controlRow("Quiet mode", "leaf") { host.runVeil(["toggle-quiet"]) }
-            controlRow("Reload", "arrow.clockwise") { host.runVeil(["reload"]) }
+            HStack(spacing: 8) {
+                miniRow("Quiet", "leaf") { host.runVeil(["toggle-quiet"]) }
+                miniRow("Reload", "arrow.clockwise") { host.runVeil(["reload"]) }
+            }
             Spacer(minLength: 0)
             Button("Close") { host.dismiss() }
                 .buttonStyle(.plain)
                 .foregroundStyle(p["comment"])
                 .pressable()
         }
+        .onAppear { host.refreshControlToggles() }
+    }
+
+    private func controlToggle(_ title: String, _ symbol: String, _ on: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(spacing: 6) {
+                Image(systemName: symbol)
+                    .font(.system(size: 16, weight: .semibold))
+                Text(title.uppercased())
+                    .font(panelFont(8, .bold, mono: true))
+                    .tracking(0.6)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .foregroundStyle(on ? p["bg_dark"] : p["fg"])
+            .frame(maxWidth: .infinity, minHeight: 58)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(on ? p["yellow"] : p["surface"])
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .strokeBorder(p["border"], lineWidth: on ? 0 : 1)
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+        .pressable()
+    }
+
+    private func controlSlider(_ label: String, _ value: Double, onChange: @escaping (Double) -> Void) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(label)
+                .font(panelFont(9, .bold, mono: true))
+                .foregroundStyle(p["dim"])
+                .tracking(1.2)
+            Slider(value: Binding(
+                get: { value },
+                set: { onChange($0) }
+            ), in: 0...1)
+            .tint(p["fg"])
+        }
+    }
+
+    private func miniRow(_ title: String, _ symbol: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: symbol).foregroundStyle(p["cyan"]).frame(width: 16)
+                Text(title).foregroundStyle(p["fg"]).font(panelFont(12, .medium))
+                Spacer(minLength: 0)
+            }
+            .padding(.vertical, 6)
+            .padding(.horizontal, 8)
+            .frame(maxWidth: .infinity)
+            .background(RoundedRectangle(cornerRadius: 8).fill(p["surface"]))
+        }
+        .buttonStyle(.plain)
+        .pressable()
     }
 
     private var keysBody: some View {
@@ -1101,6 +1215,9 @@ final class VeilBarController: ObservableObject {
 
     /// SketchyBar EDGE_H (strip/bare) / ISLE_H (islands) — keep in lockstep with sketchybarrc.
     var barHeight: CGFloat { barLayout == "islands" ? 34 : 36 }
+
+    /// Screen frame of the in-process bar — safe for outside-click (VEI-35).
+    var barWindowFrame: NSRect? { window?.isVisible == true ? window?.frame : nil }
 
     func start() {
         guard VeilFeature.veilBar, !veilIsOff else { stop(); return }
@@ -1426,5 +1543,193 @@ struct VeilBarView: View {
     private func animateClick(_ action: @escaping () -> Void) {
         if reduceMotion { action() }
         else { withAnimation(.spring(response: 0.22, dampingFraction: 0.7)) { action() } }
+    }
+}
+
+// MARK: - SystemControls (VEI-39) — live Wi‑Fi/BT/Focus/volume/brightness
+enum SystemControls {
+    private typealias BTGet = @convention(c) () -> Int32
+    private typealias BTSet = @convention(c) (Int32) -> Void
+    private static let btHandle = dlopen("/System/Library/Frameworks/IOBluetooth.framework/IOBluetooth", RTLD_NOW)
+    private static let btGet = dlsym(btHandle, "IOBluetoothPreferenceGetControllerPowerState").map { unsafeBitCast($0, to: BTGet.self) }
+    private static let btSet = dlsym(btHandle, "IOBluetoothPreferenceSetControllerPowerState").map { unsafeBitCast($0, to: BTSet.self) }
+
+    /// Prefer the Wi‑Fi hardware port's device (usually en0).
+    static var wifiDevice: String {
+        let out = run("/usr/sbin/networksetup", ["-listallhardwareports"])
+        var port = "", device = "en0"
+        for line in out.split(separator: "\n") {
+            let s = String(line)
+            if s.hasPrefix("Hardware Port:") { port = s.replacingOccurrences(of: "Hardware Port: ", with: "") }
+            else if s.hasPrefix("Device:"), port.localizedCaseInsensitiveContains("Wi-Fi") || port.localizedCaseInsensitiveContains("AirPort") {
+                device = s.replacingOccurrences(of: "Device: ", with: "").trimmingCharacters(in: .whitespaces)
+                break
+            }
+        }
+        return device
+    }
+
+    static var wifiOn: Bool {
+        let out = run("/usr/sbin/networksetup", ["-getairportpower", wifiDevice]).lowercased()
+        return out.contains(": on")
+    }
+
+    @discardableResult
+    static func setWifi(_ on: Bool) -> Bool {
+        _ = run("/usr/sbin/networksetup", ["-setairportpower", wifiDevice, on ? "on" : "off"])
+        let now = wifiOn
+        DispatchQueue.main.async {
+            OSD.shared.show(.network, level: nil, title: "Wi‑Fi", detail: now ? "On" : "Off")
+        }
+        return now
+    }
+
+    static func toggleWifi() -> Bool { setWifi(!wifiOn) }
+
+    static var bluetoothOn: Bool {
+        guard let btGet else { return false }
+        return btGet() != 0
+    }
+
+    @discardableResult
+    static func setBluetooth(_ on: Bool) -> Bool {
+        if let btSet {
+            btSet(on ? 1 : 0)
+        } else {
+            openSettings("x-apple.systempreferences:com.apple.BluetoothSettings")
+        }
+        let now = bluetoothOn
+        DispatchQueue.main.async {
+            OSD.shared.show(.network, level: nil, title: "Bluetooth", detail: now ? "On" : "Off")
+        }
+        return now
+    }
+
+    static func toggleBluetooth() -> Bool { setBluetooth(!bluetoothOn) }
+
+    /// Focus / DND — open Focus Settings (authoritative) and attempt a Control Center Focus click when Accessibility allows.
+    static func openFocus() {
+        openSettings("x-apple.systempreferences:com.apple.Focus-Settings.extension")
+        DispatchQueue.main.async {
+            OSD.shared.show(.input, level: nil, title: "Focus", detail: "Settings")
+        }
+    }
+
+    /// Best-effort Focus toggle via Control Center menu bar item (needs Accessibility — already required for MediaKeys).
+    @discardableResult
+    static func toggleFocus() -> Bool {
+        let script = """
+        tell application "System Events"
+          tell process "ControlCenter"
+            set focusItem to missing value
+            repeat with mb in menu bar items of menu bar 1
+              try
+                set n to name of mb as text
+                if n contains "Focus" or n contains "Do Not Disturb" or n contains "Concentration" then
+                  set focusItem to mb
+                  exit repeat
+                end if
+              end try
+            end repeat
+            if focusItem is missing value then return "missing"
+            click focusItem
+            delay 0.15
+            try
+              click button 1 of window 1
+              return "toggled"
+            on error
+              return "opened"
+            end try
+          end tell
+        end tell
+        """
+        var err: NSDictionary?
+        let result = NSAppleScript(source: script)?.executeAndReturnError(&err).stringValue ?? ""
+        if result == "missing" || err != nil {
+            openFocus()
+            return false
+        }
+        DispatchQueue.main.async {
+            OSD.shared.show(.input, level: nil, title: "Focus", detail: result == "toggled" ? "Toggled" : "Menu")
+        }
+        return true
+    }
+
+    static func openDisplays() {
+        openSettings("x-apple.systempreferences:com.apple.Displays-Settings.extension")
+        DispatchQueue.main.async {
+            OSD.shared.show(.brightness, level: Brightness.get().map { Double($0) }, title: "Displays")
+        }
+    }
+
+    static func openSound() {
+        openSettings("x-apple.systempreferences:com.apple.Sound-Settings.extension")
+    }
+
+    static func openNetwork() {
+        openSettings("x-apple.systempreferences:com.apple.Network-Settings.extension")
+    }
+
+    static func openSettings(_ url: String) {
+        if let u = URL(string: url) { NSWorkspace.shared.open(u) }
+    }
+
+    /// Output volume 0…1 (nil when HDMI/device has no controllable level).
+    static func volumeLevel() -> Double? {
+        var err: NSDictionary?
+        guard let raw = NSAppleScript(source: "output volume of (get volume settings)")?
+            .executeAndReturnError(&err).stringValue,
+              let v = Double(raw) else { return nil }
+        return max(0, min(1, v / 100))
+    }
+
+    static func isMuted() -> Bool {
+        var err: NSDictionary?
+        let raw = NSAppleScript(source: "output muted of (get volume settings)")?
+            .executeAndReturnError(&err).stringValue?.lowercased() ?? ""
+        return raw.contains("true")
+    }
+
+    static func setVolume(_ level: Double) {
+        let v = Int((max(0, min(1, level)) * 100).rounded())
+        let src = "set volume output volume \(v)" + (v > 0 ? " without output muted" : "")
+        var err: NSDictionary?
+        _ = NSAppleScript(source: src)?.executeAndReturnError(&err)
+        DispatchQueue.main.async {
+            OSD.shared.show(.volume, level: Double(v) / 100, title: "Volume")
+            VeilPanelHost.shared.volumeText = "\(v)%"
+            VeilPanelHost.shared.volumeLevel = Double(v) / 100
+        }
+    }
+
+    static func toggleMute() {
+        let next = !isMuted()
+        var err: NSDictionary?
+        _ = NSAppleScript(source: "set volume output muted \(next)")?.executeAndReturnError(&err)
+        DispatchQueue.main.async {
+            OSD.shared.show(.volume, level: next ? 0 : (volumeLevel() ?? 0), title: "Volume", detail: next ? "Muted" : "Unmuted")
+        }
+    }
+
+    static func setBrightness(_ level: Double) {
+        guard Brightness.available else { openDisplays(); return }
+        let set = max(0.01, min(1, level))
+        Brightness.set(Float(set))
+        DispatchQueue.main.async {
+            OSD.shared.show(.brightness, level: set, title: "Brightness")
+            VeilPanelHost.shared.brightnessLevel = set
+        }
+    }
+
+    @discardableResult
+    private static func run(_ path: String, _ args: [String]) -> String {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: path)
+        p.arguments = args
+        let out = Pipe()
+        p.standardOutput = out
+        p.standardError = Pipe()
+        do { try p.run(); p.waitUntilExit() } catch { return "" }
+        return String(data: out.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
     }
 }
