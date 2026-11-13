@@ -226,6 +226,11 @@ music_panel() {
 }
 
 if [ "${1:-}" = music ]; then
+  # `veil.sh music snapshot` → JSON for VeilPanelHost / tooling (no SketchyBar mutate).
+  if [ "${2:-}" = snapshot ]; then
+    music_snapshot "" ""
+    exit
+  fi
   music_panel "$2"
   exit
 fi

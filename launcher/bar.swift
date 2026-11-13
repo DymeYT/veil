@@ -1,6 +1,5 @@
 import AppKit
 import Combine
-import ScreenCaptureKit
 import SwiftUI
 
 // MARK: - Feature flags (animated panels default on; SketchyBar popups are the fallback)
@@ -20,6 +19,12 @@ enum VeilFeature {
     /// Opt-in custom Veil status strip. Default is SketchyBar chrome (Umbra islands look + clicks).
     /// Animated panels still ride on SketchyBar item clicks when `animated-panels` is on.
     static var veilBar: Bool { FileManager.default.fileExists(atPath: root + "/enable-veil-bar") }
+
+    /// Default-on live window thumbs for the selected Overview card (out-of-process SCK).
+    static var overviewLiveThumbs: Bool { !FileManager.default.fileExists(atPath: root + "/disable-overview-live-thumbs") }
+
+    /// Opt-in: force the Reduce Motion still-path (panels appear/dismiss without fade).
+    static var forceReduceMotion: Bool { FileManager.default.fileExists(atPath: root + "/enable-force-reduce-motion") }
 }
 
 // MARK: - Window thumbnails (ScreenCaptureKit; falls back to app icons)
@@ -51,33 +56,53 @@ func riftWindowsDetailed(_ list: [[String: Any]]) -> [Int: [WinThumb]] {
 }
 
 enum WindowCapture {
-    static func image(for windowID: CGWindowID, maxSide: CGFloat = 200) async -> NSImage? {
+    /// Capture via short-lived `veil-thumbs` so ScreenCaptureKit RSS dies with the helper.
+    static func images(for ids: [CGWindowID], maxSide: CGFloat = 96) async -> [CGWindowID: NSImage] {
+        _ = maxSide
+        guard !ids.isEmpty, !Task.isCancelled else { return [:] }
+        let helper = Bundle.main.bundleURL
+            .appendingPathComponent("Contents/MacOS/veil-thumbs").path
+        let bin = FileManager.default.isExecutableFile(atPath: helper)
+            ? helper
+            : (home + "/.local/bin/veil-thumbs")
+        guard FileManager.default.isExecutableFile(atPath: bin) else { return [:] }
+        let outDir = NSTemporaryDirectory() + "veil-thumbs-\(ProcessInfo.processInfo.processIdentifier)-\(UUID().uuidString)"
+        defer { try? FileManager.default.removeItem(atPath: outDir) }
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: bin)
+        proc.arguments = [outDir] + ids.map { String($0) }
+        proc.standardOutput = FileHandle.nullDevice
+        proc.standardError = FileHandle.nullDevice
         do {
-            let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
-            guard let window = content.windows.first(where: { $0.windowID == windowID }) else { return nil }
-            let filter = SCContentFilter(desktopIndependentWindow: window)
-            let config = SCStreamConfiguration()
-            let scale = max(window.frame.width, window.frame.height) > 0
-                ? min(1, maxSide / max(window.frame.width, window.frame.height))
-                : 0.25
-            config.width = max(2, Int(window.frame.width * scale))
-            config.height = max(2, Int(window.frame.height * scale))
-            config.showsCursor = false
-            config.captureResolution = .best
-            let cg = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
-            let img = NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
-            return img
+            try proc.run()
+            while proc.isRunning {
+                if Task.isCancelled {
+                    proc.terminate()
+                    break
+                }
+                try? await Task.sleep(nanoseconds: 20_000_000)
+            }
+            proc.waitUntilExit()
         } catch {
-            return nil
+            return [:]
         }
+        guard !Task.isCancelled else { return [:] }
+        var out: [CGWindowID: NSImage] = [:]
+        out.reserveCapacity(ids.count)
+        for id in ids {
+            let path = (outDir as NSString).appendingPathComponent("\(id).png")
+            if let img = NSImage(contentsOfFile: path) { out[id] = img }
+        }
+        return out
     }
 
     static func appIcon(bundle: String?, app: String) -> NSImage {
+        // Route through IconCache so Overview does not retain full multi-rep workspace icons.
         if let bundle, let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundle) {
-            return NSWorkspace.shared.icon(forFile: url.path)
+            return IconCache.icon(url.path)
         }
         if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: app) {
-            return NSWorkspace.shared.icon(forFile: url.path)
+            return IconCache.icon(url.path)
         }
         return NSImage(systemSymbolName: "app.fill", accessibilityDescription: app) ?? NSImage()
     }
@@ -88,8 +113,12 @@ enum WindowCapture {
 struct OverviewWindowStrip: View {
     let thumbs: [WinThumb]
     let palette: Palette
+    /// Live ScreenCaptureKit only for the selected card — icons everywhere else keeps RSS light.
+    var live: Bool = false
     @State private var images: [CGWindowID: NSImage] = [:]
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var maxThumbs: Int { live ? 2 : 3 }
 
     var body: some View {
         Group {
@@ -101,16 +130,16 @@ struct OverviewWindowStrip: View {
                         .font(.system(size: 11, weight: .medium, design: .monospaced))
                         .foregroundStyle(palette["dim"])
                 }
-                .frame(height: 88)
+                .frame(height: 64)
             } else {
                 GeometryReader { geo in
-                    let count = min(thumbs.count, 4)
-                    let gap: CGFloat = 6
-                    let w = max(40, (geo.size.width - gap * CGFloat(count - 1)) / CGFloat(count))
+                    let count = min(thumbs.count, maxThumbs)
+                    let gap: CGFloat = 5
+                    let w = max(36, (geo.size.width - gap * CGFloat(count - 1)) / CGFloat(count))
                     HStack(spacing: gap) {
                         ForEach(thumbs.prefix(count)) { thumb in
                             ZStack {
-                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                RoundedRectangle(cornerRadius: 5, style: .continuous)
                                     .fill(palette["bg_dark"])
                                 if let img = images[thumb.id] {
                                     Image(nsImage: img)
@@ -123,44 +152,41 @@ struct OverviewWindowStrip: View {
                                     Image(nsImage: WindowCapture.appIcon(bundle: thumb.bundle, app: thumb.app))
                                         .resizable()
                                         .interpolation(.high)
-                                        .frame(width: 36, height: 36)
+                                        .frame(width: 28, height: 28)
                                 }
                             }
                             .frame(width: w, height: geo.size.height)
-                            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                            .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
                             .overlay(
-                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                RoundedRectangle(cornerRadius: 5, style: .continuous)
                                     .strokeBorder(palette["border"].opacity(0.7), lineWidth: 1)
                             )
                             .accessibilityLabel("\(thumb.app)\(thumb.title.isEmpty ? "" : ": \(thumb.title)")")
                         }
                     }
                 }
-                .frame(height: 88)
+                .frame(height: 64)
             }
         }
-        .task(id: thumbs.map(\.id)) {
+        .task(id: "\(live)-\(thumbs.prefix(maxThumbs).map(\.id))") {
             await load()
+        }
+        .onDisappear { images = [:] }
+        .onChange(of: live) { _, isLive in
+            if !isLive { images = [:] }
         }
     }
 
     private func load() async {
-        await withTaskGroup(of: (CGWindowID, NSImage?).self) { group in
-            for thumb in thumbs.prefix(4) {
-                group.addTask {
-                    let img = await WindowCapture.image(for: thumb.id)
-                    return (thumb.id, img)
-                }
-            }
-            for await (id, img) in group {
-                if let img {
-                    await MainActor.run {
-                        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) {
-                            images[id] = img
-                        }
-                    }
-                }
-            }
+        guard live else {
+            await MainActor.run { images = [:] }
+            return
+        }
+        let ids = thumbs.prefix(2).map(\.id)
+        let batch = await WindowCapture.images(for: Array(ids), maxSide: 96)
+        guard !Task.isCancelled else { return }
+        await MainActor.run {
+            images = batch
         }
     }
 }
@@ -179,7 +205,9 @@ final class VeilPanelHost: ObservableObject {
     @Published var playing = false
     @Published var statusLine = ""
     private var window: NSWindow?
-    private var reduceMotion: Bool { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
+    private var reduceMotion: Bool {
+        VeilFeature.forceReduceMotion || NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+    }
 
     func toggle(_ k: VeilPanelKind) {
         if kind == k { dismiss(); return }
@@ -208,19 +236,26 @@ final class VeilPanelHost: ObservableObject {
     }
 
     func dismiss() {
-        guard let window, window.isVisible else { kind = nil; return }
-        if reduceMotion {
-            window.orderOut(nil)
+        guard let window, window.isVisible else {
             kind = nil
+            self.window?.contentView = nil
+            self.window = nil
+            return
+        }
+        let finish = { [weak self] in
+            window.orderOut(nil)
+            window.contentView = nil
+            self?.window = nil
+            self?.kind = nil
+        }
+        if reduceMotion {
+            finish()
         } else {
             NSAnimationContext.runAnimationGroup({ ctx in
                 ctx.duration = 0.14
                 window.animator().alphaValue = 0
-            }, completionHandler: { [weak self] in
-                Task { @MainActor in
-                    window.orderOut(nil)
-                    self?.kind = nil
-                }
+            }, completionHandler: {
+                Task { @MainActor in finish() }
             })
         }
     }
@@ -269,31 +304,49 @@ final class VeilPanelHost: ObservableObject {
     }
 
     private func loadMusic() {
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/bin/bash")
-        p.arguments = ["-lc", #""$HOME/.config/sketchybar/plugins/veil.sh" music snapshot 2>/dev/null || true"#]
-        let pipe = Pipe()
-        p.standardOutput = pipe
-        p.standardError = FileHandle.nullDevice
-        // Prefer media-control JSON if present
+        // media-control without artwork — avoids multi‑MB JSON / RSS spikes in the panel.
         let mc = Process()
         mc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        mc.arguments = ["media-control", "get"]
+        mc.arguments = ["media-control", "get", "--no-artwork"]
         let mcp = Pipe()
         mc.standardOutput = mcp
         mc.standardError = FileHandle.nullDevice
         if (try? mc.run()) != nil {
             let data = mcp.fileHandleForReading.readDataToEndOfFile()
             mc.waitUntilExit()
-            if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                musicTitle = (obj["title"] as? String)?.nilIfEmpty ?? "Nothing playing"
-                musicArtist = (obj["artist"] as? String) ?? ""
-                musicSource = (obj["bundleIdentifier"] as? String)?.split(separator: ".").last.map(String.init) ?? "Now playing"
-                playing = (obj["playing"] as? Bool) ?? ((obj["playbackRate"] as? Double).map { $0 > 0 } ?? false)
+            if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let title = (obj["title"] as? String)?.nilIfEmpty ?? (obj["name"] as? String)?.nilIfEmpty {
+                musicTitle = title
+                musicArtist = (obj["artist"] as? String) ?? (obj["artistName"] as? String) ?? ""
+                let bundle = (obj["bundleIdentifier"] as? String) ?? (obj["bundleID"] as? String) ?? ""
+                musicSource = bundle.split(separator: ".").last.map(String.init)
+                    ?? (obj["displayName"] as? String) ?? "Now playing"
+                if bundle.lowercased().contains("cider") { musicSource = "Cider" }
+                playing = (obj["playing"] as? Bool)
+                    ?? (obj["isPlaying"] as? Bool)
+                    ?? ((obj["playbackRate"] as? Double).map { $0 > 0 } ?? false)
                 return
             }
         }
-        _ = p
+        // Fall back to the SketchyBar plugin snapshot (cider-bridge / SIP helper).
+        let snap = Process()
+        snap.executableURL = URL(fileURLWithPath: "/bin/bash")
+        snap.arguments = ["-lc", #""$HOME/.config/sketchybar/plugins/veil.sh" music snapshot 2>/dev/null || true"#]
+        let pipe = Pipe()
+        snap.standardOutput = pipe
+        snap.standardError = FileHandle.nullDevice
+        if (try? snap.run()) != nil {
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            snap.waitUntilExit()
+            if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let title = (obj["title"] as? String)?.nilIfEmpty {
+                musicTitle = title
+                musicArtist = (obj["artist"] as? String) ?? ""
+                musicSource = (obj["source"] as? String)?.nilIfEmpty ?? "Now playing"
+                playing = (obj["state"] as? String) == "playing"
+                return
+            }
+        }
         musicTitle = "Nothing playing"
         musicArtist = ""
         musicSource = "Now playing"
@@ -302,7 +355,8 @@ final class VeilPanelHost: ObservableObject {
 
     private func loadStatus() {
         let quiet = FileManager.default.fileExists(atPath: ncRoot + "/generated/quiet")
-        let motionOff = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        let motionOff = VeilFeature.forceReduceMotion
+            || NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         var cpu = "?", mem = "?", vol = "?"
         let metrics = Process()
         metrics.executableURL = URL(fileURLWithPath: home + "/.local/bin/veil-metrics")

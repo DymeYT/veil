@@ -9,8 +9,12 @@ stage="$out/Veil Search.app"
 keep_stage=false
 trap '[ "$keep_stage" = true ] || rm -rf "$out"' EXIT
 mkdir -p "$stage/Contents/MacOS"
-if ! swiftc -O -swift-version 5 -framework ScreenCaptureKit -o "$stage/Contents/MacOS/veil-search" main.swift splash.swift extras.swift sources.swift integrations.swift osd.swift focus.swift mode.swift review-render.swift bar.swift > "$out/build.log" 2>&1; then
+if ! swiftc -O -swift-version 5 -o "$stage/Contents/MacOS/veil-search" main.swift splash.swift extras.swift sources.swift integrations.swift osd.swift focus.swift mode.swift review-render.swift bar.swift > "$out/build.log" 2>&1; then
   cat "$out/build.log"; echo "build failed; installed Veil Search preserved"; exit 1
+fi
+# Short-lived SCK helper — keeps ScreenCaptureKit out of the long-lived launcher RSS.
+if ! swiftc -O -swift-version 5 -framework ScreenCaptureKit -parse-as-library -o "$stage/Contents/MacOS/veil-thumbs" thumbs.swift >> "$out/build.log" 2>&1; then
+  cat "$out/build.log"; echo "veil-thumbs build failed; installed Veil Search preserved"; exit 1
 fi
 cat "$out/build.log"
 "$stage/Contents/MacOS/veil-search" --selftest
@@ -68,4 +72,6 @@ else
     echo "installed successfully; open $app to start it"
   fi
 fi
+mkdir -p "$HOME/.local/bin"
+ln -sfn "$app/Contents/MacOS/veil-thumbs" "$HOME/.local/bin/veil-thumbs"
 echo "installed $app"

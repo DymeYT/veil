@@ -72,9 +72,9 @@
     "semantic_hash": ""
   },
   "bin/veil": {
-    "mtime": 1794570529.1273773,
-    "seen": 1794570665.733224,
-    "ast_hash": "bda4044a8525805612ab699977721a47",
+    "mtime": 1794573728.437823,
+    "seen": 1794573817.3960052,
+    "ast_hash": "fca428d915df9b066f45d48495b9d0fb",
     "semantic_hash": ""
   },
   "bin/veil-baseline": {
@@ -102,15 +102,15 @@
     "semantic_hash": ""
   },
   "launcher/bar.swift": {
-    "mtime": 1794570500.0100048,
-    "seen": 1794570665.733226,
-    "ast_hash": "916265d5efad8a781cc26f5c4ee70f01",
+    "mtime": 1794573706.640729,
+    "seen": 1794573817.3960068,
+    "ast_hash": "ef10fe511ec1d1838086e5b8896df447",
     "semantic_hash": ""
   },
   "launcher/build.sh": {
-    "mtime": 1794570509.6521068,
-    "seen": 1794570665.733226,
-    "ast_hash": "f05f7d689f785e7b1105f2fcd8976976",
+    "mtime": 1794573037.41881,
+    "seen": 1794573519.7496698,
+    "ast_hash": "a7a6699aa66353f1d56ef1fef2cf691f",
     "semantic_hash": ""
   },
   "launcher/extras.swift": {
@@ -132,9 +132,9 @@
     "semantic_hash": ""
   },
   "launcher/main.swift": {
-    "mtime": 1794570551.6286252,
-    "seen": 1794570665.733227,
-    "ast_hash": "fe32e8c286634ca0e5f5b7c9b7c2355e",
+    "mtime": 1794573719.9260893,
+    "seen": 1794573817.396009,
+    "ast_hash": "c3c9b3cbb6eba4654705cce7d8c5dbe4",
     "semantic_hash": ""
   },
   "launcher/make-signing-identity.sh": {
@@ -210,9 +210,9 @@
     "semantic_hash": ""
   },
   "templates/launcher.json": {
-    "mtime": 1793332232.3349397,
-    "seen": 1794570665.733232,
-    "ast_hash": "d6566177379c7d6a9ace49ec362a0b2a",
+    "mtime": 1794571797.7149742,
+    "seen": 1794573519.749679,
+    "ast_hash": "5154ffe6ed10dea997e274f641e72a91",
     "semantic_hash": ""
   },
   "templates/nvim.lua": {
@@ -240,9 +240,9 @@
     "semantic_hash": ""
   },
   "templates/sketchybar/plugins/veil.sh": {
-    "mtime": 1794570545.3660035,
-    "seen": 1794570665.733233,
-    "ast_hash": "d2de7c29ed61e798c36c52810d09f581",
+    "mtime": 1794572931.850356,
+    "seen": 1794573519.749682,
+    "ast_hash": "204f638ff8ead4e8aa45330c0ea7ed13",
     "semantic_hash": ""
   },
   "templates/sketchybar/plugins/workspace-event.sh": {
@@ -537,6 +537,12 @@
     "mtime": 1794547268.3101537,
     "seen": 1794570665.7332501,
     "ast_hash": "053033dec94813688dcc9acb65f0210c",
+    "semantic_hash": ""
+  },
+  "launcher/thumbs.swift": {
+    "mtime": 1794573127.0410423,
+    "seen": 1794573519.749676,
+    "ast_hash": "1756719fbd1e9e292b24c42adff8922f",
     "semantic_hash": ""
   }
 }

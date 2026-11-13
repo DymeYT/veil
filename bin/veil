@@ -215,6 +215,10 @@ PLIST
   check "theme files match templates" "veil-theme status | grep -q 'all files match'"
   # Spotlight keeps ⌘Space unless its shortcut (symbolic hot key 64) is off; then Veil Search can't open with it
   check "Spotlight has released ⌘Space" "[ \"\$(defaults export com.apple.symbolichotkeys - | plutil -extract AppleSymbolicHotKeys.64.enabled raw -)\" = false ]"
+  check "veil-thumbs helper installed" "[ -x \"$HOME/Applications/Veil Search.app/Contents/MacOS/veil-thumbs\" ]"
+  check "launcher has no ScreenCaptureKit" "! otool -L \"$HOME/Applications/Veil Search.app/Contents/MacOS/veil-search\" | grep -q ScreenCaptureKit"
+  check "music snapshot returns JSON" "\"$HOME/.config/sketchybar/plugins/veil.sh\" music snapshot | jq -e 'type == \"object\"' >/dev/null"
+  check "ScreenSaverEngine not running" "! pgrep -x ScreenSaverEngine"
   exit $fail
   ;;
  # launcher menu entry: run the selftest and show the result as a notification
@@ -230,8 +234,8 @@ PLIST
   V="$HOME/.config/veil"; F="$V/generated/features"; mkdir -p "$F"
   # veil-bar is opt-in: SketchyBar keeps the themed strip (Umbra islands). Animated panels
   # still open from SketchyBar clicks when animated-panels is on.
-  on_by_default='music-popup clock-calendar cider-bridge screensaver-sync animated-panels'
-  off_by_default='sip-nowplaying sketchybar-popups veil-bar'
+  on_by_default='music-popup clock-calendar cider-bridge screensaver-sync animated-panels overview-live-thumbs'
+  off_by_default='sip-nowplaying sketchybar-popups veil-bar force-reduce-motion'
   known="$on_by_default $off_by_default"
   is_known() { echo " $known " | grep -q " $1 "; }
   is_opt_in() { echo " $off_by_default " | grep -q " $1 "; }
@@ -248,6 +252,7 @@ PLIST
       [ "$name" = sip-nowplaying ] && printf '; SIP-gated — see tools/sip-nowplaying/README.md'
       [ "$name" = sketchybar-popups ] && printf '; SketchyBar popup menus (skips animated panels)'
       [ "$name" = veil-bar ] && printf '; experimental SwiftUI strip — SketchyBar is the default chrome'
+      [ "$name" = force-reduce-motion ] && printf '; panels use still-path without system Reduce Motion'
       printf ')\n'
     done ;;
    disable)

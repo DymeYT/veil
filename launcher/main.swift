@@ -1147,6 +1147,8 @@ enum IconCache {
         return cache
     }()
 
+    static func clear() { cache.removeAllObjects() }
+
     static func icon(_ path: String) -> NSImage {
         let key = path as NSString
         if let icon = cache.object(forKey: key) { return icon }
@@ -1658,7 +1660,7 @@ struct OverviewCard: View {
                     .font(.system(size: 10, weight: .bold, design: .monospaced))
                     .foregroundStyle(selected ? palette["cyan"] : palette["dim"])
             }
-            OverviewWindowStrip(thumbs: windows, palette: palette)
+            OverviewWindowStrip(thumbs: windows, palette: palette, live: selected && VeilFeature.overviewLiveThumbs)
             Text(item.title)
                 .font(.system(size: 18, weight: .bold, design: .monospaced))
                 .foregroundStyle(palette["fg"])
@@ -1750,7 +1752,7 @@ struct ThemePreview: View {
                 return CGImageSourceCreateThumbnailAtIndex(source, 0, [
                     kCGImageSourceCreateThumbnailFromImageAlways: true,
                     kCGImageSourceCreateThumbnailWithTransform: true,
-                    kCGImageSourceThumbnailMaxPixelSize: 520
+                    kCGImageSourceThumbnailMaxPixelSize: 280
                 ] as CFDictionary)
             }.value
             if !Task.isCancelled { artwork = image }
@@ -2350,7 +2352,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 self.model.search(); return nil
             case kVK_ANSI_R where cmd: self.model.activate(reveal: true); return nil
             case kVK_ANSI_P where cmd: self.model.togglePin(); return nil
-            case kVK_RightArrow where !cmd:
+            case kVK_RightArrow where !cmd && !option:
                 // → at the end of the query accepts the ghost completion
                 if let rest = self.model.completion, let tv = self.panel.firstResponder as? NSTextView,
                    tv.selectedRange().location == (self.model.query as NSString).length {
@@ -2359,8 +2361,11 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 // in a grid, ←/→ move tiles once you're navigating them (or the field is empty); otherwise they edit the query
                 if self.model.gridColumns > 1 && (self.model.choosingTheme || self.model.userMoved || self.model.query.isEmpty) { self.model.moveGrid(dx: 1, dy: 0); return nil }
                 return e
-            case kVK_LeftArrow where !cmd && self.model.gridColumns > 1 && (self.model.choosingTheme || self.model.userMoved || self.model.query.isEmpty):
+            // ⌥←/⌥→ must reach the field for word navigation (never steal for grid)
+            case kVK_LeftArrow where !cmd && !option && self.model.gridColumns > 1 && (self.model.choosingTheme || self.model.userMoved || self.model.query.isEmpty):
                 self.model.moveGrid(dx: -1, dy: 0); return nil
+            case kVK_LeftArrow where option, kVK_RightArrow where option:
+                return e
             case kVK_ANSI_L where cmd: self.showLargeType(); return nil
             case kVK_ANSI_K where cmd: self.model.actionIndex = 0; self.model.actionsOpen = !self.model.currentActions.isEmpty; return nil
             // ⌘⌫ deletes the query text like every macOS field; Move to Trash stays in the ⌘K actions
@@ -2772,10 +2777,18 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             model.overviewCards = []
             model.overviewThumbs = [:]
             model.themeCards = []
+            model.windows = [:]
             return
         }
         panel.orderOut(nil)
+        // Drop the SwiftUI tree so overview thumbs / theme art leave RSS.
+        panel.contentView = nil
+        // Collapse the buffered backing store while idle (940×640 Retina is tens of MiB).
+        panel.setFrame(NSRect(x: 0, y: 0, width: 1, height: 1), display: false)
         Scrim.shared.hide()
+        IconCache.clear()
+        malloc_zone_pressure_relief(nil, 0)
+        Task { @MainActor in VeilPanelHost.shared.dismiss() }
         model.shown = false
         model.actionsOpen = false
         model.historyIndex = -1
@@ -2784,6 +2797,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         model.overviewCards = []
         model.overviewThumbs = [:]
         model.themeCards = []
+        model.windows = [:]
         let q = model.query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if q == "overview" || q == "theme" {
             model.renderingFixture = true
@@ -2961,6 +2975,10 @@ func selftest() -> Never {
     precondition(!ClipHistory.looksLikeSecret("3114cc5eb3eb6858a3495690312065fe9d95c609") && !ClipHistory.looksLikeSecret("550e8400-e29b-41d4-a716-446655440000"))
     precondition(CalendarSource.upcoming("cal").isEmpty)  // "cal" means Calculator or Calendar.app, not the agenda
     precondition((systemActionItems().first { $0.title == "Lock Screen" }?.score ?? 0) > 0)  // the action beats the Settings pane
+    // Out-of-process overview thumbs must ship next to the launcher (keeps SCK out of veil-search RSS).
+    let thumbs = (Bundle.main.bundlePath as NSString).appendingPathComponent("Contents/MacOS/veil-thumbs")
+    precondition(FileManager.default.isExecutableFile(atPath: thumbs), "veil-thumbs missing from app bundle")
+    precondition(VeilFeature.overviewLiveThumbs || !VeilFeature.overviewLiveThumbs)  // flag readable
     print("veil-search selftest: ok")
     exit(0)
 }
@@ -3117,11 +3135,22 @@ final class Scrim {
     }
     func hide() {
         isShowing = false
-        guard let w = window, w.isVisible else { return }
+        guard let w = window else { return }
+        let finish = { [weak self] in
+            w.orderOut(nil)
+            // Drop the fullscreen backing store — keeping a Retina scrim buffer floors RSS hard.
+            w.setFrame(NSRect(x: 0, y: 0, width: 1, height: 1), display: false)
+            self?.window = nil
+        }
+        guard w.isVisible else { finish(); return }
         let reduce = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-        NSAnimationContext.runAnimationGroup({ $0.duration = reduce ? 0 : 0.12; w.animator().alphaValue = 0 }, completionHandler: { [weak self] in
-            if self?.isShowing == false { w.orderOut(nil) }
-        })
+        if reduce {
+            finish()
+        } else {
+            NSAnimationContext.runAnimationGroup({ $0.duration = 0.12; w.animator().alphaValue = 0 }, completionHandler: { [weak self] in
+                if self?.isShowing == false { finish() }
+            })
+        }
     }
 }
 
