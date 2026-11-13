@@ -1,6 +1,6 @@
-// Veil Search: the Veil ⌘Space launcher. A non-activating floating panel (never tiled, never
-// steals the app focus) over apps, files (Spotlight index), math, System Settings, workspaces,
-// Veil commands and themes. Colors come from generated/launcher.json (written by veil-theme).
+// Veil Search: the Veil ⌘Space launcher. Spotlight-grade focus steal + keystroke sink over
+// apps, files (Spotlight index), math, System Settings, workspaces, Veil commands and themes.
+// Never tiled. Colors come from generated/launcher.json (written by veil-theme).
 // Build: launcher/build.sh. Self-check: "Veil Search.app/Contents/MacOS/veil-search" --selftest
 import AppKit
 import ApplicationServices
@@ -833,8 +833,9 @@ final class Model: NSObject, ObservableObject {
         if !mq.start() { stopMetadataQuery(); searchingFiles = false }
     }
 
+    /// Bury framework / plugin / asset-pack junk so simple app queries stay Spotlight-clean.
     static let noise = try! NSRegularExpression(pattern:
-        #"/Library/|/\.|\.app/|node_modules|/build/|DerivedData|/target/|/vendor/|/dist/|/externals?/|/third_party/|\.(pyc|o|d)$"#)
+        #"/Library/|/\.|\.app/|\.framework\b|\.appex\b|\.xpc\b|\.bundle/|/Frameworks/|/PlugIns/|/XPCServices/|\.car$|node_modules|/build/|DerivedData|/target/|/vendor/|/dist/|/externals?/|/third_party/|\.(pyc|o|d)$"#)
 
     @objc func filesUpdated(_ note: Notification) {
         guard let mq = note.object as? NSMetadataQuery, mq === mdQuery else { return }
@@ -848,6 +849,9 @@ final class Model: NSObject, ObservableObject {
             if Model.noise.firstMatch(in: path, range: NSRange(path.startIndex..., in: path)) != nil { continue }
             let name = (path as NSString).lastPathComponent
             let lname = name.lowercased()
+            // Framework asset names (CepheiPrefs.framework Safari.png etc.) — bury hard.
+            let pathLower = path.lowercased()
+            if pathLower.contains(".framework") || pathLower.contains("/frameworks/") || lname.hasSuffix(".car") { continue }
             let group = lname.hasPrefix(q) ? 0 : lname.contains(q) ? 1 : 2
             let used = (r.value(forAttribute: kMDItemLastUsedDate as String) as? Date ?? r.value(forAttribute: kMDItemContentModificationDate as String) as? Date)?.timeIntervalSince1970 ?? 0
             let isDir = (r.value(forAttribute: kMDItemContentType as String) as? String) == "public.folder"
@@ -1673,7 +1677,10 @@ struct OverviewCard: View {
                     .font(.system(size: 10, weight: .bold, design: .monospaced))
                     .foregroundStyle(selected ? palette["cyan"] : palette["dim"])
             }
-            OverviewWindowStrip(thumbs: windows, palette: palette, live: selected && VeilFeature.overviewLiveThumbs)
+            // VEI-53 / #22: omit Empty husk slots — live thumbs only when windows exist.
+            if !windows.isEmpty {
+                OverviewWindowStrip(thumbs: windows, palette: palette, live: selected && VeilFeature.overviewLiveThumbs)
+            }
             Text(item.title)
                 .font(.system(size: 18, weight: .bold, design: .monospaced))
                 .foregroundStyle(palette["fg"])
@@ -2264,7 +2271,7 @@ struct VisualEffect: View {
     var body: some View { Palette.load()["bg_float"] }
 }
 
-/// Esc → `veil dismiss-popups` (SketchyBar music/calendar/control/keys + Rift overview).
+/// Esc → one-shot overlay kill + `veil dismiss-popups` (SketchyBar + Rift overview).
 /// NSEvent global monitor (Veil Search needs Accessibility). Never locks; never ScreenSaverEngine.
 enum EscDismiss {
     private static var veilBin = NSString(string: "~/.local/bin/veil").expandingTildeInPath
@@ -2278,6 +2285,12 @@ enum EscDismiss {
     }
 
     static func run() {
+        // Sync kill first — never wait on Process spawn while Control/Quick stick.
+        if Thread.isMainThread {
+            OutsideClick.dismissAll()
+        } else {
+            DispatchQueue.main.sync { OutsideClick.dismissAll() }
+        }
         DispatchQueue.global(qos: .userInitiated).async {
             let task = Process()
             task.executableURL = URL(fileURLWithPath: veilBin)
@@ -2293,7 +2306,7 @@ enum EscDismiss {
 
 final class Panel: NSPanel {
     override var canBecomeKey: Bool { true }
-    override func cancelOperation(_ sender: Any?) { (NSApp.delegate as? App)?.hide() }
+    override func cancelOperation(_ sender: Any?) { OutsideClick.dismissAll() }
     override var canBecomeMain: Bool { false }
 }
 
@@ -2309,11 +2322,17 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
     /// Monotonic show generation — stale force-hides posted before this show are ignored.
     var showGeneration = 0
     var lastShowAt = Date.distantPast
+    /// Outside-click monitors for the launcher surface (VEI-53).
+    var outsideMonitors: [Any] = []
+    /// Global keystroke sink while launcher is up — catches leaks if focus races.
+    var focusSink: Any?
+    var focusRetryTokens: [UUID] = []
 
     func applicationDidFinishLaunching(_ n: Notification) {
         if Model.migrateRankingPrivacy(.standard) { model.usage = [:]; model.history = []; model.pins = []; model.queryChoices = [:] }
+        // Activating panel — Spotlight-grade focus steal (nonactivating left keys in the prior app).
         panel = Panel(contentRect: NSRect(x: 0, y: 0, width: 940, height: 640),
-                      styleMask: [.borderless, .nonactivatingPanel, .fullSizeContentView], backing: .buffered, defer: false)
+                      styleMask: [.borderless, .fullSizeContentView], backing: .buffered, defer: false)
         panel.isFloatingPanel = true
         // Above normal / full-screen media apps so overview/theme surfaces stay visible for product use.
         panel.level = .statusBar
@@ -2379,7 +2398,9 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 }
             }
             switch Int(e.keyCode) {
-            case kVK_Escape:  // Overview: close immediately. Else clear query → mode → close.
+            case kVK_Escape:  // Always bury sibling overlays; never leave Control/Quick stacked.
+                GlyphShell.shared.dismiss()
+                VeilPanelHost.shared.dismissImmediate()
                 if self.model.surface == .overview {
                     self.hide(force: true); return nil
                 }
@@ -2450,13 +2471,22 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             var hk = EventHotKeyID()
             let status = GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID), nil,
                                            MemoryLayout<EventHotKeyID>.size, nil, &hk)
-            guard status == noErr, hk.signature == OSType(0x4E43_5348), [1, 2, 3].contains(hk.id) else { return OSStatus(eventNotHandledErr) }
+            guard status == noErr, hk.signature == OSType(0x4E43_5348), [1, 2, 3, 4].contains(hk.id) else { return OSStatus(eventNotHandledErr) }
             let id = hk.id
             // Spotlight-speed: run on this turn — DispatchQueue.main.async let the next keystrokes
             // hit the previously focused app before the search field exists.
             let run = {
                 if id == 2 { VeilMode.toggle() }
                 else if id == 3 { (NSApp.delegate as? App)?.show(query: "theme") }  // ⌃⌥T — reliable when Cursor steals ⌘T
+                else if id == 4 {  // ⌃⌥O — Control panel (Quick already owns ⌃⌥A in GlyphShell)
+                    GlyphShell.shared.dismiss()
+                    if let app = NSApp.delegate as? App, app.panel.isVisible {
+                        app.hide(force: true)
+                    }
+                    Task { @MainActor in
+                        VeilPanelHost.shared.toggle(.control, near: VeilPanelHost.sketchybarItemRect(for: .control))
+                    }
+                }
                 else { (NSApp.delegate as? App)?.toggle() }
             }
             if Thread.isMainThread { run() } else { DispatchQueue.main.sync(execute: run) }
@@ -2470,9 +2500,17 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         var themesKey: EventHotKeyRef?
         RegisterEventHotKey(UInt32(kVK_ANSI_T), UInt32(controlKey | optionKey), EventHotKeyID(signature: OSType(0x4E43_5348), id: 3),
                             GetApplicationEventTarget(), 0, &themesKey)
+        // ⌃⌥O opens Control (mouse-only before VEI-53). Avoid Glyph chords + Option←/→.
+        var controlHotKey: EventHotKeyRef?
+        RegisterEventHotKey(UInt32(kVK_ANSI_O), UInt32(controlKey | optionKey), EventHotKeyID(signature: OSType(0x4E43_5348), id: 4),
+                            GetApplicationEventTarget(), 0, &controlHotKey)
         if !veilIsOff { registerSearchKey() }
-        // Esc dismisses SketchyBar popups (and Rift overview) without locking anything.
+        // Esc dismisses every overlay + SketchyBar/Rift without locking anything.
         EscDismiss.install(veilBin: home + "/.local/bin/veil")
+        // Shared dismiss registry — Lane C should also wire panel outside-click → dismissAll.
+        OutsideClick.register("launcher") { [weak self] in self?.hide(force: true) }
+        OutsideClick.register("glyph") { GlyphShell.shared.dismiss() }
+        OutsideClick.register("veil-panel") { VeilPanelHost.shared.dismissImmediate() }
         // veil off / on: step aside or come back
         DistributedNotificationCenter.default().addObserver(forName: Notification.Name("app.veil.search.mode"), object: nil, queue: .main) { [weak self] n in
             guard let self else { return }
@@ -2509,7 +2547,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         DistributedNotificationCenter.default().addObserver(forName: Notification.Name("app.veil.search.show"), object: nil, queue: .main) { [weak self] n in
             self?.show(query: n.object as? String ?? "")
         }
-        // veil dismiss-popups / Esc path — hide Search overview/panel entirely
+        // veil dismiss-popups / Esc path — bury launcher AND every stacked overlay
         DistributedNotificationCenter.default().addObserver(forName: Notification.Name("app.veil.search.hide"), object: nil, queue: .main) { [weak self] n in
             guard let self else { return }
             let obj = (n.object as? String) ?? ""
@@ -2523,7 +2561,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             } else if Date() < self.suppressHideUntil, !self.panel.isVisible {
                 return
             }
-            self.hide(force: true)
+            OutsideClick.dismissAll()
         }
         // functional check: top results for one query per feature, written to ~/Library/Caches/veil-search-verify.txt
         DistributedNotificationCenter.default().addObserver(forName: Notification.Name("app.veil.search.verify"), object: nil, queue: .main) { [weak self] _ in
@@ -2648,7 +2686,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 case "music": VeilPanelHost.shared.toggle(.music, near: VeilPanelHost.sketchybarItemRect(for: .music))
                 case "control", "city": VeilPanelHost.shared.toggle(.control, near: VeilPanelHost.sketchybarItemRect(for: .control))
                 case "keys": VeilPanelHost.shared.toggle(.keys, near: VeilPanelHost.sketchybarItemRect(for: .keys))
-                case "dismiss", "off": VeilPanelHost.shared.dismiss()
+                case "dismiss", "off": OutsideClick.dismissAll()
                 default: break
                 }
             }
@@ -2680,7 +2718,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 case "prove-remove":
                     DesktopGlyphBoard.shared.proveRemove(.cava)
                 case "dismiss-panels":
-                    VeilPanelHost.shared.dismissImmediate()
+                    OutsideClick.dismissAll()
                 default: DesktopGlyphBoard.shared.start()
                 }
             }
@@ -2769,6 +2807,9 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         guard !veilIsOff, let screen = NSScreen.screens.first(where: { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) }) ?? NSScreen.main else { return }
         MenuItems.frontPID = NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0
         ClipHistory.shared.setLauncherActive(true)
+        // Never stack: bury Control / Quick / music / Glyph before search owns the keyboard.
+        GlyphShell.shared.dismiss()
+        VeilPanelHost.shared.dismissImmediate()
         // Beat a late dismiss-popups hide from the previous surface (killer: themes → dismiss → overview).
         showGeneration += 1
         lastShowAt = Date()
@@ -2819,15 +2860,22 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let originY = min(top, f.maxY + 40) - height
         panel.setFrame(NSRect(x: f.midX - width / 2, y: originY, width: width, height: height), display: false)
 
-        // Spotlight path: activate + key + field focus BEFORE heavy work / scrim.
-        NSApp.activate(ignoringOtherApps: true)
+        // Spotlight path: hard activate + key + field focus BEFORE heavy work / scrim.
         panel.level = .statusBar
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient, .ignoresCycle]
-        panel.makeKeyAndOrderFront(nil)
-        panel.orderFrontRegardless()
-        if let field = panel.contentView?.firstTextField {
-            panel.makeFirstResponder(field)
-        }
+        stealFocus()
+        installFocusSink()
+        OutsideClick.remove(&outsideMonitors)
+        outsideMonitors = OutsideClick.install(
+            window: panel,
+            ignoreUntil: Date().addingTimeInterval(0.35),
+            extraSafeFrames: {
+                var frames: [NSRect] = []
+                if let bar = VeilBarController.shared.barWindowFrame { frames.append(bar) }
+                return frames
+            },
+            onOutside: { OutsideClick.dismissAll() }
+        )
 
         // Deferred: clipboard snapshot, source refresh, scrim — never block first keystroke.
         DispatchQueue.main.async {
@@ -2837,11 +2885,62 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
             if self.model.surface == .overview { self.model.enterOverview() }
             else if self.model.surface == .themes { self.model.enterThemes() }
             // Re-assert focus in case SwiftUI rebuilt the field after refresh.
-            if self.panel.isVisible, !(self.panel.firstResponder is NSTextView),
-               let field = self.panel.contentView?.firstTextField {
-                self.panel.makeFirstResponder(field)
+            self.stealFocus()
+        }
+    }
+
+    /// Spotlight-grade focus: activate, key the panel, put the caret in the search field.
+    func stealFocus() {
+        NSApp.activate(ignoringOtherApps: true)
+        panel.makeKeyAndOrderFront(nil)
+        panel.orderFrontRegardless()
+        if let field = panel.contentView?.firstTextField {
+            panel.makeFirstResponder(field)
+        }
+    }
+
+    /// Global sink while launcher is visible — if focus races, re-steal and ingest the key.
+    func installFocusSink() {
+        removeFocusSink()
+        let gen = showGeneration
+        focusSink = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] e in
+            guard let self, self.panel.isVisible, self.showGeneration == gen else { return }
+            if e.keyCode == UInt16(kVK_Escape) {
+                DispatchQueue.main.async { OutsideClick.dismissAll() }
+                return
+            }
+            guard !self.panel.isKeyWindow else { return }
+            // Reclaim focus; ingest printable chars so they never vanish into the prior app alone.
+            DispatchQueue.main.async {
+                guard self.panel.isVisible else { return }
+                self.stealFocus()
+                let mods = e.modifierFlags.intersection(.deviceIndependentFlagsMask)
+                if mods.contains(.command) || mods.contains(.control) { return }
+                if e.keyCode == UInt16(kVK_Delete) || e.keyCode == UInt16(kVK_ForwardDelete) {
+                    if !self.model.query.isEmpty { self.model.query.removeLast() }
+                    return
+                }
+                if let chars = e.characters, !chars.isEmpty,
+                   chars.unicodeScalars.allSatisfy({ $0.value >= 0x20 || $0 == "\t" }) {
+                    self.model.query += chars.filter { $0 != "\t" && $0 != "\r" && $0 != "\n" }
+                }
             }
         }
+        focusRetryTokens = []
+        for delay in [0.04, 0.10, 0.22] as [TimeInterval] {
+            let token = UUID()
+            focusRetryTokens.append(token)
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                guard let self, self.focusRetryTokens.contains(token), self.panel.isVisible else { return }
+                self.stealFocus()
+            }
+        }
+    }
+
+    func removeFocusSink() {
+        if let focusSink { NSEvent.removeMonitor(focusSink) }
+        focusSink = nil
+        focusRetryTokens = []
     }
 
     var splash: NSWindow?
@@ -2880,6 +2979,8 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     func hide(force: Bool = true) {
         _ = force
+        OutsideClick.remove(&outsideMonitors)
+        removeFocusSink()
         // Instant dismiss first — never wait on teardown or the launched app.
         let wasVisible = panel.isVisible
         if wasVisible { panel.orderOut(nil) }
@@ -2887,7 +2988,9 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
         model.actionsOpen = false
         ClipHistory.shared.setLauncherActive(false)
         Scrim.shared.hide()
-        Task { @MainActor in VeilPanelHost.shared.dismiss() }
+        // Sync sibling kill — async Task left Control/music stuck over real work.
+        GlyphShell.shared.dismiss()
+        VeilPanelHost.shared.dismissImmediate()
 
         guard wasVisible || model.surface != .search else {
             model.overviewCards = []
