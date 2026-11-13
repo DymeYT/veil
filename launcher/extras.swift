@@ -247,7 +247,8 @@ func glyphSurfaceItems() -> [Item] {
         ("Glyph Style", "Theme creator · ⌃⌥Y", "paintpalette", "style"),
         ("Glyph Lock (mock)", "Inert lock UI", "lock", "lockMock"),
         ("Glyph Login (mock)", "SDDM analog mock", "person.crop.circle", "loginMock"),
-        ("Desktop Glyphs", "Pin / show Home·Quick·Cava on the wallpaper", "rectangle.on.rectangle", "DESKTOP"),
+        ("Desktop Glyphs", "Snap-grid wallpaper tiles · drag to move", "rectangle.on.rectangle", "DESKTOP"),
+        ("Reset Desktop Glyphs", "Restore balanced 6×4 default layout", "arrow.counterclockwise", "DESKTOP_RESET"),
         ("Rice: Nothing", "Apply Nothing OS theme", "circle.fill", "APPLY:nothing"),
     ]
     return surfaces.map { title, sub, sym, kind in
@@ -257,10 +258,11 @@ func glyphSurfaceItems() -> [Item] {
             return Item(kind: .action, title: title, subtitle: sub, symbol: sym,
                         action: .run([bin, "apply", id]), score: 80)
         }
-        if kind == "DESKTOP" {
+        if kind == "DESKTOP" || kind == "DESKTOP_RESET" {
+            let notif = kind == "DESKTOP_RESET" ? "reset" : "toggle"
             return Item(kind: .action, title: title, subtitle: sub, symbol: sym,
                         action: .run(["/usr/bin/osascript", "-l", "JavaScript", "-e",
-                                      "ObjC.import('Foundation'); $.NSDistributedNotificationCenter.defaultCenter.postNotificationNameObjectUserInfoDeliverImmediately('app.veil.desktop-glyphs', 'toggle', $(), true)"]),
+                                      "ObjC.import('Foundation'); $.NSDistributedNotificationCenter.defaultCenter.postNotificationNameObjectUserInfoDeliverImmediately('app.veil.desktop-glyphs', '\(notif)', $(), true)"]),
                         score: 90)
         }
         return Item(kind: .action, title: title, subtitle: sub, symbol: sym,

@@ -2619,6 +2619,7 @@ final class App: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 switch raw {
                 case "toggle", "on", "off": DesktopGlyphBoard.shared.toggleEnabled()
                 case "refresh", "reload": DesktopGlyphBoard.shared.refresh()
+                case "reset", "default": DesktopGlyphBoard.shared.resetToDefault()
                 default: DesktopGlyphBoard.shared.start()
                 }
             }
