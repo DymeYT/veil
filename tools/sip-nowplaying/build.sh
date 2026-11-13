@@ -1,9 +1,11 @@
 #!/bin/bash
 # Build + ad-hoc sign the SIP-gated Now Playing helper.
-# Overnight: building is fine with SIP on; the helper may not receive NP under AMFI.
-# After wake (SIP off): re-run this script, then: veil feature enable sip-nowplaying
+# Default entitlements: library-validation bypass only (runs under SIP-off without AMFI boot-arg).
+# Optional: VEIL_SIP_PRIVATE_ENTITLEMENTS=1 ./build.sh  → private MediaRemote entitlement
+#   (requires amfi_get_out_of_my_way=1 or AMFI will SIGKILL).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+HERE="$(cd "$(dirname "$0")" && pwd)"
 OUT="${1:-$ROOT/bin/veil-nowplaying-sip}"
 SDK="${SDKROOT:-}"
 if [ -z "$SDK" ]; then
@@ -13,8 +15,13 @@ if [ -z "$SDK" ]; then
     [ -d "$s" ] && SDK="$s" && break
   done
 fi
-SRC="$(cd "$(dirname "$0")" && pwd)/NowPlayingSip.swift"
-ENT="$(cd "$(dirname "$0")" && pwd)/veil-nowplaying-sip.entitlements"
+SRC="$HERE/NowPlayingSip.swift"
+if [ "${VEIL_SIP_PRIVATE_ENTITLEMENTS:-0}" = 1 ]; then
+  ENT="$HERE/veil-nowplaying-sip.private.entitlements"
+  echo "signing with PRIVATE MediaRemote entitlements (needs AMFI relaxed)"
+else
+  ENT="$HERE/veil-nowplaying-sip.entitlements"
+fi
 mkdir -p "$(dirname "$OUT")"
 SWIFTC=(swiftc -O -module-name VeilNowPlayingSip "$SRC" -o "$OUT")
 if [ -n "$SDK" ]; then
@@ -23,15 +30,14 @@ fi
 "${SWIFTC[@]}"
 codesign --force --sign - --entitlements "$ENT" "$OUT"
 echo "built $OUT"
-# Under SIP (or SIP-off but AMFI still hard), private entitlements → SIGKILL.
-# Never fail the build; clear any prior AMFI stamp so the next enable can re-probe.
 rm -f "$ROOT/generated/features/.sip-nowplaying-amfi-blocked"
 if /usr/bin/csrutil status 2>/dev/null | /usr/bin/grep -qi 'enabled'; then
-  echo "sip=enabled — skip status smoke (AMFI would Killed: 9). After csrutil disable, re-run and expect: sip=disabled mediaremote=ok"
+  echo "sip=enabled — helper may still be limited; after csrutil disable expect: sip=disabled mediaremote=ok"
 else
-  if "$OUT" status 2>/dev/null; then
+  if "$OUT" status; then
     :
   else
-    echo "sip=disabled but helper still SIGKILL'd (AMFI). Music path falls back until AMFI boot-arg — see docs/sip-preflight.md (consent required)."
+    ec=$?
+    echo "status failed (exit $ec). If Killed:9, you signed with private entitlements under hard AMFI — rebuild without VEIL_SIP_PRIVATE_ENTITLEMENTS=1."
   fi
 fi

@@ -2,12 +2,15 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!-- Private MediaRemote entitlement — ignored/blocked under SIP+AMFI until SIP is off after wake. -->
-	<key>com.apple.private.mediaremote.read-write</key>
-	<true/>
+	<!--
+	  Default (SIP-off safe): library-validation bypass only.
+	  Private MediaRemote entitlement is NOT claimed by default — AMFI SIGKILLs
+	  ad-hoc binaries that assert com.apple.private.mediaremote.read-write even
+	  when csrutil is disabled, unless amfi_get_out_of_my_way is set.
+	  Under SIP-off, MediaRemote dlopen + get/send work without that private key.
+	  Optional hard sign: VEIL_SIP_PRIVATE_ENTITLEMENTS=1 ./build.sh
+	-->
 	<key>com.apple.security.cs.disable-library-validation</key>
-	<true/>
-	<key>com.apple.security.cs.allow-dyld-environment-variables</key>
 	<true/>
 </dict>
 </plist>

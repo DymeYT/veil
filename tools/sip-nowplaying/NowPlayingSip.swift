@@ -1,10 +1,10 @@
 import Foundation
 
 // Veil SIP-gated Now Playing CLI.
-// Links MediaRemote via dlopen (private framework). With SIP + AMFI on, calls may
-// fail; keep `cider-bridge` / media-control as the overnight path. After SIP is off
-// and this binary is signed with the bundled entitlements, `veil feature enable
-// sip-nowplaying` prefers this helper for get/control without AppleScript.
+// Default sign: library-validation bypass only (runs under SIP-off without AMFI boot-arg).
+// Direct MRMediaRemoteGetNowPlayingInfo often returns nil without the private entitlement;
+// when that happens, `get` falls back to Homebrew `media-control` (MediaRemoteAdapter).
+// Optional hard sign: VEIL_SIP_PRIVATE_ENTITLEMENTS=1 ./build.sh (needs AMFI relaxed).
 
 typealias MRGetInfo = @convention(c) (DispatchQueue, @escaping (CFDictionary?) -> Void) -> Void
 typealias MRSendCommand = @convention(c) (UInt32, CFDictionary?) -> Bool
@@ -50,14 +50,60 @@ func sipEnabled() -> Bool {
     return text.lowercased().contains("enabled")
 }
 
+func mediaControlPath() -> String? {
+    let candidates = [
+        "/opt/homebrew/bin/media-control",
+        "/usr/local/bin/media-control",
+    ]
+    return candidates.first { FileManager.default.isExecutableFile(atPath: $0) }
+}
+
+func runMediaControl(_ arguments: [String]) -> (Int32, Data) {
+    guard let bin = mediaControlPath() else { return (127, Data()) }
+    let task = Process()
+    task.executableURL = URL(fileURLWithPath: bin)
+    task.arguments = arguments
+    let out = Pipe()
+    let err = Pipe()
+    task.standardOutput = out
+    task.standardError = err
+    do {
+        try task.run()
+        task.waitUntilExit()
+    } catch {
+        return (127, Data())
+    }
+    return (task.terminationStatus, out.fileHandleForReading.readDataToEndOfFile())
+}
+
+func nowPlayingFromMediaControl() -> [String: Any]? {
+    let (ec, data) = runMediaControl(["get", "--no-artwork"])
+    guard ec == 0, !data.isEmpty,
+          let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+          obj["title"] != nil || obj["name"] != nil
+    else { return nil }
+    var out: [String: Any] = [:]
+    if let t = obj["title"] ?? obj["name"] { out["title"] = "\(t)" }
+    if let a = obj["artist"] ?? obj["artistName"] { out["artist"] = "\(a)" }
+    if let al = obj["album"] ?? obj["albumName"] { out["album"] = "\(al)" }
+    if let b = obj["bundleIdentifier"] ?? obj["bundleID"] { out["bundleIdentifier"] = "\(b)" }
+    let playing =
+        (obj["playing"] as? Bool) == true
+        || (obj["isPlaying"] as? Bool) == true
+        || ((obj["playbackRate"] as? NSNumber)?.doubleValue ?? 0) > 0.01
+    out["playing"] = playing
+    out["playbackRate"] = playing ? 1.0 : 0.0
+    out["via"] = "media-control"
+    return out
+}
+
 func nowPlayingJSON(getInfo: MRGetInfo) -> [String: Any]? {
     let sem = DispatchSemaphore(value: 0)
     var result: [String: Any]?
     getInfo(DispatchQueue.global(qos: .userInitiated)) { dict in
         defer { sem.signal() }
-        guard let dict = dict as? [String: Any] else { return }
+        guard let dict = dict as? [String: Any], !dict.isEmpty else { return }
         var out: [String: Any] = [:]
-        // Keys are CFString private constants; use string bridging of known names.
         for (key, value) in dict {
             let k = String(describing: key)
             if k.contains("Title") || k.hasSuffix("title") { out["title"] = "\(value)" }
@@ -68,7 +114,6 @@ func nowPlayingJSON(getInfo: MRGetInfo) -> [String: Any]? {
                 if let n = value as? NSNumber { out["playbackRate"] = n.doubleValue }
             }
         }
-        // Fallback: dump raw string keys when private key names differ by OS.
         if out["title"] == nil {
             for (key, value) in dict {
                 let name = "\(key)"
@@ -80,19 +125,22 @@ func nowPlayingJSON(getInfo: MRGetInfo) -> [String: Any]? {
                 }
             }
         }
+        guard out["title"] != nil else { return }
         let rate = (out["playbackRate"] as? Double) ?? 0
         out["playing"] = rate > 0.01
+        out["via"] = "mediaremote"
         result = out
     }
     _ = sem.wait(timeout: .now() + 2)
-    return result
+    if let result { return result }
+    return nowPlayingFromMediaControl()
 }
 
 func usage() {
     fputs("""
     usage: veil-nowplaying-sip get|play|pause|toggle|next|previous|status
       status  print sip=on/off and whether MediaRemote loaded
-      get     JSON now-playing (empty object if unavailable)
+      get     JSON now-playing (MediaRemote, else media-control adapter)
       play|pause|toggle|next|previous  send MediaRemote command
 
     """, stderr)
@@ -108,9 +156,10 @@ guard let (getInfo, send) = loadMediaRemote() else {
 switch verb {
 case "status":
     let sip = sipEnabled()
-    print("sip=\(sip ? "enabled" : "disabled") mediaremote=ok")
+    let adapter = mediaControlPath() != nil ? "ok" : "missing"
+    print("sip=\(sip ? "enabled" : "disabled") mediaremote=ok adapter=\(adapter)")
     if sip {
-        print("note: with SIP enabled this helper may be blocked by AMFI; overnight path uses media-control")
+        print("note: with SIP enabled prefer media-control; soft-signed helper still builds")
     }
 case "get":
     if let info = nowPlayingJSON(getInfo: getInfo),

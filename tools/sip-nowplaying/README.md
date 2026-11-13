@@ -1,37 +1,26 @@
 # SIP-gated Now Playing helper
 
-Ships **now**. Works for real after Big Dawg turns **SIP off** on wake. Overnight desktop keeps using Homebrew `media-control` + AppleScript (`cider-bridge`).
+Default sign is **soft** (library-validation bypass only) so the binary runs after `csrutil disable` **without** an AMFI boot-arg.
 
-## Why SIP
-The private `MediaRemote` entitlement (`com.apple.private.mediaremote.read-write`) and library-validation bypass in `veil-nowplaying-sip.entitlements` are blocked by SIP + AMFI while SIP is enabled. The binary still builds and is inert/fallback-safe.
+## Why
+Direct `MRMediaRemoteGetNowPlayingInfo` often returns nil without `com.apple.private.mediaremote.read-write`. Claiming that private entitlement under hard AMFI → **Killed: 9**. Soft-sign loads MediaRemote for status/commands; `get` falls back to Homebrew `media-control` (MediaRemoteAdapter) for real metadata.
 
-## Overnight (SIP on) — default
+## Enable (SIP off)
 ```bash
-veil feature list          # sip-nowplaying is off
-# music dropdown uses media-control / Music / Spotify / Cider as today
-# Running the helper under SIP → AMFI Killed: 9 (exit 137) — expected.
-# build.sh skips the status smoke while SIP is enabled.
+~/.config/veil/tools/sip-nowplaying/build.sh
+~/.config/veil/bin/veil-nowplaying-sip status   # sip=disabled mediaremote=ok adapter=ok
+veil feature enable sip-nowplaying
 ```
 
-Full preflight checklist (PASS/FAIL, rollback): store `docs/sip-preflight.md`.
-
-## After wake — enable
-1. Boot into Recovery → Terminal → `csrutil disable` → reboot (Big Dawg does this; not overnight).
-2. Rebuild and resign:
-   ```bash
-   ~/.config/veil/tools/sip-nowplaying/build.sh
-   ~/.config/veil/bin/veil-nowplaying-sip status   # expect sip=disabled mediaremote=ok
-   ~/.config/veil/bin/veil-nowplaying-sip get
-   ```
-3. Opt in (default off):
-   ```bash
-   veil feature enable sip-nowplaying
-   ```
-4. Optional: if AMFI still strips entitlements, after SIP is already off they may also need a documented AMFI boot-arg — only with their consent post-wake. See handoff.
-
-## Disable / stay usable
+## Optional private entitlements
 ```bash
-veil feature disable sip-nowplaying   # back to media-control path immediately
+# Needs AMFI relaxed (amfi_get_out_of_my_way=1) — Big Dawg consent only
+VEIL_SIP_PRIVATE_ENTITLEMENTS=1 ~/.config/veil/tools/sip-nowplaying/build.sh
+```
+
+## Disable
+```bash
+veil feature disable sip-nowplaying
 ```
 
 ## Commands
